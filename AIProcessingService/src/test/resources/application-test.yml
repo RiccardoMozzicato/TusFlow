@@ -1,0 +1,21 @@
+kafka:
+  bootstrap-servers: "localhost:9094"
+  consumer:
+    auto-offset-reset: earliest
+    group-id: "test-group"
+    bootstrap-servers: "localhost:9094"
+  producer:
+    bootstrap-servers: "localhost:9094"
+    key-serializer: org.apache.kafka.common.serialization.StringSerializer
+    value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+spring:
+  kafka:
+    bootstrap-servers: "localhost:9094"
+    consumer:
+      auto-offset-reset: earliest
+      group-id: "test-group"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+

@@ -1,0 +1,164 @@
+{
+	"info": {
+		"_postman_id": "3b665879-2fd5-460c-86a9-57e72505cd25",
+		"name": "Tus - UserDetailService",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "44812978",
+		"_collection_link": "https://samuelescapellato.postman.co/workspace/Samuele-Scapellato's-Workspace~2d271028-f176-4708-824d-9b50bd5093ec/collection/44812978-3b665879-2fd5-460c-86a9-57e72505cd25?action=share&source=collection_link&creator=44812978"
+	},
+	"item": [
+		{
+			"name": "Get users",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{userUrl}}/api/v1/users",
+					"host": [
+						"{{userUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create a user",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"id\": \"d1a1ab90-a2de-4b5b-9e2c-52f449ce0b46\",\r\n    \"fullName\": \"Samuele Scapellato\",\r\n    \"email\": \"samele.scapellato@gmail.com\",\r\n    \"organization\": \"Politecnico di Torino\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{userUrl}}/api/v1/users",
+					"host": [
+						"{{userUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update a user",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"id\": \"7a1d1c9e-3f4c-42ff-8f7c-9c3e2ad91754\",\r\n    \"fullName\": \"Mario Rossi\",\r\n    \"email\": \"mario.rossi@gmail.com\",\r\n    \"organization\": \"CloudFlare\",\r\n    \"role\": 2,\r\n    \"department\": \"Security\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{userUrl}}/api/v1/users/{{userId}}",
+					"host": [
+						"{{userUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users",
+						"{{userId}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete a user",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{userUrl}}/api/v1/users/{{userId}}",
+					"host": [
+						"{{userUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users",
+						"{{userId}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Me",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8082/api/v1/users/me",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8082",
+					"path": [
+						"api",
+						"v1",
+						"users",
+						"me"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get token",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9090/realms/file-management/protocol/openid-connect/token",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9090",
+					"path": [
+						"realms",
+						"file-management",
+						"protocol",
+						"openid-connect",
+						"token"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

@@ -1,0 +1,57 @@
+# Add log debug for spring wemb mvc and cloud gateway
+logging:
+    level:
+        org.springframework.web: DEBUG
+        org.springframework.cloud.gateway: DEBUG
+
+baseUrl: http://localhost:8080
+
+spring:
+  application:
+    name: ApiGateway
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:9090/realms/file-management
+        registration:
+          gateway-client:
+            provider: keycloak
+            client-id: gateway-client
+            client-secret: UDeZXlu98uuR15s27yHyGyWOvNj7h2VU
+            authorization-grant-type: authorization_code
+            redirect-uri: "http://localhost:8080/login/oauth2/code/{registrationId}"
+            scope:
+              - openid
+              - roles
+  cloud:
+    gateway:
+      mvc:
+        routes:
+          - id: file-service
+            uri: http://localhost:8081
+            predicates:
+              - Path=/api/v1/files/**, /api/v1/uploads/** , /api/v1/outbox/**
+            filters:
+              - TokenRelay
+
+          - id: user-service
+            uri: http://localhost:8082
+            predicates:
+              - Path=/api/v1/users/**
+            filters:
+              - TokenRelay
+
+          - id: ui
+            uri: ${UI_URL}
+            predicates:
+              - Path=/ui,/ui/**
+            filters:
+              - AddRequestHeader=X-Debug, true
+
+# use the production url, not the development one
+UI_URL: "http://localhost:5173"
+
+server:
+  port: 8080

@@ -1,0 +1,116 @@
+{
+  "realm": "file-management",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 3600,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Global system control, user and category management, full document access"
+      },
+      {
+        "name": "manager",
+        "description": "Operates within a department, managing departmental documents and spaces"
+      },
+      {
+        "name": "staff",
+        "description": "Can create/manage personal files and access departmental or explicitly shared documents"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "testadmin",
+      "enabled": true,
+      "email": "testadmin@example.com",
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "testmanager",
+      "enabled": true,
+      "email": "testmanager@example.com",
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Manager",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["manager", "staff"]
+    },
+    {
+      "username": "teststaff",
+      "enabled": true,
+      "email": "teststaff@example.com",
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Staff",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["staff"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "test-user-client",
+      "enabled": true,
+      "publicClient": true,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true
+    },
+    {
+      "clientId": "tus-client",
+      "name": "TUS Uploader Service Client",
+      "description": "Machine-to-machine client for TUS service to call other services",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "test-tus-secret",
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "fullScopeAllowed": true
+    },
+    {
+      "clientId": "user-service-client",
+      "name": "User Detail Service Client",
+      "description": "Client for User Detail Service",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true
+    }
+  ]
+}
+

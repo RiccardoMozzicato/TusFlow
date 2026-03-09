@@ -1,0 +1,3199 @@
+{
+  "info": {
+    "_postman_id": "59cea397-09d9-4e64-bd3f-5306c7f8b8b3",
+    "name": "TUS Upload Service - Complete API Collection",
+    "description": "Collection completa per testare TusController e FileController - Protocollo TUS 1.0.0\n\n**TusController - Upload API:**\n- OPTIONS: Ottieni capabilities del server\n- POST: Crea nuovo upload\n- HEAD: Ottieni info su upload esistente\n- PATCH: Carica chunk di dati\n- DELETE: Elimina upload\n\n**FileController - File Management API:**\n- GET /api/v1/files: Lista file con filtri e paginazione\n- GET /api/v1/files/{id}: Dettagli singolo file\n- PATCH /api/v1/files/{id}/versions/{version}: Aggiorna metadata\n- DELETE /api/v1/files/{id}: Elimina file\n- GET /api/v1/files/{id}/download: Scarica file\n- GET /api/v1/files/{id}/shares: Ottieni condivisioni\n- POST /api/v1/files/{id}/shares: Crea condivisione\n- GET /api/v1/files/shared-with/{userId}: File condivisi con utente\n\n**Test di Upload Completi:**\n- 8MB in 1 chunk singolo\n- 8MB in 2 chunk (2MB + 6MB)\n- 5MB in 2 chunk (2.5MB + 2.5MB)\n- 4MB in 1 chunk singolo\n- Test duplicazione con UUID statico\n\n**Formato UUID:**\n- Nel metadata (Upload-Metadata): UUID codificato in base64\n- Nell'URL (path parameter): UUID NON codificato\n- Gli UUID vengono generati automaticamente nei pre-request script\n- Test di duplicazione usa UUID statico predefinito",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. TusController Routes",
+      "item": [
+        {
+          "name": "OPTIONS - Get Server Capabilities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Headers are present\", function () {",
+                  "    pm.response.to.have.header(\"Tus-Version\");",
+                  "    pm.response.to.have.header(\"Tus-Extension\");",
+                  "    pm.response.to.have.header(\"Tus-Checksum-Algorithm\");",
+                  "    pm.response.to.have.header(\"Tus-Max-Size\");",
+                  "});",
+                  "",
+                  "console.log(\"✓ Tus-Version: \" + pm.response.headers.get(\"Tus-Version\"));",
+                  "console.log(\"✓ Tus-Extension: \" + pm.response.headers.get(\"Tus-Extension\"));",
+                  "console.log(\"✓ Tus-Checksum-Algorithm: \" + pm.response.headers.get(\"Tus-Checksum-Algorithm\"));",
+                  "console.log(\"✓ Tus-Max-Size: \" + pm.response.headers.get(\"Tus-Max-Size\"));"
+                ],
+                "type": "text/javascript",
+                "id": "66fdd2eb-9a17-4dcc-95dc-6908015e9b25"
+              }
+            }
+          ],
+          "id": "61a1b879-4848-42fd-8e61-16b634043fb3",
+          "request": {
+            "method": "OPTIONS",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ]
+            },
+            "description": "Ottiene le capabilities del server TUS: versione supportata, estensioni, algoritmi checksum e dimensione massima."
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Create Upload",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "09ff1241-fc73-4d26-836b-820b5f5c0b9b",
+                "exec": [
+                  "// Genera un nuovo UUID e lo codifica in base64",
+                  "function generateUUID() {",
+                  "    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+                  "        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+                  "        return v.toString(16);",
+                  "    });",
+                  "}",
+                  "",
+                  "var newUuid = generateUUID();",
+                  "var base64Uuid = btoa(newUuid);",
+                  "",
+                  "pm.collectionVariables.set(\"currentUploadUuid\", newUuid);",
+                  "pm.collectionVariables.set(\"currentUploadUuidBase64\", base64Uuid);",
+                  "",
+                  "console.log(\"UUID generato: \" + newUuid);",
+                  "console.log(\"UUID base64: \" + base64Uuid);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "603f13f3-f786-4f27-82c7-da44ea2fefae",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Location header is present\", function () {",
+                  "    pm.response.to.have.header(\"Location\");",
+                  "    var location = pm.response.headers.get(\"Location\");",
+                  "    var uploadId = location.split('/').pop();",
+                  "    pm.collectionVariables.set(\"uploadId\", uploadId);",
+                  "    console.log(\"✓ Upload creato con ID: \" + uploadId);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Expires header is present\", function () {",
+                  "    pm.response.to.have.header(\"Upload-Expires\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "2379bf54-99a3-4a95-8f39-e05557f70b38",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "1000000",
+                "description": "Dimensione totale del file in bytes",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{currentUploadUuidBase64}},filename dGVzdC5wZGY=,filetype YXBwbGljYXRpb24vcGRm",
+                "description": "UUID generato dinamicamente. filename=test.pdf, filetype=application/pdf (base64)",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads?fileId={{currentUploadUuid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ],
+              "query": [
+                {
+                  "key": "fileId",
+                  "value": "{{currentUploadUuid}}"
+                }
+              ]
+            },
+            "description": "Crea un nuovo upload senza inviare dati. Richiede Upload-Length e Upload-Metadata con UUID."
+          },
+          "response": []
+        },
+        {
+          "name": "HEAD - Get Upload Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload info headers are present\", function () {",
+                  "    pm.response.to.have.header(\"Upload-Offset\");",
+                  "    pm.response.to.have.header(\"Cache-Control\");",
+                  "});",
+                  "",
+                  "console.log(\"✓ Upload-Offset: \" + pm.response.headers.get(\"Upload-Offset\"));",
+                  "console.log(\"✓ Upload-Length: \" + pm.response.headers.get(\"Upload-Length\"));",
+                  "console.log(\"✓ Upload-Metadata: \" + pm.response.headers.get(\"Upload-Metadata\"));"
+                ],
+                "type": "text/javascript",
+                "id": "0b0b8d1a-80d6-46ae-b813-3d4b581d6e9a"
+              }
+            }
+          ],
+          "id": "b0767c33-7c04-4d34-9699-58b3ec11118f",
+          "request": {
+            "method": "HEAD",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Ottiene informazioni sullo stato di un upload: offset corrente, length totale, metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH - Upload Chunk (Complete Upload)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Genera esattamente 1000000 bytes (1MB) per completare l'upload",
+                  "// L'upload è stato creato con Upload-Length: 1000000",
+                  "var chunk = 'X'.repeat(10000); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 100; i++) {",
+                  "    content += chunk; // 100 * 10KB = 1MB",
+                  "}",
+                  "pm.collectionVariables.set('chunkContent', content);",
+                  "console.log('Chunk generato: ' + content.length + ' bytes (1MB)');",
+                  "console.log('Questo chunk completerà l\\'upload');"
+                ],
+                "type": "text/javascript",
+                "id": "159d72d0-5518-4292-9f01-3501b8961daf"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset header is present\", function () {",
+                  "    pm.response.to.have.header(\"Upload-Offset\");",
+                  "    var newOffset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.collectionVariables.set('currentOffset', newOffset);",
+                  "    console.log(\"✓ Nuovo Upload-Offset: \" + newOffset);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload completed successfully\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"1000000\");",
+                  "    console.log(\"✓ Upload completato: offset = length = 1MB\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "id": "38e8ee08-a0bd-43d8-9fcd-25039d3e5e1a"
+              }
+            }
+          ],
+          "id": "7fc151d8-d463-4b3b-ae66-fff59dace82a",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Offset",
+                "value": "0",
+                "description": "Offset corrente del file (inizio)",
+                "type": "text"
+              },
+              {
+                "key": "Content-Length",
+                "value": "1000000",
+                "description": "Dimensione del chunk (OBBLIGATORIO per TUS)",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{chunkContent}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Carica un chunk di dati per un upload esistente.\n\n**Specifiche TUS:**\n- Content-Type DEVE essere 'application/offset+octet-stream'\n- Upload-Offset DEVE corrispondere all'offset corrente del server\n- Content-Length DEVE essere specificato\n- Il chunk completa l'upload (1MB totale)\n\nL'uploadId viene estratto automaticamente dal Location header della POST precedente."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH - Upload Partial Chunk (Stays in Uploading)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Crea un nuovo upload per il test parziale",
+                  "// Questo test dimostra cosa succede quando NON completi l'upload"
+                ],
+                "type": "text/javascript",
+                "id": "f0e98871-4f7e-49bd-91af-37c2193e1a13"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset header is present\", function () {",
+                  "    pm.response.to.have.header(\"Upload-Offset\");",
+                  "    var newOffset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    console.log(\"✓ Upload-Offset aggiornato a: \" + newOffset);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload remains in UPLOADING state (incomplete)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    // Offset = 524288 (512KB), ma Upload-Length = 1000000 (1MB)",
+                  "    pm.expect(parseInt(offset)).to.be.lessThan(1000000);",
+                  "    console.log(\"⚠️  Upload incompleto: \" + offset + \" / 1000000 bytes\");",
+                  "    console.log(\"⚠️  Stato: UPLOADING (non completato)\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "id": "c5b76856-a2db-4d9c-bcc9-e656efbd8c7b"
+              }
+            }
+          ],
+          "id": "f09b02bf-b9ba-4afd-b030-6aadfe3fa929",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Offset",
+                "value": "0",
+                "description": "Offset iniziale",
+                "type": "text"
+              },
+              {
+                "key": "Content-Length",
+                "value": "524288",
+                "description": "512KB - Upload PARZIALE (OBBLIGATORIO per TUS)",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{#repeat 524288}}Y{{/repeat}}",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Carica un chunk PARZIALE di 512KB (metà dell'upload).\n\n**Risultato atteso:**\n- Upload-Offset sarà 524288 (512KB)\n- Upload-Length è 1000000 (1MB)\n- Stato rimane **UPLOADING** perché non completato\n\n**Specifiche TUS rispettate:**\n- ✅ Content-Type: application/offset+octet-stream\n- ✅ Upload-Offset: 0 (corrisponde all'offset server)\n- ✅ Content-Length: 524288 (specificato)\n\n⚠️ **IMPORTANTE:** Questo upload rimane incompleto e in stato UPLOADING.\nPer completarlo servirebbe un altro PATCH con i rimanenti 475712 bytes (offset 524288)."
+          },
+          "response": []
+        },
+        {
+          "name": "HEAD - Verify Partial Upload Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload is incomplete (UPLOADING state)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    var length = pm.response.headers.get(\"Upload-Length\");",
+                  "    ",
+                  "    pm.expect(parseInt(offset)).to.be.lessThan(parseInt(length));",
+                  "    console.log(\"📊 Upload Status:\");",
+                  "    console.log(\"   Offset: \" + offset + \" bytes\");",
+                  "    console.log(\"   Length: \" + length + \" bytes\");",
+                  "    console.log(\"   Progress: \" + Math.round((offset/length)*100) + \"%\");",
+                  "    console.log(\"   Stato: UPLOADING ⚠️\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "id": "f8a45a3a-a3c0-42bd-b669-53aa66641d38"
+              }
+            }
+          ],
+          "id": "aeca6f9e-dddf-434f-b5ed-ab9062aca055",
+          "request": {
+            "method": "HEAD",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Verifica lo stato dell'upload parziale.\n\nQuesto HEAD dimostra che l'upload è in stato UPLOADING:\n- Upload-Offset < Upload-Length\n- Il file non è ancora completato\n- È possibile riprendere l'upload dal byte 524288"
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE - Terminate Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Tus-Resumable header is present\", function () {",
+                  "    pm.response.to.have.header(\"Tus-Resumable\");",
+                  "});",
+                  "",
+                  "console.log(\"✓ Upload eliminato con successo\");"
+                ],
+                "type": "text/javascript",
+                "id": "796337e1-7e7b-4204-86f6-26dd1c94875a"
+              }
+            }
+          ],
+          "id": "8aaed4b3-8870-4819-880a-db2eea8c8131",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Elimina un upload e tutti i dati associati (termination extension)."
+          },
+          "response": []
+        }
+      ],
+      "id": "1148a9a8-3908-4cb0-929f-4d352acda229",
+      "description": "Test per tutte le route del TusController: OPTIONS, POST, HEAD, PATCH, DELETE\n\n**Test conformi alle specifiche TUS 1.0.0:**\n\n✅ **PATCH - Upload Chunk (Complete Upload)**\n- Carica 1MB completando l'upload\n- Include Content-Length (OBBLIGATORIO)\n- Offset finale = Upload-Length (completato)\n\n⚠️ **PATCH - Upload Partial Chunk (Stays in Uploading)**\n- Carica solo 512KB (upload parziale)\n- Include Content-Length (OBBLIGATORIO)\n- Upload rimane in stato UPLOADING\n- Offset < Upload-Length (incompleto)\n\n✅ **HEAD - Verify Partial Upload Status**\n- Verifica stato upload incompleto\n- Mostra progress e stato UPLOADING\n\n**Specifiche TUS rispettate:**\n- Content-Type: application/offset+octet-stream\n- Upload-Offset deve corrispondere all'offset server\n- Content-Length OBBLIGATORIO per tutti i PATCH"
+    },
+    {
+      "name": "2. FileController Routes",
+      "item": [
+        {
+          "name": "GET - List Files",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "c349fe91-8c32-4aa3-95aa-3b0e3ab6e301",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test(\"Response has pagination info\", function () {",
+                  "    pm.expect(jsonData).to.have.property('content');",
+                  "    pm.expect(jsonData).to.have.property('totalElements');",
+                  "    pm.expect(jsonData).to.have.property('totalPages');",
+                  "});",
+                  "",
+                  "// Salva il primo file ID se disponibile",
+                  "if (jsonData.content && jsonData.content.length > 0) {",
+                  "    var firstFileId = jsonData.content[0].id;",
+                  "    pm.collectionVariables.set('uploadId', firstFileId);",
+                  "    console.log('✓ Primo file ID salvato: ' + firstFileId);",
+                  "}",
+                  "",
+                  "console.log('✓ Totale file trovati: ' + jsonData.totalElements);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "3dc54e4e-3d40-4df0-b70a-8404a3299fe1",
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "e3e854da-4aca-4061-9199-2c8463b5ee09",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files?page=0&size=10&sort=createdAt,desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files"
+              ],
+              "query": [
+                {
+                  "key": "contentType",
+                  "value": "application/pdf",
+                  "description": "Filtra per tipo MIME",
+                  "disabled": true
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "2024-01-01",
+                  "description": "Data inizio (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2024-12-31",
+                  "description": "Data fine (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Numero pagina (0-based)"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Elementi per pagina"
+                },
+                {
+                  "key": "sort",
+                  "value": "createdAt,desc",
+                  "description": "Campo e direzione ordinamento"
+                }
+              ]
+            },
+            "description": "Ottiene la lista dei file con filtri opzionali e paginazione."
+          },
+          "response": []
+        },
+        {
+          "name": "GET - Get File Metadata",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test(\"Response has file metadata\", function () {",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('filename');",
+                  "    pm.expect(jsonData).to.have.property('size');",
+                  "    pm.expect(jsonData).to.have.property('contentType');",
+                  "});",
+                  "",
+                  "console.log('✓ Filename: ' + jsonData.filename);",
+                  "console.log('✓ Size: ' + jsonData.size + ' bytes');",
+                  "console.log('✓ Content-Type: ' + jsonData.contentType);"
+                ],
+                "type": "text/javascript",
+                "id": "3bd50b20-d109-4c61-8525-cadc811c9b6b"
+              }
+            }
+          ],
+          "id": "a366541f-1f4a-4236-aeef-1de560418fc2",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Ottiene i metadata di un file specifico tramite il suo ID."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH - Update File Metadata",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "console.log('✓ Metadata aggiornati con successo');"
+                ],
+                "type": "text/javascript",
+                "id": "45b0b641-6470-4f07-ad33-c769e004eb61"
+              }
+            }
+          ],
+          "id": "5687c128-1ec1-4785-bba7-2afa37413a72",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n\t\"description\": \"File aggiornato da Postman\",\n\t\"category\": \"test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{uploadId}}/versions/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{uploadId}}",
+                "versions",
+                "1"
+              ]
+            },
+            "description": "Aggiorna i metadata di un file specifico. Le chiavi devono essere ASCII."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE - Delete File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "console.log('✓ File eliminato con successo');"
+                ],
+                "type": "text/javascript",
+                "id": "e757b48e-fb74-436d-b268-b2000bf535ea"
+              }
+            }
+          ],
+          "id": "b810d4df-ba15-4eaf-a9ce-7bfa705e40de",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Elimina un file e i suoi metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "GET - Download File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "d3552648-81e2-48ec-b2f6-899d57a5f242",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Content-Disposition header is present\", function () {",
+                  "    pm.response.to.have.header(\"Content-Disposition\");",
+                  "});",
+                  "",
+                  "console.log('✓ File scaricato con successo');",
+                  "console.log('✓ Content-Disposition: ' + pm.response.headers.get('Content-Disposition'));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "8fa5110f-ae88-4d03-b996-e21c64325b72",
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "ff5e3105-8e0c-400f-860f-930ae5ad7826",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{uploadId}}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{uploadId}}",
+                "download"
+              ]
+            },
+            "description": "Scarica il file binario. Il file deve essere completato prima del download."
+          },
+          "response": []
+        },
+        {
+          "name": "GET - Get File Shares",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test(\"Response has pagination info\", function () {",
+                  "    pm.expect(jsonData).to.have.property('content');",
+                  "    pm.expect(jsonData).to.have.property('totalElements');",
+                  "});",
+                  "",
+                  "console.log('✓ Condivisioni trovate: ' + jsonData.totalElements);"
+                ],
+                "type": "text/javascript",
+                "id": "d17305eb-6ea9-4d27-b5ee-519daaa640f4"
+              }
+            }
+          ],
+          "id": "44f59569-f872-4520-b8c7-e7797f821add",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{uploadId}}/shares?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{uploadId}}",
+                "shares"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Ottiene la lista delle condivisioni per un file specifico."
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Create File Share",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "6e45c99c-a4de-46e4-a30f-0ad93aa44378",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test(\"Response has share details\", function () {",
+                  "    pm.expect(jsonData).to.have.property('fileId');",
+                  "    pm.expect(jsonData).to.have.property('userId');",
+                  "    pm.expect(jsonData).to.have.property('permission');",
+                  "});",
+                  "",
+                  "console.log('✓ Condivisione creata con successo');",
+                  "console.log('✓ Permission: ' + jsonData.permission);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "529b436a-e810-4f75-9ec1-39fee79cde8d",
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "8e28d5c8-ae79-42eb-a4e9-83573f1c17f3",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{uploadId}}/shares?userId={{testUserId}}&permission=READ_ONLY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{uploadId}}",
+                "shares"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{testUserId}}",
+                  "description": "UUID dell'utente con cui condividere"
+                },
+                {
+                  "key": "permission",
+                  "value": "READ_ONLY",
+                  "description": "READ_ONLY, READ_WRITE",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "Crea una nuova condivisione di un file con un utente specifico."
+          },
+          "response": []
+        },
+        {
+          "name": "GET - Files Shared With User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test(\"Response has pagination info\", function () {",
+                  "    pm.expect(jsonData).to.have.property('content');",
+                  "    pm.expect(jsonData).to.have.property('totalElements');",
+                  "});",
+                  "",
+                  "console.log('✓ File condivisi con utente: ' + jsonData.totalElements);"
+                ],
+                "type": "text/javascript",
+                "id": "b5eb2dbd-f72d-48b3-aad9-f7aa8b7f991b"
+              }
+            }
+          ],
+          "id": "6594fa0c-1a69-4aeb-8271-1e01f889ba48",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/shared-with/{{testUserId}}?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "shared-with",
+                "{{testUserId}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Ottiene la lista dei file condivisi con un utente specifico."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE - Delete File Share",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "console.log('✓ Condivisione eliminata con successo');"
+                ],
+                "type": "text/javascript",
+                "id": "7962cdb2-133a-4194-af0d-5fcda4ca3ded"
+              }
+            }
+          ],
+          "id": "fe10dfa6-5fc9-4f30-a634-64046e606ff2",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{uploadId}}/shares/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{uploadId}}",
+                "shares",
+                "1"
+              ]
+            },
+            "description": "Elimina una condivisione specifica di un file."
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Create File Version",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "3b5f472a-cb0e-4a09-851b-0b1a13de20d3",
+                "exec": [
+                  "// Il server fa un redirect",
+                  "pm.test(\"Status code is 3xx redirect\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([301, 302, 303, 307, 308]);",
+                  "});",
+                  "",
+                  "pm.test(\"Location header is present\", function () {",
+                  "    pm.response.to.have.header(\"Location\");",
+                  "    var location = pm.response.headers.get(\"Location\");",
+                  "    console.log('✓ Redirect to: ' + location);",
+                  "    ",
+                  "    // Verifica che il redirect contenga il fileId",
+                  "    var fileId = pm.collectionVariables.get('uploadId');",
+                  "    pm.expect(location).to.include(fileId);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "571f1eab-e14e-47c7-9058-e8529bf83fce",
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "35bf4841-93a8-4984-a163-b767dbf9d6a5",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "100000",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{uploadId}}/versions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{uploadId}}",
+                "versions"
+              ]
+            },
+            "description": "Crea una nuova versione di un file esistente.\n\n**Comportamento:**\n- Il server fa un redirect a `file:/{fileId}`\n- Risposta attesa: 302 Found o altro status code 3xx\n- Location header contiene il path del redirect"
+          },
+          "response": []
+        }
+      ],
+      "id": "773f5e3d-284a-4f41-aee6-0c4747bee231",
+      "description": "Test per tutte le route del FileController: gestione file, metadata, download e condivisioni\n\n**Route testate:**\n- GET /api/v1/files - Lista file\n- GET /api/v1/files/{id} - Dettagli file\n- PATCH /api/v1/files/{id}/versions/{version} - Aggiorna metadata\n- DELETE /api/v1/files/{id} - Elimina file\n- GET /api/v1/files/{id}/download - Scarica file\n- GET /api/v1/files/{id}/shares - Lista condivisioni\n- POST /api/v1/files/{id}/shares - Crea condivisione\n- GET /api/v1/files/shared-with/{userId} - File condivisi con utente\n- DELETE /api/v1/files/{id}/shares/{shareId} - Elimina condivisione\n- POST /api/v1/files/{fileId}/versions - Crea versione file (redirect)"
+    },
+    {
+      "name": "3. Upload Test - 8MB Single Chunk",
+      "item": [
+        {
+          "name": "Step 1 - Create 8MB Upload",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "81dcc717-23a0-44be-ab11-89f4f1dd287a",
+                "exec": [
+                  "// Genera UUID dinamico",
+                  "function generateUUID() {",
+                  "    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+                  "        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+                  "        return v.toString(16);",
+                  "    });",
+                  "}",
+                  "var uuid = generateUUID();",
+                  "pm.collectionVariables.set(\"currentUploadUuidBase64\", btoa(uuid));",
+                  "pm.collectionVariables.set(\"currentUploadUuid\", uuid);",
+                  "",
+                  "// Genera esattamente 8MB (8388608 bytes) di contenuto",
+                  "var chunk = 'X'.repeat(10240); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 819; i++) {",
+                  "    content += chunk; // 819 * 10240 = 8386560 bytes",
+                  "}",
+                  "content += 'X'.repeat(2048); // + 2048 = 8388608 (esattamente 8MB)",
+                  "pm.collectionVariables.set('content_8mb', content);",
+                  "",
+                  "console.log('🔵 Test: 8MB in 1 chunk singolo');",
+                  "console.log('UUID generato: ' + uuid);",
+                  "console.log('Contenuto generato: ' + content.length + ' bytes');"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "05fecfd5-b7ad-4593-9daa-674f947c69a9",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 8388608 (8MB)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"8388608\");",
+                  "    console.log('✓ Upload completato: ' + offset + ' bytes (8MB)');",
+                  "});",
+                  "",
+                  "var location = pm.response.headers.get(\"Location\");",
+                  "var uploadId = location.split('/').pop();",
+                  "pm.collectionVariables.set(\"uploadId\", uploadId);",
+                  "console.log('✓ Upload ID: ' + uploadId);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "id": "8962210c-a658-4c1b-a600-7db67cb8f988",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "8388608",
+                "description": "8MB = 8388608 bytes"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{currentUploadUuidBase64}},filename OG1iX3NpbmdsZS5iaW4=,filetype YXBwbGljYXRpb24vb2N0ZXQtc3RyZWFt",
+                "description": "filename=8mb_single.bin (base64)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Content-Length",
+                "value": "8388608",
+                "description": "Dimensione del chunk (OBBLIGATORIO per TUS)"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{content_8mb}}",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/uploads?fileId={{currentUploadUuid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads"
+              ],
+              "query": [
+                {
+                  "key": "fileId",
+                  "value": "{{currentUploadUuid}}"
+                }
+              ]
+            },
+            "description": "Crea e carica un file di 8MB in un singolo chunk usando Creation-With-Upload"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Verify 8MB Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload is complete\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    var length = pm.response.headers.get(\"Upload-Length\");",
+                  "    pm.expect(offset).to.equal(length);",
+                  "    pm.expect(offset).to.equal(\"8388608\");",
+                  "});",
+                  "",
+                  "console.log('✅ Test 8MB singolo chunk completato con successo!');"
+                ],
+                "type": "text/javascript",
+                "id": "f1ef2b6d-5e5a-4a70-ad38-dc2ab3c00127"
+              }
+            }
+          ],
+          "id": "c9bbb722-234a-4ac4-9021-8388432ab80d",
+          "request": {
+            "method": "HEAD",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Verifica che l'upload da 8MB sia completato"
+          },
+          "response": []
+        }
+      ],
+      "id": "192966b9-e84c-4e5c-af58-60ee760f2892",
+      "description": "**Test:** Creazione file da 8MB in un solo chunk\n\n- 8 MB = 8,388,608 bytes\n- Utilizza Creation-With-Upload extension\n- Upload completato in una singola richiesta POST"
+    },
+    {
+      "name": "3b. Upload Test - 8MB Two Chunks + Download",
+      "item": [
+        {
+          "name": "Step 1 - Create 8MB Upload (Auto UUID)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "3f68afe9-5e70-4ef6-8093-ad772bfac467",
+                "exec": [
+                  "// Genera UUID dinamico automaticamente",
+                  "function generateUUID() {",
+                  "    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+                  "        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+                  "        return v.toString(16);",
+                  "    });",
+                  "}",
+                  "var uuid = generateUUID();",
+                  "pm.collectionVariables.set(\"currentUploadUuidBase64\", btoa(uuid));",
+                  "pm.collectionVariables.set(\"currentUploadUuid\", uuid);",
+                  "",
+                  "console.log('🔵 Test: 8MB in 2 chunk + Download con UUID automatico');",
+                  "console.log('UUID generato automaticamente: ' + uuid);",
+                  "console.log('UUID base64: ' + btoa(uuid));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "72dd1848-981a-47d0-a4b7-f7e199b95f8c",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Location header is present\", function () {",
+                  "    pm.response.to.have.header(\"Location\");",
+                  "    var location = pm.response.headers.get(\"Location\");",
+                  "    var uploadId = location.split('/').pop();",
+                  "    pm.collectionVariables.set(\"uploadId\", uploadId);",
+                  "    ",
+                  "    // Verifica che l'uploadId corrisponda all'UUID generato",
+                  "    var generatedUuid = pm.collectionVariables.get('currentUploadUuid');",
+                  "    console.log('✓ Upload creato con ID: ' + uploadId);",
+                  "    console.log('✓ UUID generato era: ' + generatedUuid);",
+                  "    console.log('✓ Match: ' + (uploadId === generatedUuid ? 'SÌ' : 'NO'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "12cae8d2-dbec-4401-9359-a336e74f46a4",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "8388608",
+                "description": "8MB = 8388608 bytes"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{currentUploadUuidBase64}},filename OG1iX2Rvd25sb2FkLmJpbg==,filetype YXBwbGljYXRpb24vb2N0ZXQtc3RyZWFt",
+                "description": "UUID generato automaticamente. filename=8mb_download.bin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads?fileId={{currentUploadUuid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ],
+              "query": [
+                {
+                  "key": "fileId",
+                  "value": "{{currentUploadUuid}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "Crea upload da 8MB usando UUID generato automaticamente nel pre-request script"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Upload First Chunk (4MB)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Genera esattamente 4MB (4194304 bytes) per il primo chunk",
+                  "var chunk = 'A'.repeat(10240); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 409; i++) {",
+                  "    content += chunk; // 409 * 10240 = 4188160 bytes",
+                  "}",
+                  "content += 'A'.repeat(6144); // + 6144 = 4194304 (esattamente 4MB)",
+                  "pm.collectionVariables.set('chunk1_4mb', content);",
+                  "console.log('✓ Primo chunk generato: ' + content.length + ' bytes (4MB)');"
+                ],
+                "type": "text/javascript",
+                "id": "2d4f8ca7-17c3-4df5-9eb7-5623293ba20c"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 4194304 (4MB)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"4194304\");",
+                  "    pm.collectionVariables.set('currentOffset', offset);",
+                  "    console.log('✓ Primo chunk caricato, offset: ' + offset + ' (4MB)');",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "id": "5c09ac17-3fbd-4b05-bea6-9d517eca321c"
+              }
+            }
+          ],
+          "id": "f26345ac-5bf0-40bd-b75e-8b23dbbd8b49",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Upload-Offset",
+                "value": "0"
+              },
+              {
+                "key": "Content-Length",
+                "value": "4194304",
+                "description": "4MB"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{chunk1_4mb}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Carica primo chunk da 4MB (offset 0)"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3 - Upload Second Chunk (4MB)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Genera esattamente 4MB (4194304 bytes) per il secondo chunk",
+                  "var chunk = 'B'.repeat(10240); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 409; i++) {",
+                  "    content += chunk; // 409 * 10240 = 4188160 bytes",
+                  "}",
+                  "content += 'B'.repeat(6144); // + 6144 = 4194304 (esattamente 4MB)",
+                  "pm.collectionVariables.set('chunk2_4mb', content);",
+                  "console.log('✓ Secondo chunk generato: ' + content.length + ' bytes (4MB)');"
+                ],
+                "type": "text/javascript",
+                "id": "9a89a48d-db6b-4495-b786-d0438d27c391"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 8388608 (8MB)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"8388608\");",
+                  "    console.log('✓ Secondo chunk caricato, offset finale: ' + offset + ' (8MB)');",
+                  "});",
+                  "",
+                  "console.log('✅ Upload 8MB completato in 2 chunk!');"
+                ],
+                "type": "text/javascript",
+                "id": "9f06d17e-a4a0-4743-8735-abd95ac67433"
+              }
+            }
+          ],
+          "id": "b3a19143-8805-45c6-b0e0-46064e3493f4",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Upload-Offset",
+                "value": "{{currentOffset}}",
+                "description": "Usa offset dal primo chunk (4194304)"
+              },
+              {
+                "key": "Content-Length",
+                "value": "4194304",
+                "description": "4MB"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{chunk2_4mb}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Carica secondo chunk da 4MB (offset 4194304)"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 4 - Verify Upload Complete",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload is complete (offset = length)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    var length = pm.response.headers.get(\"Upload-Length\");",
+                  "    pm.expect(offset).to.equal(length);",
+                  "    pm.expect(offset).to.equal(\"8388608\");",
+                  "});",
+                  "",
+                  "console.log('✓ Upload verificato: 8MB completi');",
+                  "console.log('✓ Pronto per il download');"
+                ],
+                "type": "text/javascript",
+                "id": "1d62b1ec-7e47-482b-b02e-d4fbbaeb187a"
+              }
+            }
+          ],
+          "id": "c1bef14c-5d97-4179-9554-1a7e07a58397",
+          "request": {
+            "method": "HEAD",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Verifica che l'upload da 8MB sia completato"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 5 - Download File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "f515a2bd-ee7f-42ba-a6da-2e15bbb5f009",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Content-Disposition header is present\", function () {",
+                  "    pm.response.to.have.header(\"Content-Disposition\");",
+                  "    var disposition = pm.response.headers.get(\"Content-Disposition\");",
+                  "    console.log('✓ Content-Disposition: ' + disposition);",
+                  "});",
+                  "",
+                  "pm.test(\"File size is 8MB\", function () {",
+                  "    var contentLength = pm.response.headers.get(\"Content-Length\");",
+                  "    if (contentLength) {",
+                  "        pm.expect(contentLength).to.equal(\"8388608\");",
+                  "        console.log('✓ File scaricato: ' + contentLength + ' bytes (8MB)');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test(\"Response body size is 8MB\", function () {",
+                  "    var bodySize = pm.response.stream.length;",
+                  "    console.log('✓ Body size: ' + bodySize + ' bytes');",
+                  "    // Il body potrebbe essere leggermente diverso a causa dell'encoding",
+                  "    pm.expect(bodySize).to.be.closeTo(8388608, 1000);",
+                  "});",
+                  "",
+                  "console.log('✅ Test completato: Upload 8MB + Download con UUID automatico!');",
+                  "console.log('✓ UUID usato: ' + pm.collectionVariables.get('uploadId'));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "a7a5953d-6973-460c-805e-72a34dbc9ff0",
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "366ebdf0-25f3-4c53-b279-1dd3e9e00274",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{currentUploadUuid}}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{currentUploadUuid}}",
+                "download"
+              ]
+            },
+            "description": "Scarica il file da 8MB usando l'UUID generato automaticamente durante la creazione"
+          },
+          "response": []
+        }
+      ],
+      "id": "c0a54715-7d00-47cb-a9e0-c11f393e207d",
+      "description": "**Test:** Upload 8MB in 2 chunk (4MB + 4MB) e Download con UUID automatico\n\n**Flusso completo:**\n1. Genera UUID automaticamente nel pre-request script\n2. POST crea upload con UUID generato\n3. PATCH carica primo chunk 4MB (offset 0)\n4. PATCH carica secondo chunk 4MB (offset 4194304)\n5. HEAD verifica completamento\n6. GET scarica il file usando lo stesso UUID\n\n**Dimensioni:**\n- Primo chunk: 4 MB = 4,194,304 bytes\n- Secondo chunk: 4 MB = 4,194,304 bytes\n- Totale: 8 MB = 8,388,608 bytes\n\n**UUID:** Generato automaticamente nel pre-request script e usato per tutta la catena"
+    },
+    {
+      "name": "5. Upload Test - 8MB Two Chunks (2MB+6MB)",
+      "item": [
+        {
+          "name": "Step 1 - Create 8MB Upload",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "d3da0686-2f6b-4967-baab-532856ebb0e1",
+                "exec": [
+                  "// Genera UUID dinamico",
+                  "function generateUUID() {",
+                  "    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+                  "        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+                  "        return v.toString(16);",
+                  "    });",
+                  "}",
+                  "var uuid = generateUUID();",
+                  "pm.collectionVariables.set(\"currentUploadUuidBase64\", btoa(uuid));",
+                  "pm.collectionVariables.set(\"currentUploadUuid\", uuid);",
+                  "console.log('🔵 Test: 8MB in 2 chunk (2MB + 6MB)');",
+                  "console.log('UUID generato: ' + uuid);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "0e0e7702-f767-4329-920d-32c9f7fb176a",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var location = pm.response.headers.get(\"Location\");",
+                  "var uploadId = location.split('/').pop();",
+                  "pm.collectionVariables.set(\"uploadId\", uploadId);",
+                  "console.log('✓ Upload creato con ID: ' + uploadId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "082641ae-af78-4d0d-a893-025166f0b14f",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "8388608",
+                "description": "8MB = 8388608 bytes"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{currentUploadUuidBase64}},filename OG1iX2NodW5rZWQuYmlu,filetype YXBwbGljYXRpb24vb2N0ZXQtc3RyZWFt",
+                "description": "filename=8mb_chunked.bin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ]
+            },
+            "description": "Crea un upload per un file da 8MB"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Upload First Chunk (2MB)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Genera esattamente 2MB (2097152 bytes)",
+                  "var chunk = 'A'.repeat(10240); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 204; i++) { // 204 * 10KB = 2088960 bytes",
+                  "    content += chunk;",
+                  "}",
+                  "content += 'A'.repeat(8192); // + 8192 = 2097152 (esattamente 2MB)",
+                  "pm.collectionVariables.set('chunk_2mb', content);",
+                  "console.log('✓ Primo chunk generato: ' + content.length + ' bytes (2MB)');"
+                ],
+                "type": "text/javascript",
+                "id": "7af4721a-1fc9-41da-9ca1-4324a431e2ab"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 2097152 (2MB)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"2097152\");",
+                  "    pm.collectionVariables.set('currentOffset', offset);",
+                  "    console.log('✓ Primo chunk caricato, offset: ' + offset);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "id": "e1047261-e26c-4ad3-8d04-24049a257662"
+              }
+            }
+          ],
+          "id": "50d835c7-24d9-459a-aece-f3667498ce3e",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Upload-Offset",
+                "value": "0"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{chunk_2mb}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Carica il primo chunk da 2MB (offset 0)"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3 - Upload Second Chunk (6MB)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Genera esattamente 6MB (6291456 bytes)",
+                  "var chunk = 'B'.repeat(10240); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 614; i++) { // 614 * 10KB = 6287360 bytes",
+                  "    content += chunk;",
+                  "}",
+                  "content += 'B'.repeat(4096); // + 4096 = 6291456 (esattamente 6MB)",
+                  "pm.collectionVariables.set('chunk_6mb', content);",
+                  "console.log('✓ Secondo chunk generato: ' + content.length + ' bytes (6MB)');"
+                ],
+                "type": "text/javascript",
+                "id": "2c823a15-bf57-473e-b91f-34dc8f6aa665"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 8388608 (8MB)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"8388608\");",
+                  "    console.log('✓ Secondo chunk caricato, offset finale: ' + offset);",
+                  "});",
+                  "",
+                  "console.log('✅ Test 8MB in 2 chunk (2MB+6MB) completato!');"
+                ],
+                "type": "text/javascript",
+                "id": "3bf68a83-de9a-495a-9d59-5f2fa35e3c5b"
+              }
+            }
+          ],
+          "id": "0488c94f-a159-4c4d-af26-11184ce52566",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Upload-Offset",
+                "value": "{{currentOffset}}",
+                "description": "Usa l'offset dal primo chunk (2097152)"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{chunk_6mb}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Carica il secondo chunk da 6MB (offset 2097152)"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 4 - Verify 8MB Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload is complete\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    var length = pm.response.headers.get(\"Upload-Length\");",
+                  "    pm.expect(offset).to.equal(length);",
+                  "    pm.expect(offset).to.equal(\"8388608\");",
+                  "});",
+                  "",
+                  "console.log('✅ Verifica completata: 8MB uploadati correttamente!');"
+                ],
+                "type": "text/javascript",
+                "id": "31a77efa-322e-40a9-8f4e-6289b7fe046f"
+              }
+            }
+          ],
+          "id": "5639f719-62e4-49e7-9a50-aca6ce92c0d5",
+          "request": {
+            "method": "HEAD",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Verifica che l'upload da 8MB sia completato"
+          },
+          "response": []
+        }
+      ],
+      "id": "735c9c9a-6d19-4722-9183-f3565ace1cb0",
+      "description": "**Test:** Creazione file da 8MB in 2 chunk (2MB + 6MB)\n\n- Primo chunk: 2 MB = 2,097,152 bytes (offset 0)\n- Secondo chunk: 6 MB = 6,291,456 bytes (offset 2,097,152)\n- Totale: 8 MB = 8,388,608 bytes"
+    },
+    {
+      "name": "6. Upload Test - 5MB Two Chunks (2.5MB+2.5MB)",
+      "item": [
+        {
+          "name": "Step 1 - Create 5MB Upload",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "4652d90d-f9eb-4b3b-959a-53a6fcf08243",
+                "exec": [
+                  "// Genera UUID dinamico",
+                  "function generateUUID() {",
+                  "    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+                  "        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+                  "        return v.toString(16);",
+                  "    });",
+                  "}",
+                  "var uuid = generateUUID();",
+                  "pm.collectionVariables.set(\"currentUploadUuidBase64\", btoa(uuid));",
+                  "pm.collectionVariables.set(\"currentUploadUuid\", uuid);",
+                  "console.log('🔵 Test: 5MB in 2 chunk (2.5MB + 2.5MB)');",
+                  "console.log('UUID generato: ' + uuid);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "8623bf26-aa01-4069-b1fa-f93e87e6395e",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var location = pm.response.headers.get(\"Location\");",
+                  "var uploadId = location.split('/').pop();",
+                  "pm.collectionVariables.set(\"uploadId\", uploadId);",
+                  "console.log('✓ Upload creato con ID: ' + uploadId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "ab1cb4c3-44a2-4c6d-a439-1942cfc9d7fb",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "5242880",
+                "description": "5MB = 5242880 bytes"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{currentUploadUuidBase64}},filename NW1iX2NodW5rZWQuYmlu,filetype YXBwbGljYXRpb24vb2N0ZXQtc3RyZWFt",
+                "description": "filename=5mb_chunked.bin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ]
+            },
+            "description": "Crea un upload per un file da 5MB"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Upload First Chunk (2.5MB)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Genera esattamente 2.5MB (2621440 bytes)",
+                  "var chunk = 'A'.repeat(10240); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 256; i++) { // 256 * 10KB = 2621440 bytes (esattamente 2.5MB)",
+                  "    content += chunk;",
+                  "}",
+                  "pm.collectionVariables.set('chunk_2_5mb_1', content);",
+                  "console.log('✓ Primo chunk generato: ' + content.length + ' bytes (2.5MB)');"
+                ],
+                "type": "text/javascript",
+                "id": "ee6023fd-70d0-451f-9e32-9d7743e0c061"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 2621440 (2.5MB)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"2621440\");",
+                  "    pm.collectionVariables.set('currentOffset', offset);",
+                  "    console.log('✓ Primo chunk caricato, offset: ' + offset);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "id": "21d581b2-598e-4300-b29b-141a5935cfef"
+              }
+            }
+          ],
+          "id": "0ccff73d-4b4f-4d72-9500-49bead525ae1",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Upload-Offset",
+                "value": "0"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{chunk_2_5mb_1}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Carica il primo chunk da 2.5MB (offset 0)"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3 - Upload Second Chunk (2.5MB)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Genera esattamente 2.5MB (2621440 bytes)",
+                  "var chunk = 'B'.repeat(10240); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 256; i++) { // 256 * 10KB = 2621440 bytes (esattamente 2.5MB)",
+                  "    content += chunk;",
+                  "}",
+                  "pm.collectionVariables.set('chunk_2_5mb_2', content);",
+                  "console.log('✓ Secondo chunk generato: ' + content.length + ' bytes (2.5MB)');"
+                ],
+                "type": "text/javascript",
+                "id": "9f729e91-b04e-464c-adf5-06a4a1260265"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 5242880 (5MB)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"5242880\");",
+                  "    console.log('✓ Secondo chunk caricato, offset finale: ' + offset);",
+                  "});",
+                  "",
+                  "console.log('✅ Test 5MB in 2 chunk (2.5MB+2.5MB) completato!');"
+                ],
+                "type": "text/javascript",
+                "id": "b50893d8-18d3-4064-87cf-20709b0a2578"
+              }
+            }
+          ],
+          "id": "21a78812-f494-4288-afae-97dfd3cb757e",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Upload-Offset",
+                "value": "{{currentOffset}}",
+                "description": "Usa l'offset dal primo chunk (2621440)"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{chunk_2_5mb_2}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Carica il secondo chunk da 2.5MB (offset 2621440)"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 4 - Verify 5MB Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload is complete\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    var length = pm.response.headers.get(\"Upload-Length\");",
+                  "    pm.expect(offset).to.equal(length);",
+                  "    pm.expect(offset).to.equal(\"5242880\");",
+                  "});",
+                  "",
+                  "console.log('✅ Verifica completata: 5MB uploadati correttamente!');"
+                ],
+                "type": "text/javascript",
+                "id": "398e9adc-17ea-49af-aa84-9a0a2106b08a"
+              }
+            }
+          ],
+          "id": "d1c39538-349a-43f3-944a-b717dd92fffb",
+          "request": {
+            "method": "HEAD",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Verifica che l'upload da 5MB sia completato"
+          },
+          "response": []
+        }
+      ],
+      "id": "f8cb042a-1960-44ce-8384-04ef625be540",
+      "description": "**Test:** Creazione file da 5MB in 2 chunk uguali (2.5MB + 2.5MB)\n\n- Primo chunk: 2.5 MB = 2,621,440 bytes (offset 0)\n- Secondo chunk: 2.5 MB = 2,621,440 bytes (offset 2,621,440)\n- Totale: 5 MB = 5,242,880 bytes"
+    },
+    {
+      "name": "7. Upload Test - 4MB Single Chunk",
+      "item": [
+        {
+          "name": "Step 1 - Create 4MB Upload",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Genera UUID dinamico",
+                  "function generateUUID() {",
+                  "    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+                  "        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+                  "        return v.toString(16);",
+                  "    });",
+                  "}",
+                  "var uuid = generateUUID();",
+                  "pm.collectionVariables.set(\"currentUploadUuidBase64\", btoa(uuid));",
+                  "",
+                  "// Genera esattamente 4MB (4194304 bytes) di contenuto",
+                  "var chunk = 'X'.repeat(10240); // 10KB",
+                  "var content = '';",
+                  "for (var i = 0; i < 409; i++) {",
+                  "    content += chunk; // 409 * 10240 = 4188160 bytes",
+                  "}",
+                  "content += 'X'.repeat(6144); // + 6144 = 4194304 (esattamente 4MB)",
+                  "pm.collectionVariables.set('content_4mb', content);",
+                  "",
+                  "console.log('🔵 Test: 4MB in 1 chunk singolo');",
+                  "console.log('UUID generato: ' + uuid);",
+                  "console.log('Contenuto generato: ' + content.length + ' bytes');"
+                ],
+                "type": "text/javascript",
+                "id": "17bdf908-cc33-4a4b-8103-6fd6ae20aae2"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 4194304 (4MB)\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"4194304\");",
+                  "    console.log('✓ Upload completato: ' + offset + ' bytes (4MB)');",
+                  "});",
+                  "",
+                  "var location = pm.response.headers.get(\"Location\");",
+                  "var uploadId = location.split('/').pop();",
+                  "pm.collectionVariables.set(\"uploadId\", uploadId);",
+                  "console.log('✓ Upload ID: ' + uploadId);"
+                ],
+                "type": "text/javascript",
+                "id": "3dabcbf0-c14f-412a-87bf-4f6be6e92b86"
+              }
+            }
+          ],
+          "id": "8208cea5-b392-4697-919d-b732b78d4b09",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "4194304",
+                "description": "4MB = 4194304 bytes"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{currentUploadUuidBase64}},filename NG1iX3NpbmdsZS5iaW4=,filetype YXBwbGljYXRpb24vb2N0ZXQtc3RyZWFt",
+                "description": "filename=4mb_single.bin (base64)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Content-Length",
+                "value": "4194304",
+                "description": "Dimensione del chunk (OBBLIGATORIO per TUS)"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{content_4mb}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ]
+            },
+            "description": "Crea e carica un file di 4MB in un singolo chunk usando Creation-With-Upload"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Verify 4MB Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload is complete\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    var length = pm.response.headers.get(\"Upload-Length\");",
+                  "    pm.expect(offset).to.equal(length);",
+                  "    pm.expect(offset).to.equal(\"4194304\");",
+                  "});",
+                  "",
+                  "console.log('✅ Test 4MB singolo chunk completato con successo!');"
+                ],
+                "type": "text/javascript",
+                "id": "4b7a5d0f-669b-4099-8a3b-7c378b8dd499"
+              }
+            }
+          ],
+          "id": "02256e7f-5bcf-4596-b97e-565acdf1961e",
+          "request": {
+            "method": "HEAD",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Verifica che l'upload da 4MB sia completato"
+          },
+          "response": []
+        }
+      ],
+      "id": "54de50d7-d364-44c4-bc9b-f1f263834307",
+      "description": "**Test:** Creazione file da 4MB in un solo chunk\n\n- 4 MB = 4,194,304 bytes\n- Utilizza Creation-With-Upload extension\n- Upload completato in una singola richiesta POST"
+    },
+    {
+      "name": "8. Duplicate UUID Test - Static FileUUID",
+      "item": [
+        {
+          "name": "Step 1 - Create First Upload with Static UUID",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Usa UUID statico dalla variabile di collezione",
+                  "var staticUuid = pm.collectionVariables.get('staticTestUuid');",
+                  "var staticUuidBase64 = pm.collectionVariables.get('staticTestUuidBase64');",
+                  "",
+                  "console.log('🔵 Test: Duplicazione UUID statico');",
+                  "console.log('UUID statico utilizzato: ' + staticUuid);",
+                  "console.log('UUID statico base64: ' + staticUuidBase64);"
+                ],
+                "type": "text/javascript",
+                "id": "5192c177-b3a4-4ed5-b032-3459ab0f5c29"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Location header is present\", function () {",
+                  "    pm.response.to.have.header(\"Location\");",
+                  "    var location = pm.response.headers.get(\"Location\");",
+                  "    var uploadId = location.split('/').pop();",
+                  "    pm.collectionVariables.set(\"uploadId\", uploadId);",
+                  "    console.log('✓ Primo upload creato con successo');",
+                  "    console.log('✓ Upload ID: ' + uploadId);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Expires header is present\", function () {",
+                  "    pm.response.to.have.header(\"Upload-Expires\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "id": "f8112fd0-dddc-4448-98fe-a60e6b1d13ad"
+              }
+            }
+          ],
+          "id": "3bb95b46-b7e0-4daa-b290-a9803b964e18",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "1024",
+                "description": "1KB per il test",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{staticTestUuidBase64}},filename ZHVwbGljYXRlX3Rlc3QudHh0,filetype dGV4dC9wbGFpbg==",
+                "description": "UUID statico. filename=duplicate_test.txt, filetype=text/plain (base64)",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ]
+            },
+            "description": "Crea il primo upload con un UUID statico predefinito"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Verify First Upload Created",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload exists and has correct metadata\", function () {",
+                  "    pm.response.to.have.header(\"Upload-Offset\");",
+                  "    pm.response.to.have.header(\"Upload-Length\");",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    var length = pm.response.headers.get(\"Upload-Length\");",
+                  "    pm.expect(offset).to.equal(\"0\");",
+                  "    pm.expect(length).to.equal(\"1024\");",
+                  "});",
+                  "",
+                  "console.log('✓ Primo upload verificato con successo');"
+                ],
+                "type": "text/javascript",
+                "id": "67f509a8-9277-4448-adcf-a750cf5c9e3c"
+              }
+            }
+          ],
+          "id": "4cd02f90-ae2f-4d55-983f-6781eac58c1b",
+          "request": {
+            "method": "HEAD",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Verifica che il primo upload esista correttamente"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3 - Attempt to Create Second Upload with Same UUID",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "console.log('⚠️  Tentativo di creare un secondo upload con lo stesso UUID statico');",
+                  "console.log('UUID statico: ' + pm.collectionVariables.get('staticTestUuid'));"
+                ],
+                "type": "text/javascript",
+                "id": "b4802d5b-fee6-452a-935d-cce05e8216e2"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Test per verificare il comportamento in caso di duplicazione",
+                  "// Il server può ritornare:",
+                  "// - 409 Conflict se rileva UUID duplicato",
+                  "// - 400 Bad Request se considera l'UUID già in uso",
+                  "// - 201 Created se permette duplicati (comportamento da verificare)",
+                  "",
+                  "var statusCode = pm.response.code;",
+                  "",
+                  "console.log('📊 Status Code ricevuto: ' + statusCode);",
+                  "",
+                  "if (statusCode === 409) {",
+                  "    pm.test(\"Server correctly rejects duplicate UUID with 409 Conflict\", function () {",
+                  "        pm.response.to.have.status(409);",
+                  "    });",
+                  "    console.log('✅ Server correttamente rifiuta UUID duplicato (409 Conflict)');",
+                  "} else if (statusCode === 400) {",
+                  "    pm.test(\"Server rejects duplicate UUID with 400 Bad Request\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "    });",
+                  "    console.log('✅ Server rifiuta UUID duplicato (400 Bad Request)');",
+                  "} else if (statusCode === 201) {",
+                  "    pm.test(\"Server allows duplicate UUID (creates new upload)\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "    console.log('⚠️  Server permette UUID duplicato - nuovo upload creato');",
+                  "    ",
+                  "    // Salva il secondo uploadId per eventuali test successivi",
+                  "    if (pm.response.headers.has(\"Location\")) {",
+                  "        var location = pm.response.headers.get(\"Location\");",
+                  "        var secondUploadId = location.split('/').pop();",
+                  "        pm.collectionVariables.set(\"secondUploadId\", secondUploadId);",
+                  "        console.log('  Secondo Upload ID: ' + secondUploadId);",
+                  "    }",
+                  "} else {",
+                  "    pm.test(\"Server returned unexpected status code: \" + statusCode, function () {",
+                  "        // Test informativo - non fallisce",
+                  "        console.log('❓ Status code inatteso: ' + statusCode);",
+                  "    });",
+                  "}",
+                  "",
+                  "// Log del response body se presente",
+                  "if (pm.response.text()) {",
+                  "    console.log('Response body: ' + pm.response.text());",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "id": "fb48740c-441c-41a1-98b5-e104902362e0"
+              }
+            }
+          ],
+          "id": "4e11bf62-6479-418b-b775-f6fff24bab12",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "2048",
+                "description": "Dimensione diversa per distinguerlo",
+                "type": "text"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{staticTestUuidBase64}},filename ZHVwbGljYXRlX3Rlc3RfMi50eHQ=,filetype dGV4dC9wbGFpbg==",
+                "description": "STESSO UUID statico. filename=duplicate_test_2.txt (base64)",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ]
+            },
+            "description": "Tenta di creare un secondo upload usando lo STESSO UUID statico del primo.\n\nQuesto test verifica il comportamento del server:\n- Se ritorna 409 Conflict → UUID duplicati non permessi ✅\n- Se ritorna 400 Bad Request → UUID considerato invalido/in uso ✅\n- Se ritorna 201 Created → Server permette duplicati ⚠️"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 4 - Clean Up First Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"First upload deleted successfully\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "console.log('✓ Primo upload eliminato (cleanup)');"
+                ],
+                "type": "text/javascript",
+                "id": "74aeef7a-c25a-4e0e-840c-fbec8dc679e1"
+              }
+            }
+          ],
+          "id": "487100e3-692e-486c-9c89-e663a3227416",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{uploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{uploadId}}"
+              ]
+            },
+            "description": "Elimina il primo upload per pulizia"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 5 - Clean Up Second Upload (if created)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Verifica se esiste un secondo upload da eliminare",
+                  "var secondUploadId = pm.collectionVariables.get('secondUploadId');",
+                  "if (!secondUploadId || secondUploadId === '') {",
+                  "    console.log('ℹ️  Nessun secondo upload da eliminare (probabilmente respinto dal server)');",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "id": "53569000-7222-4c08-a328-32a831ee8033"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var secondUploadId = pm.collectionVariables.get('secondUploadId');",
+                  "",
+                  "if (!secondUploadId || secondUploadId === '') {",
+                  "    pm.test(\"No second upload to delete\", function () {",
+                  "        console.log('✓ Nessun secondo upload creato - test completato');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Second upload deleted successfully\", function () {",
+                  "        pm.response.to.have.status(204);",
+                  "    });",
+                  "    console.log('✓ Secondo upload eliminato (cleanup)');",
+                  "    pm.collectionVariables.set('secondUploadId', '');",
+                  "}",
+                  "",
+                  "console.log('✅ Test duplicazione UUID completato!');"
+                ],
+                "type": "text/javascript",
+                "id": "7b22d499-59f5-4a2c-a3de-f35bcfde2150"
+              }
+            }
+          ],
+          "id": "8624f3c6-9135-4ced-955b-db5fe6398192",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/{{secondUploadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "{{secondUploadId}}"
+              ]
+            },
+            "description": "Elimina il secondo upload se è stato creato (cleanup)"
+          },
+          "response": []
+        }
+      ],
+      "id": "a5339fd5-2359-446e-a428-9e6656db107c",
+      "description": "**Test:** Verifica comportamento con UUID statico duplicato\n\n**Obiettivo:** Testare se il server permette di creare due upload con lo stesso FileUUID.\n\n**Flusso del test:**\n1. Crea primo upload con UUID statico\n2. Verifica che il primo upload esista\n3. Tenta di creare secondo upload con lo STESSO UUID statico\n4. Verifica il comportamento del server\n5. Cleanup: elimina gli upload creati\n\n**Comportamenti attesi:**\n- **409 Conflict** → Server rileva e rifiuta UUID duplicato ✅\n- **400 Bad Request** → Server considera UUID già in uso ✅\n- **201 Created** → Server permette duplicati (comportamento da verificare) ⚠️\n\n**UUID Statico utilizzato:**\n- UUID: `aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee`\n- Base64: `YWFhYWFhYWEtYmJiYi00Y2NjLThkZGQtZWVlZWVlZWVlZWVl`"
+    },
+    {
+      "name": "9. Create File Version Test",
+      "item": [
+        {
+          "name": "Step 1 - Create and Upload File",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "3e731165-4147-440e-b162-cd68ea129f7c",
+                "exec": [
+                  "// Genera UUID dinamico per il test",
+                  "function generateUUID() {",
+                  "    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+                  "        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+                  "        return v.toString(16);",
+                  "    });",
+                  "}",
+                  "var uuid = generateUUID();",
+                  "pm.collectionVariables.set(\"currentUploadUuidBase64\", btoa(uuid));",
+                  "pm.collectionVariables.set(\"currentUploadUuid\", uuid);",
+                  "",
+                  "// Genera contenuto di 1KB",
+                  "var content = 'V'.repeat(1024);",
+                  "pm.collectionVariables.set('versionTestContent', content);",
+                  "",
+                  "console.log('🔵 Test: Create File Version');",
+                  "console.log('UUID generato: ' + uuid);",
+                  "console.log('Contenuto: 1024 bytes');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "7ede6c5f-8865-440e-9beb-0c6987b8dd24",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload-Offset is 1024\", function () {",
+                  "    var offset = pm.response.headers.get(\"Upload-Offset\");",
+                  "    pm.expect(offset).to.equal(\"1024\");",
+                  "    console.log('✓ File caricato: 1024 bytes');",
+                  "});",
+                  "",
+                  "var location = pm.response.headers.get(\"Location\");",
+                  "var fileId = location.split('/').pop();",
+                  "pm.collectionVariables.set(\"uploadId\", fileId);",
+                  "console.log('✓ File ID: ' + fileId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "8e66ebbe-f905-4880-90c0-4034294d3f80",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Tus-Resumable",
+                "value": "{{tusVersion}}"
+              },
+              {
+                "key": "Upload-Length",
+                "value": "1024"
+              },
+              {
+                "key": "Upload-Metadata",
+                "value": "UUID {{currentUploadUuidBase64}},filename dmVyc2lvbl90ZXN0LnR4dA==,filetype dGV4dC9wbGFpbg==",
+                "description": "filename=version_test.txt, filetype=text/plain"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/offset+octet-stream"
+              },
+              {
+                "key": "Content-Length",
+                "value": "1024"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{versionTestContent}}",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads"
+              ]
+            },
+            "description": "Crea e carica un file da 1KB usando Creation-With-Upload"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Verify File Exists",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "65505ee9-4036-496c-bc83-28335bb9439f",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test(\"File metadata is correct\", function () {",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('filename');",
+                  "    pm.expect(jsonData.size).to.equal(1024);",
+                  "    console.log('✓ File verificato: ' + jsonData.filename);",
+                  "    console.log('✓ Size: ' + jsonData.size + ' bytes');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "14958684-05c4-4c5b-a542-e57aa846fef6",
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "d1c19fa7-aea3-4d29-9e81-6f0329650046",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{currentUploadUuid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{currentUploadUuid}}"
+              ]
+            },
+            "description": "Verifica che il file esista e abbia i metadata corretti"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3 - Create New Version (Redirect)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "bca9c927-cff5-441c-9af4-07eb651cd9b0",
+                "exec": [
+                  "console.log('⚠️  Creazione nuova versione del file');",
+                  "console.log('File ID: ' + pm.collectionVariables.get('uploadId'));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "89f87ec3-3910-472a-909c-d12f121715d5",
+                "exec": [
+                  "pm.test(\"Status code is 3xx redirect\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([301, 302, 303, 307, 308]);",
+                  "    console.log('✓ Status code: ' + pm.response.code + ' (redirect)');",
+                  "});",
+                  "",
+                  "pm.test(\"Location header is present\", function () {",
+                  "    pm.response.to.have.header(\"Location\");",
+                  "    var location = pm.response.headers.get(\"Location\");",
+                  "    console.log('✓ Redirect to: ' + location);",
+                  "});",
+                  "",
+                  "pm.test(\"Location contains fileId\", function () {",
+                  "    var location = pm.response.headers.get(\"Location\");",
+                  "    var fileId = pm.collectionVariables.get('uploadId');",
+                  "    ",
+                  "    // Verifica che il redirect contenga il fileId",
+                  "    pm.expect(location).to.include(fileId);",
+                  "    console.log('✓ FileId nel redirect: ' + fileId);",
+                  "});",
+                  "",
+                  "pm.test(\"Location starts with 'file:'\", function () {",
+                  "    var location = pm.response.headers.get(\"Location\");",
+                  "    pm.expect(location).to.match(/^file:/);",
+                  "    console.log('✓ Redirect format corretto: file:/{fileId}');",
+                  "});",
+                  "",
+                  "console.log('✅ Test Create File Version completato!');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "27ce3595-e176-44a9-baa8-d29a787d7fd7",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{currentUploadUuid}}/versions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{currentUploadUuid}}",
+                "versions"
+              ]
+            },
+            "description": "Crea una nuova versione del file.\n\n**Comportamento atteso:**\n```kotlin\n@PostMapping(\"/{fileId}/versions\")\nfun createFileVersion(...) {\n    res.sendRedirect(\"file:/${fileId}\")\n}\n```\n\n**Verifica:**\n- Status code 3xx (redirect)\n- Location header presente\n- Location = \"file:/{fileId}\"\n- FileId corrisponde all'upload"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 4 - Cleanup (Delete File)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "a935ce06-59a8-4695-bdf4-caa3a1637ef4",
+                "exec": [
+                  "pm.test(\"File deleted successfully\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "console.log('✓ File eliminato (cleanup)');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "e125c60e-9a9c-478a-9c9f-fed863b0d0ab",
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "482a09f1-8509-4fec-8ac6-fca5b18de482",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/{{currentUploadUuid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "{{currentUploadUuid}}"
+              ]
+            },
+            "description": "Elimina il file di test (cleanup)"
+          },
+          "response": []
+        }
+      ],
+      "id": "4e7398c5-35fe-45a5-8a7d-7ca1e05c03bd",
+      "description": "**Test:** POST /api/v1/files/{fileId}/versions - Create File Version\n\n**Obiettivo:** Testare la creazione di una nuova versione di un file esistente.\n\n**Flusso completo:**\n1. Crea e carica un file da 1KB (Creation-With-Upload)\n2. Verifica che il file esista (GET metadata)\n3. Crea nuova versione (POST /versions) → Redirect\n4. Verifica il redirect a file:/{fileId}\n5. Cleanup: elimina il file\n\n**Endpoint testato:**\n```kotlin\n@PostMapping(\"/{fileId}/versions\")\nfun createFileVersion(\n    @PathVariable fileId: UUID,\n    req: HttpServletRequest,\n    res: HttpServletResponse\n) {\n    req.contextPath\n    res.sendRedirect(\"file:/${fileId}\")\n}\n```\n\n**Verifiche:**\n- ✅ Status code 3xx (redirect)\n- ✅ Location header presente\n- ✅ Location formato: \"file:/{fileId}\"\n- ✅ FileId corretto nel redirect"
+    },
+    {
+      "name": "Test access token",
+      "id": "892c73ea-0f68-4cb2-82d2-fa5f9992b6c7",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client-id",
+              "value": "tus-client",
+              "type": "text",
+              "uuid": "cfea1fde-94b1-49e1-8149-0027d9ccccd2"
+            },
+            {
+              "key": "client-secret",
+              "value": "kBwAXCN3ljeGDubcnpSanUdUP19mcQG9",
+              "type": "text",
+              "uuid": "9f2204f6-b522-4ed4-857f-b159a526b788"
+            },
+            {
+              "key": "grant_type",
+              "value": "client_credentials",
+              "type": "text",
+              "uuid": "597698b1-97d0-4f7f-8544-eff60700deca"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:9090/realms/file-management/protocol/openid-connect/token",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "9090",
+          "path": [
+            "realms",
+            "file-management",
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "oauth2",
+    "oauth2": [
+      {
+        "key": "expires_in",
+        "value": 300,
+        "type": "number"
+      },
+      {
+        "key": "timestamp",
+        "value": 1765624852504,
+        "type": "number"
+      },
+      {
+        "key": "token_id",
+        "value": "44a15c32-2839-4870-874c-2b8171eeed80",
+        "type": "string"
+      },
+      {
+        "key": "tokenType",
+        "value": "Bearer",
+        "type": "string"
+      },
+      {
+        "key": "accessToken",
+        "value": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJxNFBPcjBQS3BHRER0REk5TkhZUVVTRllpM3JiNFVzUWxwamRRaWNYVWpZIn0.eyJleHAiOjE3NjU2MjUxNTIsImlhdCI6MTc2NTYyNDg1MiwiYXV0aF90aW1lIjoxNzY1NjI0ODUyLCJqdGkiOiJvbnJ0YWM6MThjNWVmMzMtOGJhOC1lOTAwLTM5NTQtZTMwZTE0MTVkYzIyIiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo5MDkwL3JlYWxtcy9maWxlLW1hbmFnZW1lbnQiLCJhdWQiOlsicmVhbG0tbWFuYWdlbWVudCIsImFjY291bnQiXSwic3ViIjoiYTY3ZDA0YmItZGFjOC00N2RlLTkwYTItZTQ5MTU4ODI3NWFhIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiZ2F0ZXdheS1jbGllbnQiLCJzaWQiOiI4YThmMDhiYy1kNGZiLWNkM2MtN2I5Yi1lYTk4M2NlM2JhZWYiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHA6Ly9sb2NhbGhvc3Q6ODA4MCJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsibWFuYWdlciIsIm9mZmxpbmVfYWNjZXNzIiwiZGVmYXVsdC1yb2xlcy1maWxlLW1hbmFnZW1lbnQiLCJhZG1pbiIsInN0YWZmIiwidW1hX2F1dGhvcml6YXRpb24iXX0sInJlc291cmNlX2FjY2VzcyI6eyJyZWFsbS1tYW5hZ2VtZW50Ijp7InJvbGVzIjpbInZpZXctcmVhbG0iLCJ2aWV3LWlkZW50aXR5LXByb3ZpZGVycyIsIm1hbmFnZS1pZGVudGl0eS1wcm92aWRlcnMiLCJpbXBlcnNvbmF0aW9uIiwicmVhbG0tYWRtaW4iLCJjcmVhdGUtY2xpZW50IiwibWFuYWdlLXVzZXJzIiwicXVlcnktcmVhbG1zIiwidmlldy1hdXRob3JpemF0aW9uIiwicXVlcnktY2xpZW50cyIsInF1ZXJ5LXVzZXJzIiwibWFuYWdlLWV2ZW50cyIsIm1hbmFnZS1yZWFsbSIsInZpZXctZXZlbnRzIiwidmlldy11c2VycyIsInZpZXctY2xpZW50cyIsIm1hbmFnZS1hdXRob3JpemF0aW9uIiwibWFuYWdlLWNsaWVudHMiLCJxdWVyeS1ncm91cHMiXX0sImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJtYW5hZ2UtYWNjb3VudC1saW5rcyIsInZpZXctcHJvZmlsZSJdfX0sInNjb3BlIjoib3BlbmlkIGVtYWlsIHByb2ZpbGUiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwic3RvcmFnZV9xdW90YSI6IjEwMDAwIiwicm9sZXMiOlsic3RhZmYiLCJhZG1pbiJdLCJvcmdhbml6YXRpb24iOiJQb2xpdGVjbmljbyBkaSBUb3Jpbm8iLCJuYW1lIjoiYXNkIGFzZCIsInByZWZlcnJlZF91c2VybmFtZSI6InJpY2NhcmRvIiwiZ2l2ZW5fbmFtZSI6ImFzZCIsImRlcGFydG1lbnQiOiJJVCIsImZhbWlseV9uYW1lIjoiYXNkIiwiZW1haWwiOiJzMzQ3NDkyQHN0dWRlbnRpLnBvbGl0by5pdCJ9.gHdgRZHhWSFp-U9ukRvjjBzOqubSDVIQNJlrwDleUdKRn45koT6mwlDHLv8qlfrqATB7kDdzEFmDVu0eisAi2S253EccCgHEV3ZcLjecekbidOqldxm0rhI4OWojV1SURjQAJPiFFDqhtmBlG5VZho0mSJogBR5x_H9Dxmz0IPO-Oz4QUALxboCkrSA_DAaZ5jGkEFZS_PKEWP80oLD3jQKo4yc1OmINn3iX2Yoxi6BBL6PL4UUHouYcw9povF_-10FyT98x-U-qusXfLRMcHwp-zS9HQjxcm6MdSJEgbjqgIeC0niPtwHMys_hNAsXOkNQkTokO77UcrbL20cZw1w",
+        "type": "string"
+      },
+      {
+        "key": "redirect_uri",
+        "value": "https://oauth.pstmn.io/v1/callback",
+        "type": "string"
+      },
+      {
+        "key": "useBrowser",
+        "value": false,
+        "type": "boolean"
+      },
+      {
+        "key": "scope",
+        "value": "openid profile",
+        "type": "string"
+      },
+      {
+        "key": "accessTokenUrl",
+        "value": "http://localhost:9090/realms/file-management/protocol/openid-connect/token",
+        "type": "string"
+      },
+      {
+        "key": "authUrl",
+        "value": "http://localhost:9090/realms/file-management/protocol/openid-connect/auth",
+        "type": "string"
+      },
+      {
+        "key": "clientSecret",
+        "value": "UDeZXlu98uuR15s27yHyGyWOvNj7h2VU",
+        "type": "string"
+      },
+      {
+        "key": "clientId",
+        "value": "gateway-client",
+        "type": "string"
+      },
+      {
+        "key": "tokenName",
+        "value": "PostmanTest",
+        "type": "string"
+      },
+      {
+        "key": "addTokenTo",
+        "value": "header",
+        "type": "string"
+      },
+      {
+        "key": "id",
+        "value": "collection/59cea397-09d9-4e64-bd3f-5306c7f8b8b3/2b2d916b-ae16-43c2-8db4-10d970334d5a",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "id": "3b6a8ef5-c0ff-4c58-b5dc-7681e6c098db",
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "id": "6c738a78-6336-41b4-923f-4ad6bce41b74",
+      "key": "uploadId",
+      "value": "",
+      "description": {
+        "content": "ID dell'upload estratto dal Location header (UUID non codificato)",
+        "type": "text/plain"
+      }
+    },
+    {
+      "id": "b09fbaba-4c8d-4838-9a07-30c266c97745",
+      "key": "tusVersion",
+      "value": "1.0.0"
+    },
+    {
+      "id": "8b2dba28-e1fa-4f0b-b3b0-0ebce9600256",
+      "key": "currentUploadUuidBase64",
+      "value": "",
+      "description": {
+        "content": "UUID generato dinamicamente e codificato in base64 per Upload-Metadata",
+        "type": "text/plain"
+      }
+    },
+    {
+      "id": "8d51de3e-3102-4e80-8aff-93e89c64feb2",
+      "key": "currentUploadUuid",
+      "value": "",
+      "description": {
+        "content": "UUID generato dinamicamente (non codificato)",
+        "type": "text/plain"
+      }
+    },
+    {
+      "id": "7db961a8-564a-4170-ac4c-13859675d528",
+      "key": "currentOffset",
+      "value": "",
+      "description": {
+        "content": "Offset corrente salvato dall'ultimo PATCH",
+        "type": "text/plain"
+      }
+    },
+    {
+      "id": "bade7e99-a3b1-44b0-98fa-b12ec25643ba",
+      "key": "testUserId",
+      "value": "550e8400-e29b-41d4-a716-446655440000",
+      "description": {
+        "content": "UUID di esempio per test condivisioni",
+        "type": "text/plain"
+      }
+    },
+    {
+      "id": "08635b17-b28f-4ec6-a4ab-e35c5de2d509",
+      "key": "staticTestUuid",
+      "value": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "description": {
+        "content": "UUID statico per test di duplicazione",
+        "type": "text/plain"
+      }
+    },
+    {
+      "id": "617193cc-d7a8-46eb-8c88-b4e009a1b67f",
+      "key": "staticTestUuidBase64",
+      "value": "YWFhYWFhYWEtYmJiYi00Y2NjLThkZGQtZWVlZWVlZWVlZWVl",
+      "description": {
+        "content": "UUID statico codificato in base64 per test di duplicazione",
+        "type": "text/plain"
+      }
+    },
+    {
+      "id": "f62b457e-6fe5-4cff-a075-8fa20aaef543",
+      "key": "content_8mb",
+      "value": ""
+    },
+    {
+      "id": "7e58e474-2a6f-4afc-b0ef-a803718ac156",
+      "key": "fileId",
+      "value": ""
+    }
+  ]
+}

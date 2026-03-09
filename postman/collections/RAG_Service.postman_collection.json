@@ -1,0 +1,126 @@
+{
+  "info": {
+    "name": "RAG Service API",
+    "description": "Test collection for RAG (Retrieval-Augmented Generation) queries",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "RAG Query - Automotive Security",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Quali sono i rischi di sicurezza del protocollo CAN?\",\n  \"topK\": 5\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/rag/query",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "rag",
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "name": "RAG Query - ISO 21434",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Cos'è lo standard ISO 21434?\",\n  \"topK\": 3\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/rag/query",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "rag",
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "name": "RAG Query - Authentication Methods",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Quali sono le tecniche di autenticazione per veicoli?\",\n  \"topK\": 5\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/rag/query",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "rag",
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "name": "RAG Query - References",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Dammi i riferimenti bibliografici su cybersecurity automotive\",\n  \"topK\": 10\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/rag/query",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "rag",
+            "query"
+          ]
+        }
+      }
+    }
+  ]
+}
+

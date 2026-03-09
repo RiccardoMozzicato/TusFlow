@@ -1,0 +1,336 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: fileServiceDB
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_DB: filedb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    labels:
+      org.springframework.boot.ignore: true
+    networks:
+      - kfk-net
+
+  postgres_aireq:
+    image: pgvector/pgvector:pg15
+    container_name: aiserviceDB
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_DB: aireqdb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_ai:/var/lib/postgresql/ai
+    labels:
+      org.springframework.boot.ignore: true
+    networks:
+      - kfk-net
+
+  postgres_user:
+    image: postgres:15
+    container_name: userDetailService
+    environment:
+      POSTGRES_DB: userdb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_user:/var/lib/postgresql/user
+    labels:
+      org.springframework.boot.ignore: true
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: fileServiceMinio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console
+    volumes:
+      - minio_data:/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    ports:
+      - "127.0.0.1:9090:8080"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres_keycloak
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_PORT: 5432
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      #KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      #KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    command:
+      - start-dev
+      - --import-realm
+      - --log-level=DEBUG
+      - --verbose
+    volumes:
+      - ./keycloak/:/opt/keycloak/data/import
+    depends_on:
+      - postgres_keycloak
+
+  postgres_keycloak:
+    image: postgres:15
+    ports:
+      - "5434:5432"
+    container_name: keycloak_db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - pg_key:/var/lib/postgresql/data
+    labels:
+      org.springframework.boot.ignore: true
+
+  kafka:
+    image: apache/kafka:4.1.0
+    hostname: kafka
+    container_name: kafka_broker
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      KAFKA_LISTENERS: CONTROLLER://:9093,PLAINTEXT://:9092,PLAINTEXT_HOST://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - kfk-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8084:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - kfk-net
+
+  kafka-connect:
+    image: confluentinc/cp-kafka-connect:latest
+    container_name: kafka-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8086:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: "connect1"
+      CONNECT_CONFIG_STORAGE_TOPIC: "connect1_config"
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+
+      CONNECT_OFFSET_STORAGE_TOPIC: "connect1_offset"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_PARTITIONS: "-1"
+      CONNECT_OFFSET_PARTITION_NAME: "kafka-connect.1"
+
+      CONNECT_STATUS_STORAGE_TOPIC: "connect1_status"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_PARTITIONS: "-1"
+
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
+      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+
+     # CONNECT_PRODUCER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor"
+      #CONNECT_CONSUMER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor"
+      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect"
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+      CONNECT_LOG4J_LOGGERS: org.reflections=ERROR
+    volumes:
+      - kafka_connect_plugins:/usr/share/confluent-hub-components
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8083/ || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command:
+      - bash
+      - -c
+      - |
+        echo "Installing Debezium connector..."
+        confluent-hub install debezium/debezium-connector-postgresql:3.0.8 --no-prompt
+        echo "Starting Kafka Connect..."
+        /etc/confluent/docker/run
+    networks:
+      - kfk-net
+
+# Setup Debezium connector
+  setup-connector:
+    image: curlimages/curl:latest
+    container_name: setup-connector
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    restart: no
+    networks:
+      - kfk-net
+    command:
+      - sh
+      - -c
+      - |
+        echo "Waiting for Kafka Connect to become available..."
+        until curl -s -f http://kafka-connect:8083/connectors; do
+          echo "Kafka Connect not ready yet, retrying..."
+        sleep 5
+        done
+        
+        echo "Kafka Connect is up. Attempting to register connector..."
+        RESPONSE=$$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        -H "Content-Type: application/json" \
+        --data '{
+        "name": "fileservice-outbox-connector",
+        "config": {
+          "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+          "database.hostname": "postgres",
+          "database.port": "5432",
+          "database.user": "myuser",
+          "database.password": "secret",
+          "database.dbname": "filedb",
+          "table.include.list": "public.files_outbox_events",
+          "topic.prefix": "tusService",
+          "transforms": "unwrap,router",
+          "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+          "transforms.unwrap.drop.tombstones": "true",
+
+          "transforms.router.type": "io.debezium.transforms.ByLogicalTableRouter",
+          "transforms.router.topic.regex": ".*",
+          "transforms.router.topic.replacement": "file-outbox",
+          
+          "plugin.name": "pgoutput",
+          "key.converter.schemas.enable": "false",
+          "value.converter.schemas.enable": "false",
+          "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+          "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+          "snapshot.mode": "initial"
+        }
+        }' http://kafka-connect:8083/connectors/)
+      
+        if [ "$$RESPONSE" -eq 201 ] || [ "$$RESPONSE" -eq 409 ]; then
+          echo "Connector registered successfully (or already exists). Exiting."
+          exit 0
+        else
+          echo "Failed to register connector. Status code: $$RESPONSE"
+          exit 1
+        fi
+
+# Setup Debezium connector for AI Processing Service job_outbox
+  setup-job-outbox-connector:
+    image: curlimages/curl:latest
+    container_name: setup-job-outbox-connector
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+      postgres_aireq:
+        condition: service_started
+    restart: no
+    networks:
+      - kfk-net
+    command:
+      - sh
+      - -c
+      - |
+        echo "Waiting for Kafka Connect to become available..."
+        until curl -s -f http://kafka-connect:8083/connectors; do
+          echo "Kafka Connect not ready yet, retrying..."
+          sleep 5
+        done
+        
+        echo "Kafka Connect is up. Attempting to register job-outbox connector..."
+        RESPONSE=$$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        -H "Content-Type: application/json" \
+        --data '{
+        "name": "ai-processing-job-outbox-connector",
+        "config": {
+          "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+          "plugin.name": "pgoutput",
+          "database.hostname": "postgres_aireq",
+          "database.port": "5432",
+          "database.user": "myuser",
+          "database.password": "secret",
+          "database.dbname": "aireqdb",
+          "database.server.name": "aiprocessing-server",
+          "table.include.list": "public.job_outbox",
+          "topic.prefix": "aiService",
+        
+          "transforms": "unwrap,router",
+
+          "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+          "transforms.unwrap.drop.tombstones": "true",
+
+          "transforms.router.type": "io.debezium.transforms.ByLogicalTableRouter",
+          "transforms.router.topic.regex": ".*",
+          "transforms.router.topic.replacement": "job-outbox",
+        
+          "key.converter.schemas.enable": "false",
+          "value.converter.schemas.enable": "false",
+          "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+          "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+          "snapshot.mode": "initial"
+        }
+        }' http://kafka-connect:8083/connectors/)
+      
+        if [ "$$RESPONSE" -eq 201 ] || [ "$$RESPONSE" -eq 409 ]; then
+          echo "Job-outbox connector registered successfully (or already exists). Exiting."
+          exit 0
+        else
+          echo "Failed to register job-outbox connector. Status code: $$RESPONSE"
+          exit 1
+        fi
+
+
+networks:
+  kfk-net:
+    driver: bridge
+
+volumes:
+  pg_data:
+  pg_key:
+  pg_ai:
+  pg_user:
+  minio_data:
+  kafka_data:
+  kafka_connect_plugins:

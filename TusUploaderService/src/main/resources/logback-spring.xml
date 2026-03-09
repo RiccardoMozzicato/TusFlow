@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Abilita %clr e conversioni Spring -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Palette colori personalizzata -->
+    <property name="LOG_DATE" value="%clr(%d{HH:mm:ss.SSS}){faint}"/>
+    <property name="LOG_THREAD" value="%clr([%thread]){magenta}"/>
+    <property name="LOG_LEVEL" value="%highlight(%-5level){FATAL=red blink, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=blue}"/>
+    <property name="LOG_LOGGER" value="%clr(%logger{30}){cyan}"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                ${LOG_DATE} ${LOG_THREAD} ${LOG_LEVEL} ${LOG_LOGGER}
+                --> %msg%n%ex{full}
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- Logger specifici -->
+
+    <!-- Hibernate SQL queries -->
+    <logger name="org.hibernate.SQL" level="DEBUG"/>
+
+    <!-- Hibernate parameter binding (molto verboso) -->
+    <logger name="org.hibernate.orm.jdbc.bind" level="WARN"/>
+    <logger name="org.hibernate.type.descriptor.sql" level="WARN"/>
+
+    <!-- Spring Framework - generale -->
+    <logger name="org.springframework" level="INFO"/>
+
+    <!-- Spring Web - nasconde log di inizializzazione DispatcherServlet -->
+    <logger name="org.springframework.web.servlet.DispatcherServlet" level="WARN"/>
+
+    <!-- Catalina/Tomcat - nasconde log di inizializzazione -->
+    <logger name="org.apache.catalina" level="WARN"/>
+    <logger name="org.apache.coyote" level="WARN"/>
+    <logger name="org.apache.tomcat" level="WARN"/>
+
+    <!-- Il tuo codice applicativo -->
+    <logger name="g11.tusuploaderservice" level="DEBUG"/>
+
+    <!-- ROOT LEVEL -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>

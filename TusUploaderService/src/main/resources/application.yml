@@ -1,0 +1,70 @@
+server:
+  port: 8081
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${issuer}
+  application:
+    name: TusUploaderService
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    target: latest
+    repair: true
+  jpa:
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+    hibernate:
+      ddl-auto: none
+   # generate-ddl: true
+  mvc:
+    problemdetails:
+      enabled: true
+  output:
+    ansi:
+      enabled: ALWAYS
+  datasource:
+    url: jdbc:postgresql://localhost:5432/filedb
+    username: myuser
+    password: secret
+  docker:
+    compose:
+      enabled: true
+springdoc:
+  default-response-status: false
+  remove-broken-reference-definitions: true
+  override-with-generic-response: false
+  show-actuator: false
+tus:
+  version: 1.0.0
+  extensions: creation,creation-defer-length,creation-with-upload,expiration,checksum,termination
+  maxSize: 1073741824
+  checksumAlgorithm: sha-1
+  vary: access-control-request-headers
+  allowMethods: OPTIONS,POST,HEAD,PATCH,DELETE
+  allowHeaders: "*"
+  exposeHeaders: location,upload-offset,upload-length,upload-expires,tus-version,tus-extension,tus-resumable,tus-checksum-algorithm,upload-metadata
+  allowOrigin: "*"
+  expirationPeriod: 3600
+minio:
+  url: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  uploads-bucket: uploads
+  files-bucket: files
+issuer: http://localhost:9090/realms/file-management
+
+keycloak:
+  client-id: tus-client
+  client-secret: kBwAXCN3ljeGDubcnpSanUdUP19mcQG9
+  token-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/token
+
+kafka:
+  bootstrap-servers: localhost:9094
+  topic:
+    file-upload:  file-outbox

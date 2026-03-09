@@ -1,0 +1,14 @@
+{
+  "workspace": {
+    "id": "2b2d916b-ae16-43c2-8db4-10d970334d5a"
+  },
+  "entities": {
+    "collections": [
+      "../postman/collections/TUS Upload Service - Complete API Collection.postman_collection.json"
+    ],
+    "environments": [],
+    "specs": [],
+    "flows": [],
+    "globals": []
+  }
+}

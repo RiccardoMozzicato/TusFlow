@@ -1,0 +1,509 @@
+openapi: 3.0.1
+info:
+  title: File management system API
+  description: File management system with TUS protocol support implemented by group
+    11
+  version: 0.0.1
+servers:
+- url: http://localhost:8080
+  description: Generated server url
+tags:
+- name: /uploads
+  description: REST API for file uploads using the TUS protocol
+paths:
+  /uploads:
+    post:
+      tags:
+      - /uploads
+      summary: Create a new upload
+      description: Creates a new file upload resource on the server and returns its
+        location.
+      operationId: postUploads
+      parameters:
+      - name: Upload-Length
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: Upload-Defer-Length
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: Upload-Metadata
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: Content-Length
+        in: header
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: Upload-Checksum
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Unsupported Media Type
+                title: Invalid Content-Type
+                status: 415
+                detail: Content-Type must be application/offset+octet-stream for creation-with-upload
+                instance: /uploads
+        "412":
+          description: Precondition Failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Precondition Failed
+                title: Unsupported protocol version
+                status: 412
+                detail: Tus-Resumable version not supported
+                instance: /uploads
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Internal Server Error
+                title: Server error
+                status: 500
+                detail: An unexpected error occurred
+                instance: /uploads
+        "413":
+          description: Request Entity Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Request Entity Too Large
+                title: Upload size exceeds limit
+                status: 413
+                detail: Upload-Length must be lower than maximum allowed size
+                instance: /uploads
+        "460":
+          description: Checksum Mismatch
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Checksum Mismatch
+                title: Checksum validation failed
+                status: 460
+                detail: Calculated checksum does not match provided checksum
+                instance: /uploads
+        "201":
+          description: Created
+          headers:
+            Upload-Offset:
+              description: Current offset after creation (if data was uploaded)
+              style: simple
+              schema:
+                type: string
+                example: 0
+            Upload-Expires:
+              description: Expiration time of the upload
+              style: simple
+              schema:
+                type: string
+                example: "Fri, 01 Nov 2025 15:30:00 GMT"
+            Location:
+              description: URI of the newly created upload resource
+              style: simple
+              schema:
+                type: string
+                example: http://localhost:8080/uploads/c22c49d6-04fd-444f-87ca-8e9e64f43f50
+        "410":
+          description: Gone
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Gone
+                title: Upload expired
+                status: 410
+                detail: Upload has expired and is no longer available
+                instance: /uploads
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Bad Request
+                title: Missing required header
+                status: 400
+                detail: Upload-Length header is required
+                instance: /uploads
+    options:
+      tags:
+      - /uploads
+      summary: Get server TUS capabilities
+      description: Returns info about the TUS protocol versions and extensions supported
+        by the server.
+      operationId: optionsUploads
+      responses:
+        "204":
+          description: No Content
+          headers:
+            Tus-Checksum-Algorithm:
+              description: Supported checksum algorithms
+              style: simple
+            vary:
+              description: Indicates which headers can affect the response
+              style: simple
+            Tus-Version:
+              description: Supported TUS protocol version
+              style: simple
+            Tus-Max-Size:
+              description: Maximum allowed upload size
+              style: simple
+            Tus-Extension:
+              description: Supported TUS protocol extensions
+              style: simple
+  /uploads/{id}:
+    delete:
+      tags:
+      - /uploads
+      summary: Delete upload
+      description: Terminates an upload and deletes all associated data including
+        the file and metadata.
+      operationId: deleteUploads
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "412":
+          description: Precondition Failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Precondition Failed
+                title: Unsupported protocol version
+                status: 412
+                detail: Tus-Resumable version not supported
+                instance: "/uploads/{id}"
+        "204":
+          description: Upload deleted successfully
+          headers:
+            Tus-Resumable:
+              description: The tus protocol version used
+              style: simple
+              schema:
+                type: string
+                example: 1.0.0
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Not Found
+                title: Resource not found
+                status: 404
+                detail: Upload resource with the specified ID does not exist
+                instance: "/uploads/{id}"
+        "410":
+          description: Gone
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Gone
+                title: Upload expired
+                status: 410
+                detail: Upload has expired and is no longer available
+                instance: "/uploads/{id}"
+    head:
+      tags:
+      - /uploads
+      summary: Get upload status
+      description: "Retrieve the current status of an upload including offset, length,\
+        \ metadata, and expiration."
+      operationId: headUploads
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "412":
+          description: Precondition Failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Precondition Failed
+                title: Unsupported protocol version
+                status: 412
+                detail: Tus-Resumable version not supported
+                instance: "/uploads/{id}"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Not Found
+                title: Resource not found
+                status: 404
+                detail: Upload resource with the specified ID does not exist
+                instance: "/uploads/{id}"
+        "204":
+          description: No Content
+          headers:
+            Cache-Control:
+              description: Cache control directives for the response
+              style: simple
+              schema:
+                type: string
+                example: no-store
+            Upload-Offset:
+              description: Current offset of the upload in bytes
+              style: simple
+              schema:
+                type: string
+                example: 1024
+            Upload-Metadata:
+              description: Metadata associated with the upload
+              style: simple
+              schema:
+                type: string
+                example: "filename ZXhhbXBsZS50eHQ=,filetype dGV4dC9wbGFpbg=="
+            Upload-Expires:
+              description: Expiration time of the upload
+              style: simple
+              schema:
+                type: string
+                example: "Fri, 01 Nov 2025 15:30:00 GMT"
+            Upload-Length:
+              description: Total length of the resource in bytes
+              style: simple
+              schema:
+                type: string
+                example: 10485760
+        "410":
+          description: Gone
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Gone
+                title: Upload expired
+                status: 410
+                detail: Upload has expired and is no longer available
+                instance: "/uploads/{id}"
+    patch:
+      tags:
+      - /uploads
+      summary: Upload File Chunk
+      description: Uploads a chunk of a specified file to the server.
+      operationId: patchUploads
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Tus-Resumable
+        in: header
+        required: true
+        schema:
+          type: string
+      - name: Content-Type
+        in: header
+        required: true
+        schema:
+          type: string
+      - name: Upload-Offset
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: Content-Length
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "412":
+          description: Precondition Failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Precondition Failed
+                title: Unsupported protocol version
+                status: 412
+                detail: Tus-Resumable version not supported
+                instance: "/uploads/{id}"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Bad Request
+                title: Invalid request
+                status: 400
+                detail: Upload length exceeds maximum allowed size
+                instance: "/uploads/{id}"
+        "415":
+          description: Unsupported Media Type
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Unsupported Media Type
+                title: Invalid Content-Type
+                status: 415
+                detail: Content-Type must be application/offset+octet-stream
+                instance: "/uploads/{id}"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Not Found
+                title: Resource not found
+                status: 404
+                detail: Upload resource with the specified ID does not exist
+                instance: "/uploads/{id}"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Conflict
+                title: Offset mismatch
+                status: 409
+                detail: Upload-Offset does not match current file offset
+                instance: "/uploads/{id}"
+        "413":
+          description: Request Entity Too Large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Request Entity Too Large
+                title: Upload size exceeds limit
+                status: 413
+                detail: File length exceeds expected length
+                instance: "/uploads/{id}"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Internal Server Error
+                title: Server error
+                status: 500
+                detail: An unexpected error occurred during upload
+                instance: "/uploads/{id}"
+        "204":
+          description: Chunk uploaded successfully
+          headers:
+            Tus-Resumable:
+              description: The tus protocol version used
+              style: simple
+              schema:
+                type: string
+                example: 1.0.0
+            Upload-Offset:
+              description: The new offset after the chunk upload
+              style: simple
+              schema:
+                type: string
+                example: 2048
+            Upload-Expires:
+              description: Expiration time of the upload
+              style: simple
+              schema:
+                type: string
+                example: "Fri, 01 Nov 2025 15:30:00 GMT"
+        "410":
+          description: Gone
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Gone
+                title: Upload expired
+                status: 410
+                detail: Upload has expired and is no longer available
+                instance: "/uploads/{id}"
+        "460":
+          description: Checksum Mismatch
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+              example:
+                type: Checksum Mismatch
+                title: Checksum validation failed
+                status: 460
+                detail: Calculated checksum does not match provided checksum
+                instance: "/uploads/{id}"
+components:
+  schemas:
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        properties:
+          type: object
+          additionalProperties:
+            type: object
