@@ -1288,7 +1288,7 @@ CHAT_MODEL=llama-3.1-8b-instant
 PDF_MODEL=llama-3.3-70b-versatile
 
 # Keycloak
-KEYCLOAK_ADMIN_USER=admin
+KEYCLOAK_ADMIN_USER=administrator
 KEYCLOAK_ADMIN_PASSWORD=admin
 ```
 
