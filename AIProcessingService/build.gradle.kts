@@ -54,6 +54,7 @@ dependencies {
 
     //Web
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
@@ -78,6 +79,37 @@ dependencies {
     testRuntimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")
     testRuntimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    // Observability - Loki log appender (LGTM stack)
+    implementation("com.github.loki4j:loki-logback-appender:1.5.2")
+}
+
+// OpenTelemetry Java Agent
+val otelAgentVersion = "2.12.0"
+val otelAgentFile = file("$buildDir/otel/opentelemetry-javaagent.jar")
+
+tasks.register("downloadOtelAgent") {
+    group = "observability"
+    description = "Download the OpenTelemetry Java Agent JAR"
+    outputs.file(otelAgentFile)
+    doLast {
+        otelAgentFile.parentFile.mkdirs()
+        val url = "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v$otelAgentVersion/opentelemetry-javaagent.jar"
+        ant.invokeMethod("get", mapOf("src" to url, "dest" to otelAgentFile))
+    }
+}
+
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    dependsOn("downloadOtelAgent")
+    jvmArgs(
+        "-javaagent:${otelAgentFile.absolutePath}",
+    )
+    environment("OTEL_SERVICE_NAME", "AIProcessingService")
+    environment("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+    environment("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+    environment("OTEL_METRICS_EXPORTER", "otlp")
+    environment("OTEL_TRACES_EXPORTER", "otlp")
+    environment("OTEL_LOGS_EXPORTER", "none")
 }
 
 dependencyManagement {

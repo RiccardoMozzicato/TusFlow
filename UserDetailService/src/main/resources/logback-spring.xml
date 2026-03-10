@@ -42,9 +42,26 @@
     <!-- Il tuo codice applicativo -->
     <logger name="g11.tusuploaderservice" level="DEBUG"/>
 
+    <!-- Loki appender (LGTM stack) -->
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="UserDetailService"/>
+    <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <http>
+            <url>http://localhost:3100/loki/api/v1/push</url>
+        </http>
+        <format>
+            <label>
+                <pattern>application=${appName},host=${HOSTNAME},level=%level</pattern>
+            </label>
+            <message>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - traceId=%mdc{traceId:-} spanId=%mdc{spanId:-} - %msg%n</pattern>
+            </message>
+        </format>
+    </appender>
+
     <!-- ROOT LEVEL -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOKI"/>
     </root>
 
 </configuration>

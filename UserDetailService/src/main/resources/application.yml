@@ -41,3 +41,4 @@ keycloak-admin:
   realm: file-management
   client-id: user-admin
   secret: lgwvWQ7TnGvcRL1SYxsdzUu7j3hiXDNB
+
