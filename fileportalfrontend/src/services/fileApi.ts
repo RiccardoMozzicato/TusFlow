@@ -442,6 +442,44 @@ export const downloadFileVersion = async (fileId: string, version: number): Prom
   return response.blob();
 };
 
+/**
+ * Preview the latest version of a file
+ * */
+
+export const previewFile = async (fileId: string): Promise<Blob> => {
+    const response = await fetch(`${FILES_BASE_URL}/${fileId}/preview`, {
+        method: 'GET',
+        credentials: 'include',
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Preview file version error:', errorText);
+        throw new Error(`Failed to preview file version: ${response.statusText}`);
+    }
+
+    return response.blob();
+};
+
+
+/**
+ * Preview a specific version of a file
+ * */
+export const previewFileVersion = async (fileId: string, version: number): Promise<Blob> => {
+    const response = await fetch(`${FILES_BASE_URL}/${fileId}/preview?version=${version}`, {
+        method: 'GET',
+        credentials: 'include',
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Preview file version error:', errorText);
+        throw new Error(`Failed to preview file version: ${response.statusText}`);
+    }
+
+    return response.blob();
+};
+
 // AI-generated metadata type
 export interface MetadataAIDTO {
   tags?: string | string[];

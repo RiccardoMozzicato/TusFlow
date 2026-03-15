@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Modal, Table, Button, Alert, Spinner, Badge } from 'react-bootstrap';
-import { getFileVersions, downloadFileVersion } from '../services/fileApi';
+import { renderAsync } from 'docx-preview';
+import { getFileVersions, downloadFileVersion, previewFileVersion } from '../services/fileApi';
 import type { FileMetadata, FileVersion } from '../services/fileApi';
 
 interface VersionHistoryModalProps {
@@ -19,13 +20,11 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   const [error, setError] = useState<string>('');
   const [downloadingVersion, setDownloadingVersion] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (show && file) {
-      loadVersions();
-    }
-  }, [show, file]);
+  const [previewingVersion, setPreviewingVersion] = useState<number | null>(null);
+  const [docxPreviewVisible, setDocxPreviewVisible] = useState(false);
+  const docxPreviewRef = useRef<HTMLDivElement | null>(null);
 
-  const loadVersions = async () => {
+  const loadVersions = useCallback(async () => {
     if (!file) return;
 
     setLoading(true);
@@ -39,7 +38,19 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [file]);
+
+  useEffect(() => {
+    if (show && file) {
+      void loadVersions();
+    }
+    if (!show) {
+      // reset preview state quando si chiude il modal
+      setDocxPreviewVisible(false);
+      setPreviewingVersion(null);
+      if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
+    }
+  }, [show, file, loadVersions]);
 
   const handleDownloadVersion = async (version: number, filename: string) => {
     if (!file) return;
@@ -61,6 +72,55 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       setError(err instanceof Error ? err.message : 'Failed to download version');
     } finally {
       setDownloadingVersion(null);
+    }
+  };
+
+  const handlePreviewVersion = async (version: number, contentType: string) => {
+    if (!file) return;
+
+    setError('');
+    const baseContentType = (contentType ?? '').split(';')[0].trim();
+    const isDocx = baseContentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    if (isDocx) {
+      setPreviewingVersion(version);
+      setDocxPreviewVisible(true);
+
+      try {
+        const blob = await previewFileVersion(file.id, version);
+        const arrayBuffer = await blob.arrayBuffer();
+
+        if (!docxPreviewRef.current) {
+          throw new Error('Preview container non disponibile');
+        }
+
+        docxPreviewRef.current.innerHTML = '';
+
+        await renderAsync(arrayBuffer, docxPreviewRef.current, undefined, {
+          inWrapper: true,
+          breakPages: true
+        });
+      } catch (err) {
+        console.error('Error previewing DOCX file:', err);
+        setError(err instanceof Error ? err.message : 'Failed to preview file');
+        setDocxPreviewVisible(false);
+      } finally {
+        setPreviewingVersion(null);
+      }
+      return;
+    }
+
+    // per PDF/immagini/testo ecc. apro in una nuova tab tramite Blob URL
+    try {
+      const blob = await previewFileVersion(file.id, version);
+      const url = window.URL.createObjectURL(blob);
+      const previewWindow = window.open(url, '_blank');
+      if (!previewWindow) {
+        window.location.href = url;
+      }
+    } catch (err) {
+      console.error('Error previewing file:', err);
+      setError(err instanceof Error ? err.message : 'Failed to preview file');
     }
   };
 
@@ -101,12 +161,47 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
           </Alert>
         )}
 
+        {docxPreviewVisible ? (
+          <div className="mb-3">
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <strong>Anteprima DOCX</strong>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => {
+                  setDocxPreviewVisible(false);
+                  if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
+                }}
+              >
+                Close preview
+              </Button>
+            </div>
+
+            {previewingVersion !== null ? (
+              <div className="py-3">
+                <Spinner animation="border" role="status" size="sm" className="me-2" />
+                <span>Rendering preview...</span>
+              </div>
+            ) : null}
+
+            <div
+              ref={docxPreviewRef}
+              style={{
+                maxHeight: 420,
+                overflow: 'auto',
+                border: '1px solid #ddd',
+                borderRadius: 6,
+                padding: 10,
+                background: '#fff'
+              }}
+            />
+          </div>
+        ) : null}
+
         {file && (
           <div className="mb-3">
             <h6>File: {file.fileName}</h6>
-            <small className="text-muted">
-              Current Version: v{file.version || 1}
-            </small>
+            <small className="text-muted">Current Version: v{file.version || 1}</small>
           </div>
         )}
 
@@ -178,6 +273,14 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                         '📥 Download'
                       )}
                     </Button>
+
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => handlePreviewVersion(version.version, version.contentType)}
+                    >
+                      👁️ Preview
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -193,4 +296,3 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     </Modal>
   );
 };
-

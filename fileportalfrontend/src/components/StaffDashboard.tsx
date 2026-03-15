@@ -1,13 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Container, Table, Button, Alert, Spinner, Badge, Form, Row, Col, Modal } from 'react-bootstrap';
 import { Layout } from './Layout';
-import { getFilesMetadata, getSharedFiles, getAllFiles, deleteFile, downloadFile, SharingScope } from '../services/fileApi';
+import {
+    getFilesMetadata,
+    getSharedFiles,
+    getAllFiles,
+    deleteFile,
+    downloadFile,
+    SharingScope, previewFile
+} from '../services/fileApi';
 import type { FileMetadata } from '../services/fileApi';
 import { ShareFileModal } from './ShareFileModal';
 import { UploadVersionModal } from './UploadVersionModal';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { MetadataAIModal } from './MetadataAIModal';
+import { renderAsync } from 'docx-preview';
 
 export const StaffDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -59,15 +67,33 @@ export const StaffDashboard: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => {
-    loadPersonalFiles();
-  }, [currentPage, contentTypeFilter, dateFromFilter, dateToFilter, sortField, sortDirection, pageSize]);
+  // DOCX preview state (inline)
+  const [docxPreviewVisible, setDocxPreviewVisible] = useState(false);
+  const [previewingDocx, setPreviewingDocx] = useState(false);
+  const [fileInPreview, setFileInPreview] = useState<FileMetadata | null>(null);
+  const docxPreviewRef = useRef<HTMLDivElement | null>(null);
+
+  const closeDocxPreview = useCallback(() => {
+    setDocxPreviewVisible(false);
+    setPreviewingDocx(false);
+    setFileInPreview(null);
+    if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
+  }, []);
 
   useEffect(() => {
-    loadSharedFiles();
-  }, [sharedCurrentPage, sharedPageSize]);
+    if (!docxPreviewVisible) return;
 
-  const loadPersonalFiles = async () => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeDocxPreview();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [docxPreviewVisible, closeDocxPreview]);
+
+  const loadPersonalFiles = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -79,7 +105,7 @@ export const StaffDashboard: React.FC = () => {
         sort: `${sortField},${sortDirection}`,
         contentType: contentTypeFilter || undefined,
         dateFrom: dateFromFilter ? `${dateFromFilter}T00:00:00Z` : undefined,
-        dateTo: dateToFilter ? `${dateToFilter}T23:59:59Z` : undefined,
+        dateTo: dateToFilter ? `${dateToFilter}T23:59:59Z` : undefined
       });
 
       console.log(response);
@@ -98,9 +124,17 @@ export const StaffDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    contentTypeFilter,
+    currentPage,
+    dateFromFilter,
+    dateToFilter,
+    pageSize,
+    sortDirection,
+    sortField
+  ]);
 
-  const loadSharedFiles = async () => {
+  const loadSharedFiles = useCallback(async () => {
     try {
       setSharedLoading(true);
       setSharedError(null);
@@ -120,7 +154,15 @@ export const StaffDashboard: React.FC = () => {
     } finally {
       setSharedLoading(false);
     }
-  };
+  }, [sharedCurrentPage, sharedPageSize]);
+
+  useEffect(() => {
+    void loadPersonalFiles();
+  }, [loadPersonalFiles]);
+
+  useEffect(() => {
+    void loadSharedFiles();
+  }, [loadSharedFiles]);
 
   const handleDownload = async (file: FileMetadata) => {
     try {
@@ -136,6 +178,51 @@ export const StaffDashboard: React.FC = () => {
     } catch (err) {
       console.error('Error downloading file:', err);
       setError(err instanceof Error ? err.message : 'Failed to download file');
+    }
+  };
+
+  const handlePreview = async (file: FileMetadata) => {
+    try {
+      setError(null);
+
+      const baseContentType = (file.contentType ?? '').split(';')[0].trim();
+      const isDocx =
+        baseContentType ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+      if (isDocx) {
+        setFileInPreview(file);
+        setDocxPreviewVisible(true);
+        setPreviewingDocx(true);
+
+        // pulisci eventuale preview precedente
+        if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
+
+        const blob = await previewFile(file.id);
+        const arrayBuffer = await blob.arrayBuffer();
+
+        if (!docxPreviewRef.current) {
+          throw new Error('Preview container non disponibile');
+        }
+
+        await renderAsync(arrayBuffer, docxPreviewRef.current, undefined, {
+          inWrapper: true,
+          breakPages: true
+        });
+
+        setPreviewingDocx(false);
+        return;
+      }
+
+      // default: apri su nuova tab tramite Blob URL
+      const blob = await previewFile(file.id);
+      const url = window.URL.createObjectURL(blob);
+      const previewWindow = window.open(url, '_blank');
+      if (!previewWindow) window.location.href = url;
+    } catch (err) {
+      console.error('Error previewing file:', err);
+      setError(err instanceof Error ? err.message : 'Failed to preview file');
+      closeDocxPreview();
     }
   };
 
@@ -256,6 +343,75 @@ export const StaffDashboard: React.FC = () => {
             {error}
           </Alert>
         )}
+
+        {/* DOCX Preview Overlay */}
+        {docxPreviewVisible ? (
+          <>
+            <div
+              onClick={closeDocxPreview}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.55)',
+                zIndex: 1050
+              }}
+            />
+
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 'min(1100px, calc(100vw - 32px))',
+                maxHeight: 'calc(100vh - 32px)',
+                zIndex: 1060
+              }}
+            >
+              <div
+                className="card"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
+                }}
+              >
+                <div className="card-header d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong>Anteprima DOCX</strong>
+                    {fileInPreview ? (
+                      <span className="text-muted ms-2">{fileInPreview.fileName}</span>
+                    ) : null}
+                  </div>
+                  <Button variant="outline-secondary" size="sm" onClick={closeDocxPreview}>
+                    Close
+                  </Button>
+                </div>
+                <div className="card-body">
+                  {previewingDocx ? (
+                    <div className="py-2">
+                      <Spinner animation="border" role="status" size="sm" className="me-2" />
+                      <span>Rendering preview...</span>
+                    </div>
+                  ) : null}
+
+                  <div
+                    ref={docxPreviewRef}
+                    style={{
+                      maxHeight: 'calc(100vh - 180px)',
+                      overflow: 'auto',
+                      border: '1px solid #ddd',
+                      borderRadius: 6,
+                      padding: 10,
+                      background: '#fff'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
 
         {/* Filters and Sorting */}
         <div className="card mb-3">
@@ -428,6 +584,14 @@ export const StaffDashboard: React.FC = () => {
                           >
                             📥 Download
                           </Button>
+                            <Button
+                                variant="outline-secondary"
+                                size="sm"
+                                className="me-2"
+                                onClick={() => handlePreview(file)}
+                            >
+                                👁️ Preview
+                            </Button>
                           <Button
                             variant="outline-secondary"
                             size="sm"
@@ -592,6 +756,14 @@ export const StaffDashboard: React.FC = () => {
                           >
                             📥 Download
                           </Button>
+                            <Button
+                                variant="outline-secondary"
+                                size="sm"
+                                className="me-2"
+                                onClick={() => handlePreview(file)}
+                            >
+                                👁️ Preview
+                            </Button>
                           <Button
                             variant="outline-warning"
                             size="sm"
