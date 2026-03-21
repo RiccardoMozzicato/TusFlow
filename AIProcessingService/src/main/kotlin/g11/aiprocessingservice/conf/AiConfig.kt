@@ -5,6 +5,7 @@ import org.springframework.ai.openai.OpenAiChatModel
 import org.springframework.ai.openai.OpenAiChatOptions
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.web.client.RestClientCustomizer
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.client.SimpleClientHttpRequestFactory
@@ -79,6 +80,16 @@ class AiConfig {
                     .build()
             )
             .build()
+
+    // Sets a 20-second read timeout on the RestClient.Builder used by Spring AI's OpenAiApi
+    // (injected via ObjectProvider<RestClient.Builder> in OpenAiChatAutoConfiguration).
+    // The TusUploaderService client overrides this factory explicitly with its own timeouts (3s/5s).
+    @Bean
+    fun groqReadTimeoutCustomizer(): RestClientCustomizer = RestClientCustomizer { builder ->
+        val factory = SimpleClientHttpRequestFactory()
+        factory.setReadTimeout(20_000) // 20 seconds
+        builder.requestFactory(factory)
+    }
 
     // REST CLIENT CONFIG
     @Bean

@@ -11,6 +11,7 @@ import g11.aiprocessingservice.repositories.JobRepository
 import org.apache.kafka.common.errors.ResourceNotFoundException
 import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
+import org.springframework.ai.retry.NonTransientAiException
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.io.ByteArrayResource
@@ -485,6 +486,9 @@ class MetadataProcessor(
             } catch (e: AIAnalysisUnsupportedException) {
                 // Do not retry for permanently unsupported content types (e.g. video)
                 throw e
+            } catch (e: NonTransientAiException) {
+                // 4xx status response, do not retry
+                throw AIAnalysisUnsupportedException(e.message?: "Bad Request")
             } catch (e: Exception) {
                 lastException = e
                 log.warn("AI analysis attempt {} failed for job {}: {}", attempt, jobId, e.message)
@@ -498,12 +502,11 @@ class MetadataProcessor(
             }
         }
 
-        // All 5 attempts failed - throw exception to mark as UNSUPPORTED
-        log.error("AI analysis failed after {} attempts for job {}", maxRetries, jobId, lastException)
-        throw AIAnalysisUnsupportedException(
-            "AI analysis not supported for this file after $maxRetries attempts",
-            lastException
-        )
+        // All 5 attempts failed - rethrow the original exception so the job is marked as FAILED,
+        // not UNSUPPORTED. UNSUPPORTED is reserved for truly unsupported content types (e.g. video).
+        // LLM unavailability or an expired API key are transient/infrastructure failures.
+        log.error("AI analysis failed after {} attempts for job {} - marking as FAILED", maxRetries, jobId, lastException)
+        throw lastException!!
     }
 
 
