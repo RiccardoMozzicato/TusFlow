@@ -189,8 +189,13 @@ services:
       - bash
       - -c
       - |
-        echo "Installing Debezium connector..."
-        confluent-hub install debezium/debezium-connector-postgresql:3.0.8 --no-prompt
+        echo "Installing Debezium PostgreSQL connector from Maven Central..."
+        mkdir -p /usr/share/confluent-hub-components
+        curl -fsSLk -o /tmp/debezium-postgres-plugin.tar.gz \
+          "https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/3.0.8.Final/debezium-connector-postgres-3.0.8.Final-plugin.tar.gz" \
+          && python3 -c "import tarfile; tarfile.open('/tmp/debezium-postgres-plugin.tar.gz').extractall('/usr/share/confluent-hub-components/')" \
+          && echo "Debezium connector installed successfully." \
+          || { echo "ERROR: Failed to install Debezium connector. Aborting."; exit 1; }
         echo "Starting Kafka Connect..."
         /etc/confluent/docker/run
     networks:
@@ -219,7 +224,7 @@ services:
         done
         
         echo "Kafka Connect is up. Attempting to register connector..."
-        RESPONSE=$$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        RESPONSE=$$(curl -s -o /tmp/connector_response.txt -w "%{http_code}" -X POST \
         -H "Content-Type: application/json" \
         --data '{
         "name": "fileservice-outbox-connector",
@@ -248,7 +253,7 @@ services:
           "snapshot.mode": "initial"
         }
         }' http://kafka-connect:8083/connectors/)
-      
+        echo "Response body: $$(cat /tmp/connector_response.txt)"
         if [ "$$RESPONSE" -eq 201 ] || [ "$$RESPONSE" -eq 409 ]; then
           echo "Connector registered successfully (or already exists). Exiting."
           exit 0
@@ -280,7 +285,7 @@ services:
         done
         
         echo "Kafka Connect is up. Attempting to register job-outbox connector..."
-        RESPONSE=$$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        RESPONSE=$$(curl -s -o /tmp/job_outbox_response.txt -w "%{http_code}" -X POST \
         -H "Content-Type: application/json" \
         --data '{
         "name": "ai-processing-job-outbox-connector",
@@ -312,7 +317,7 @@ services:
           "snapshot.mode": "initial"
         }
         }' http://kafka-connect:8083/connectors/)
-      
+        echo "Response body: $$(cat /tmp/job_outbox_response.txt)"
         if [ "$$RESPONSE" -eq 201 ] || [ "$$RESPONSE" -eq 409 ]; then
           echo "Job-outbox connector registered successfully (or already exists). Exiting."
           exit 0
