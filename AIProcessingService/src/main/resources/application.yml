@@ -54,6 +54,10 @@ ai:
   # Llama 3.3 70B is the current powerful model for complex document analysis
   pdf:
     model: ${PDF_MODEL:llama-3.3-70b-versatile}
+  # Model for image analysis (must be a vision-capable model)
+  # Llama 4 Scout supports image input via Groq's OpenAI-compatible API
+  image:
+    model: ${IMAGE_MODEL:meta-llama/llama-4-scout-17b-16e-instruct}
 
   document:
     # Maximum characters to send to AI (to avoid token limits)

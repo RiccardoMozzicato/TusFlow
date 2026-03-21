@@ -13,7 +13,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.io.ByteArrayResource
 import org.springframework.core.io.Resource
+import org.springframework.util.MimeType
 import org.springframework.http.HttpStatus
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.core.KafkaTemplate
@@ -35,6 +37,7 @@ class MetadataProcessor(
     @Qualifier("TusUploaderService") private val fileServiceClient: RestClient,
     @Qualifier("chatClient") private val chatClient: ChatClient,
     @Qualifier("pdfAnalysisChatClient") private val pdfAnalysisChatClient: ChatClient,
+    @Qualifier("imageChatClient") private val imageChatClient: ChatClient,
     private val jobStatusService: JobStatusServiceInterface,
     private val kafkaTemplate: KafkaTemplate<String, String>,
     @Value("classpath:prompts/file-analysis-prompt.st") private val promptTemplate: Resource,
@@ -60,14 +63,14 @@ class MetadataProcessor(
                 return
             }
         } catch (e: Exception) {
-            log.error("Failed to parse event_type from Kafka message: ${e.message}", e)
+            log.error("Failed to parse event_type from Kafka message: {}", e.message, e)
         }
 
         // Parse JSON message
         val job = try {
             readJson(message)
         } catch (e: Exception) {
-            log.error("Failed to parse Kafka message: ${e.message}", e)
+            log.error("Failed to parse Kafka message: {}", e.message, e)
             throw e // Cannot proceed without valid message
         }
 
@@ -77,12 +80,12 @@ class MetadataProcessor(
         val jobId = try {
             createJobIfNotExists(job)
         } catch (e: Exception) {
-            log.error("Failed to create/check job for file ${job.fileId}: ${e.message}", e)
+            log.error("Failed to create/check job for file {}: {}", job.fileId, e.message, e)
             throw e // Cannot proceed without job record
         }
 
         if(jobId == null){
-            log.info("Skipping job for file ${job.fileId} - already processed or in progress")
+            log.info("Skipping job for file {} - already processed or in progress", job.fileId)
             // Job already exists and is not PENDING - acknowledge the message to commit offset
             acknowledgment.acknowledge()
             return
@@ -90,7 +93,7 @@ class MetadataProcessor(
 
         // Job created successfully - acknowledge the message to commit the offset
         // This ensures the message is removed from files_outbox_events after job creation
-        log.info("Job $jobId created successfully - acknowledging Kafka message")
+        log.info("Job {} created successfully - acknowledging Kafka message", jobId)
         acknowledgment.acknowledge()
 
         // Process the job
@@ -101,11 +104,11 @@ class MetadataProcessor(
             if (enhancedMeta != null) {
                 publishFileAnalyzedEvent(job, jobId, enhancedMeta)
             } else {
-                log.info("Skipping file-analyzed event for job $jobId - file analysis not supported")
+                log.info("Skipping file-analyzed event for job {} - file analysis not supported", jobId)
             }
 
         } catch (e: Exception) {
-            log.error("Failed to process job $jobId: ${e.message}", e)
+            log.error("Failed to process job {}: {}", jobId, e.message, e)
 
             // Check if this is a retry by looking at the job status
             val jobEntity = jobRepository.findById(jobId)
@@ -113,13 +116,13 @@ class MetadataProcessor(
 
             if (isRetry) {
                 // This is a retry and it failed again - mark as FAILED (will go to DLT)
-                log.error("Job $jobId RETRY FAILED - will be sent to DLT")
+                log.error("Job {} RETRY FAILED - will be sent to DLT", jobId)
                 jobStatusService.markJobAsFailed(jobId, job, "Retry failed: ${e.message}")
                 // Rethrow to send to DLT
                 throw e
             } else {
                 // First failure - mark as FAILED and trigger retry
-                log.warn("Job $jobId FIRST FAILURE - marking as FAILED and will retry after 5 minutes")
+                log.warn("Job {} FIRST FAILURE - marking as FAILED and will retry after 5 minutes", jobId)
                 jobStatusService.markJobAsFailed(jobId, job, e.message ?: "Unknown error")
                 // Rethrow to trigger Kafka retry mechanism (will retry after 5 minutes)
                 throw e
@@ -133,7 +136,7 @@ class MetadataProcessor(
         val jobId = job.id
 
         // Check if job exists
-        log.debug("Checking if the job already exists for file: ${job.fileId}, version: ${job.version}")
+        log.debug("Checking if the job already exists for file: {}, version: {}", job.fileId, job.version)
         val existingJob = jobRepository.findById(jobId)
         log.debug(existingJob.toString())
 
@@ -141,10 +144,10 @@ class MetadataProcessor(
             log.debug("Job already exists")
             val jobEntity = existingJob.get()
             return if (jobEntity.status == jobStatus.PENDING) {
-                log.warn("Resuming stuck job: ${jobEntity.jobid}")
+                log.warn("Resuming stuck job: {}", jobEntity.jobid)
                 jobId
             } else {
-                log.info("Job ${jobEntity.jobid} already ${jobEntity.status}. Skipping.")
+                log.info("Job {} already {}. Skipping.", jobEntity.jobid, jobEntity.status)
                 null
             }
         }
@@ -182,8 +185,12 @@ class MetadataProcessor(
 
         // Determine which AI client to use based on content type
         val clientToUse = selectAIClient(job.contentType)
-        val clientName = if (clientToUse === pdfAnalysisChatClient) "PDF-specific (Claude)" else "Generic (Groq)"
-        log.info("Processing job $jobId with $clientName client for contentType: ${job.contentType}")
+        val clientName = when (clientToUse) {
+            pdfAnalysisChatClient -> "PDF-specific (Llama 3.3 70B)"
+            imageChatClient       -> "Image/Video-specific (Llama 4 Scout vision)"
+            else                  -> "Generic (Llama 3.1 8B)"
+        }
+        log.info("Processing job {} with {} client for contentType: {}", jobId, clientName, job.contentType)
 
         try {
             // Attempt AI analysis with retry logic using the appropriate client
@@ -212,7 +219,7 @@ class MetadataProcessor(
 
         } catch (e: IllegalStateException) {
             // AI returned incomplete metadata - propagate to let markJobAsFailed handle it
-            log.error("AI returned incomplete metadata for job $jobId: ${e.message}")
+            log.error("AI returned incomplete metadata for job {}: {}", jobId, e.message)
             throw e
         }
     }
@@ -227,12 +234,20 @@ class MetadataProcessor(
         // Extract the base MIME type (remove charset and other parameters)
         val baseMimeType = contentType.split(";").firstOrNull()?.trim() ?: contentType
 
-        return if (baseMimeType.equals("application/pdf", ignoreCase = true)) {
-            log.info("Selected PDF-specific client (Groq Llama 3.3 70B) for content type: $contentType")
-            pdfAnalysisChatClient
-        } else {
-            log.info("Selected generic client (Groq Llama 3.1 8B) for content type: $contentType")
-            chatClient
+        return when {
+            baseMimeType.equals("application/pdf", ignoreCase = true) -> {
+                log.info("Selected PDF client (Llama 3.3 70B) for content type: {}", contentType)
+                pdfAnalysisChatClient
+            }
+            baseMimeType.startsWith("image/", ignoreCase = true) ||
+            baseMimeType.startsWith("video/", ignoreCase = true) -> {
+                log.info("Selected image/video client (Llama 4 Scout vision) for content type: {}", contentType)
+                imageChatClient
+            }
+            else -> {
+                log.info("Selected generic client (Llama 3.1 8B) for content type: {}", contentType)
+                chatClient
+            }
         }
     }
 
@@ -261,9 +276,9 @@ class MetadataProcessor(
             val eventJson = objectMapper.writeValueAsString(event)
             kafkaTemplate.send("file-analyzed", job.fileId.toString(), eventJson)
 
-            log.info("Published file-analyzed event for file ${job.fileId} (job $jobId) to Kafka")
+            log.info("Published file-analyzed event for file {} (job {}) to Kafka", job.fileId, jobId)
         } catch (e: Exception) {
-            log.error("Failed to publish file-analyzed event for job $jobId: ${e.message}", e)
+            log.error("Failed to publish file-analyzed event for job {}: {}", jobId, e.message, e)
             // Don't throw - job is already marked as completed
         }
     }
@@ -315,17 +330,56 @@ class MetadataProcessor(
     }
 
     fun analyzeUpload(inputStream: InputStream, client: ChatClient, contentType: String): MetadataDTO {
-        // Extract text based on content type
-        val contenutoFile = if (contentType.startsWith("application/pdf", ignoreCase = true)) {
+        val baseMimeType = contentType.split(";").firstOrNull()?.trim() ?: contentType
+
+        // Images: base64-encode, validate size, then send to the vision model via Media
+        if (baseMimeType.startsWith("image/", ignoreCase = true)) {
+            val imageBytes = inputStream.readBytes()
+
+            // Base64 encodes every 3 raw bytes into 4 ASCII characters (with padding).
+            // Exact encoded size without actually encoding: ceil(n / 3) * 4 == ((n + 2) / 3) * 4
+            val base64SizeBytes = ((imageBytes.size.toLong() + 2) / 3) * 4
+
+            val maxBase64Bytes = 4L * 1024 * 1024 // 4 MB
+            if (base64SizeBytes > maxBase64Bytes) {
+                log.info(
+                    "Image rejected: base64 size is {} MB, exceeds the 4 MB limit",
+                    "%.2f".format(base64SizeBytes / 1_048_576.0)
+                )
+                throw AIAnalysisUnsupportedException(
+                    "Image base64-encoded size (${"%.2f".format(base64SizeBytes / 1_048_576.0)} MB) exceeds the 4 MB limit"
+                )
+            }
+            log.info(
+                "Image accepted: base64 size {} KB (limit 4 MB)",
+                base64SizeBytes / 1024
+            )
+
+            // Spring AI sends ByteArrayResource as a base64 data-URI to the OpenAI-compatible API
+            val imageResource = ByteArrayResource(imageBytes)
+            return client.prompt()
+                .user { u ->
+                    u.text("Analyze this image carefully and provide the metadata as specified in your instructions. Return ONLY valid JSON, no markdown.")
+                    u.media(MimeType.valueOf(baseMimeType), imageResource)
+                }
+                .call()
+                .entity(MetadataDTO::class.java)
+                ?: throw IllegalStateException("AI returned null response")
+        }
+
+        // Videos: Analysis not supported
+        if (baseMimeType.startsWith("video/", ignoreCase = true)) {
+            throw AIAnalysisUnsupportedException("Video analysis is not supported: $contentType")
+        }
+
+        // PDFs and text files: extract text then send to the LLM
+        val contenutoFile = if (baseMimeType.equals("application/pdf", ignoreCase = true)) {
             extractTextFromPdf(inputStream)
         } else {
             inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
         }
 
-        // Tronca il contenuto se troppo lungo (per evitare limiti di token AI)
         val truncatedContent = truncateContent(contenutoFile, maxContentChars)
-
-        // Carica il template e sostituisci il placeholder
         val prompt = promptTemplate.inputStream.bufferedReader().use { it.readText() }
             .replace("{document}", truncatedContent)
 
@@ -350,10 +404,10 @@ class MetadataProcessor(
             val stripper = org.apache.pdfbox.text.PDFTextStripper()
             val text = stripper.getText(document)
             val numPages = document.numberOfPages
-            log.info("Successfully extracted ${text.length} characters from PDF ($numPages pages)")
+            log.info("Successfully extracted {} characters from PDF ({} pages)", text.length, numPages)
             text
         } catch (e: Exception) {
-            log.error("Failed to extract text from PDF: ${e.message}", e)
+            log.error("Failed to extract text from PDF: {}", e.message, e)
             throw IllegalStateException("Cannot extract text from PDF: ${e.message}", e)
         } finally {
             document?.close()
@@ -391,7 +445,7 @@ class MetadataProcessor(
         val truncatedBytes = content.length - maxChars
         val truncationMarker = "\n\n[... CONTENT TRUNCATED - ${truncatedBytes} characters omitted ...]\n\n"
 
-        log.info("Content truncated: original ${content.length} chars -> ${maxChars} chars (removed ${truncatedBytes} chars)")
+        log.info("Content truncated: original {} chars -> {} chars (removed {} chars)", content.length, maxChars, truncatedBytes)
 
         return beginning + truncationMarker + ending
     }
@@ -402,7 +456,7 @@ class MetadataProcessor(
      *
      * @param inputStream The file content to analyze
      * @param jobId The job identifier for logging
-     * @param client The ChatClient to use (either chatClient or pdfAnalysisChatClient)
+     * @param client The ChatClient to use (chatClient, pdfAnalysisChatClient, or imageChatClient)
      * @param contentType The MIME type of the file
      */
     private fun analyzeUploadWithRetry(inputStream: InputStream, jobId: UUID, client: ChatClient, contentType: String): MetadataDTO {
@@ -411,7 +465,7 @@ class MetadataProcessor(
 
         for (attempt in 1..maxRetries) {
             try {
-                log.info("AI analysis attempt $attempt/$maxRetries for job $jobId")
+                log.info("AI analysis attempt {}/{} for job {}", attempt, maxRetries, jobId)
 
                 // Reset stream if possible (for retries after the first attempt)
                 if (attempt > 1) {
@@ -425,24 +479,27 @@ class MetadataProcessor(
                 val result = analyzeUpload(inputStream, client, contentType)
 
                 // Success
-                log.info("AI analysis succeeded on attempt $attempt for job $jobId")
+                log.info("AI analysis succeeded on attempt {} for job {}", attempt, jobId)
                 return result
 
+            } catch (e: AIAnalysisUnsupportedException) {
+                // Do not retry for permanently unsupported content types (e.g. video)
+                throw e
             } catch (e: Exception) {
                 lastException = e
-                log.warn("AI analysis attempt $attempt failed for job $jobId: ${e.message}")
+                log.warn("AI analysis attempt {} failed for job {}: {}", attempt, jobId, e.message)
 
                 if (attempt < maxRetries) {
                     // Wait before retry with exponential backoff (1s, 2s, 3s, 4s, 5s max)
                     val delayMs = (1000L * attempt).coerceAtMost(5000L)
-                    log.info("Retrying in ${delayMs}ms...")
+                    log.info("Retrying in {}ms...", delayMs)
                     Thread.sleep(delayMs)
                 }
             }
         }
 
         // All 5 attempts failed - throw exception to mark as UNSUPPORTED
-        log.error("AI analysis failed after $maxRetries attempts for job $jobId", lastException)
+        log.error("AI analysis failed after {} attempts for job {}", maxRetries, jobId, lastException)
         throw AIAnalysisUnsupportedException(
             "AI analysis not supported for this file after $maxRetries attempts",
             lastException

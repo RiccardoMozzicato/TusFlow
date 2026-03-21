@@ -63,6 +63,23 @@ class AiConfig {
             )
             .build()
 
+    // Vision model client for image analysis (Groq Llama 4 Scout or equivalent)
+    @Bean
+    @Qualifier("imageChatClient")
+    fun imageChatClient(
+        @Qualifier("openAiChatModel") openAiChatModel: OpenAiChatModel,
+        @Value("\${ai.image.model}") imageModel: String,
+        @Value("classpath:/prompts/image-analysis-prompt.st") imagePrompt: org.springframework.core.io.Resource
+    ): ChatClient =
+        ChatClient.builder(openAiChatModel)
+            .defaultSystem(imagePrompt)
+            .defaultOptions(
+                OpenAiChatOptions.builder()
+                    .model(imageModel)
+                    .build()
+            )
+            .build()
+
     // REST CLIENT CONFIG
     @Bean
     @Qualifier("TusUploaderService")
