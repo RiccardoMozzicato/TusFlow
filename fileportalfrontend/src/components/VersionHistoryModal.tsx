@@ -1,28 +1,28 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Table, Button, Alert, Spinner, Badge } from 'react-bootstrap';
-import { renderAsync } from 'docx-preview';
-import { getFileVersions, downloadFileVersion, previewFileVersion } from '../services/fileApi';
+import { getFileVersions, downloadFileVersion } from '../services/fileApi';
 import type { FileMetadata, FileVersion } from '../services/fileApi';
 
 interface VersionHistoryModalProps {
   show: boolean;
   onHide: () => void;
   file: FileMetadata | null;
+  // callback opzionale verso il padre per chiedere la preview di una certa versione
+  onPreviewRequested?: (args: { fileId: string; version: number; contentType: string; filename: string }) => void;
 }
 
 export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   show,
   onHide,
-  file
+  file,
+  onPreviewRequested
 }) => {
   const [versions, setVersions] = useState<FileVersion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [downloadingVersion, setDownloadingVersion] = useState<number | null>(null);
 
-  const [previewingVersion, setPreviewingVersion] = useState<number | null>(null);
-  const [docxPreviewVisible, setDocxPreviewVisible] = useState(false);
-  const docxPreviewRef = useRef<HTMLDivElement | null>(null);
+  // non gestiamo più la preview internamente; la UI di history si limita a chiedere al padre di aprire la preview
 
   const loadVersions = useCallback(async () => {
     if (!file) return;
@@ -43,12 +43,6 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   useEffect(() => {
     if (show && file) {
       void loadVersions();
-    }
-    if (!show) {
-      // reset preview state quando si chiude il modal
-      setDocxPreviewVisible(false);
-      setPreviewingVersion(null);
-      if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
     }
   }, [show, file, loadVersions]);
 
@@ -75,53 +69,16 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     }
   };
 
-  const handlePreviewVersion = async (version: number, contentType: string) => {
+  const handlePreviewVersion = (version: number, contentType: string, filename: string) => {
     if (!file) return;
-
-    setError('');
-    const baseContentType = (contentType ?? '').split(';')[0].trim();
-    const isDocx = baseContentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-    if (isDocx) {
-      setPreviewingVersion(version);
-      setDocxPreviewVisible(true);
-
-      try {
-        const blob = await previewFileVersion(file.id, version);
-        const arrayBuffer = await blob.arrayBuffer();
-
-        if (!docxPreviewRef.current) {
-          throw new Error('Preview container non disponibile');
-        }
-
-        docxPreviewRef.current.innerHTML = '';
-
-        await renderAsync(arrayBuffer, docxPreviewRef.current, undefined, {
-          inWrapper: true,
-          breakPages: true
-        });
-      } catch (err) {
-        console.error('Error previewing DOCX file:', err);
-        setError(err instanceof Error ? err.message : 'Failed to preview file');
-        setDocxPreviewVisible(false);
-      } finally {
-        setPreviewingVersion(null);
-      }
-      return;
-    }
-
-    // per PDF/immagini/testo ecc. apro in una nuova tab tramite Blob URL
-    try {
-      const blob = await previewFileVersion(file.id, version);
-      const url = window.URL.createObjectURL(blob);
-      const previewWindow = window.open(url, '_blank');
-      if (!previewWindow) {
-        window.location.href = url;
-      }
-    } catch (err) {
-      console.error('Error previewing file:', err);
-      setError(err instanceof Error ? err.message : 'Failed to preview file');
-    }
+    // deleghiamo al padre la gestione della preview (docx o iframe) e chiudiamo il modal di history
+    onPreviewRequested?.({
+      fileId: file.id,
+      version,
+      contentType,
+      filename
+    });
+    onHide();
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -161,42 +118,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
           </Alert>
         )}
 
-        {docxPreviewVisible ? (
-          <div className="mb-3">
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <strong>Anteprima DOCX</strong>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={() => {
-                  setDocxPreviewVisible(false);
-                  if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
-                }}
-              >
-                Close preview
-              </Button>
-            </div>
-
-            {previewingVersion !== null ? (
-              <div className="py-3">
-                <Spinner animation="border" role="status" size="sm" className="me-2" />
-                <span>Rendering preview...</span>
-              </div>
-            ) : null}
-
-            <div
-              ref={docxPreviewRef}
-              style={{
-                maxHeight: 420,
-                overflow: 'auto',
-                border: '1px solid #ddd',
-                borderRadius: 6,
-                padding: 10,
-                background: '#fff'
-              }}
-            />
-          </div>
-        ) : null}
+        {/* Il modal di history non contiene più la preview: la preview viene gestita dal componente padre */}
 
         {file && (
           <div className="mb-3">
@@ -277,7 +199,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                     <Button
                       variant="outline-secondary"
                       size="sm"
-                      onClick={() => handlePreviewVersion(version.version, version.contentType)}
+                      onClick={() => handlePreviewVersion(version.version, version.contentType, version.filename)}
                     >
                       👁️ Preview
                     </Button>

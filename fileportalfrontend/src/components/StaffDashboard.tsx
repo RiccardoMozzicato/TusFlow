@@ -8,7 +8,9 @@ import {
     getAllFiles,
     deleteFile,
     downloadFile,
-    SharingScope, previewFile
+    SharingScope,
+    previewFile,
+    previewFileVersion
 } from '../services/fileApi';
 import type { FileMetadata } from '../services/fileApi';
 import { ShareFileModal } from './ShareFileModal';
@@ -72,13 +74,35 @@ export const StaffDashboard: React.FC = () => {
   const [previewingDocx, setPreviewingDocx] = useState(false);
   const [fileInPreview, setFileInPreview] = useState<FileMetadata | null>(null);
   const docxPreviewRef = useRef<HTMLDivElement | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
 
-  const closeDocxPreview = useCallback(() => {
+  // iframe preview state (for non-DOCX files)
+  const [iframeSrc, setIframeSrc] = useState<string>('');
+  const [iframeLoading, setIframeLoading] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // unified close that cleans both docx preview and iframe (revokes object URLs)
+  const closePreview = useCallback(() => {
+    setPreviewVisible(false);
     setDocxPreviewVisible(false);
     setPreviewingDocx(false);
     setFileInPreview(null);
     if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
-  }, []);
+    if (iframeSrc) {
+      try {
+        window.URL.revokeObjectURL(iframeSrc);
+      } catch {
+        // ignore
+      }
+      setIframeSrc('');
+    }
+    setIframeLoading(false);
+  }, [iframeSrc]);
+
+  // wrapper kept for backward compatibility with existing code that uses closeDocxPreview
+  const closeDocxPreview = useCallback(() => {
+    closePreview();
+  }, [closePreview]);
 
   useEffect(() => {
     if (!docxPreviewVisible) return;
@@ -189,9 +213,11 @@ export const StaffDashboard: React.FC = () => {
       const isDocx =
         baseContentType ===
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      // Imposto il file corrente in preview (utile anche per la header dell'overlay)
+      setFileInPreview(file);
 
       if (isDocx) {
-        setFileInPreview(file);
+        setPreviewVisible(true);
         setDocxPreviewVisible(true);
         setPreviewingDocx(true);
 
@@ -202,7 +228,9 @@ export const StaffDashboard: React.FC = () => {
         const arrayBuffer = await blob.arrayBuffer();
 
         if (!docxPreviewRef.current) {
-          throw new Error('Preview container non disponibile');
+          setError('Preview container non disponibile');
+          setPreviewingDocx(false);
+          return;
         }
 
         await renderAsync(arrayBuffer, docxPreviewRef.current, undefined, {
@@ -214,15 +242,101 @@ export const StaffDashboard: React.FC = () => {
         return;
       }
 
-      // default: apri su nuova tab tramite Blob URL
+      // Non-DOCX: mostro il file nell'iframe dell'overlay usando un Blob URL
       const blob = await previewFile(file.id);
       const url = window.URL.createObjectURL(blob);
-      const previewWindow = window.open(url, '_blank');
-      if (!previewWindow) window.location.href = url;
+      // pulisco eventuale iframe precedente
+      if (iframeSrc) {
+        try {
+          window.URL.revokeObjectURL(iframeSrc);
+        } catch {
+          // ignore
+        }
+      }
+      setIframeSrc(url);
+      setIframeLoading(true);
+      setDocxPreviewVisible(false);
+      setPreviewVisible(true);
     } catch (err) {
       console.error('Error previewing file:', err);
       setError(err instanceof Error ? err.message : 'Failed to preview file');
-      closeDocxPreview();
+      closePreview();
+    }
+  };
+
+  // Preview di una versione specifica richiesta dalla history
+  const handlePreviewVersionFromHistory = async (args: {
+    fileId: string;
+    version: number;
+    contentType: string;
+    filename: string;
+  }) => {
+    try {
+      setError(null);
+
+      const baseContentType = (args.contentType ?? '').split(';')[0].trim();
+      const isDocx =
+        baseContentType ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+      // recupero il metadato del file attuale per mostrare nome/id nell'header
+      const meta = files.find((f) => f.id === args.fileId) ||
+        sharedFiles.find((f) => f.id === args.fileId) ||
+        null;
+
+      setFileInPreview(
+        meta || {
+          id: args.fileId,
+          fileName: args.filename,
+          contentType: args.contentType,
+          version: args.version,
+          size: 0,
+          createdAt: new Date().toISOString(),
+          completedAt: undefined,
+          ownerName: undefined,
+          sharingScope: SharingScope.PERSONAL
+        }
+      );
+
+      if (isDocx) {
+        setPreviewVisible(true);
+        setDocxPreviewVisible(true);
+        setPreviewingDocx(true);
+
+        if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
+
+        const blob = await previewFileVersion(args.fileId, args.version);
+        const arrayBuffer = await blob.arrayBuffer();
+
+        if (!docxPreviewRef.current) {
+          setError('Preview container non disponibile');
+          setPreviewingDocx(false);
+          return;
+        }
+
+        await renderAsync(arrayBuffer, docxPreviewRef.current, undefined, {
+          inWrapper: true,
+          breakPages: true
+        });
+
+        setPreviewingDocx(false);
+        return;
+      }
+
+      // Non-DOCX: preview in iframe
+      const blob = await previewFileVersion(args.fileId, args.version);
+      const url = window.URL.createObjectURL(blob);
+      if (iframeSrc) {
+        try { window.URL.revokeObjectURL(iframeSrc); } catch { /* ignore */ }
+      }
+      setIframeSrc(url);
+      setIframeLoading(true);
+      setDocxPreviewVisible(false);
+      setPreviewVisible(true);
+    } catch (err) {
+      console.error('Error previewing file version:', err);
+      setError(err instanceof Error ? err.message : 'Failed to preview file version');
+      closePreview();
     }
   };
 
@@ -344,72 +458,124 @@ export const StaffDashboard: React.FC = () => {
           </Alert>
         )}
 
-        {/* DOCX Preview Overlay */}
-        {docxPreviewVisible ? (
+        {previewVisible ? (
           <>
-            <div
-              onClick={closeDocxPreview}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0, 0, 0, 0.55)',
-                zIndex: 1050
-              }}
-            />
-
-            <div
-              role="dialog"
-              aria-modal="true"
-              style={{
-                position: 'fixed',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: 'min(1100px, calc(100vw - 32px))',
-                maxHeight: 'calc(100vh - 32px)',
-                zIndex: 1060
-              }}
-            >
               <div
-                className="card"
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
-                }}
-              >
-                <div className="card-header d-flex justify-content-between align-items-center">
-                  <div>
-                    <strong>Anteprima DOCX</strong>
-                    {fileInPreview ? (
-                      <span className="text-muted ms-2">{fileInPreview.fileName}</span>
-                    ) : null}
-                  </div>
-                  <Button variant="outline-secondary" size="sm" onClick={closeDocxPreview}>
-                    Close
-                  </Button>
-                </div>
-                <div className="card-body">
-                  {previewingDocx ? (
-                    <div className="py-2">
-                      <Spinner animation="border" role="status" size="sm" className="me-2" />
-                      <span>Rendering preview...</span>
-                    </div>
-                  ) : null}
-
-                  <div
-                    ref={docxPreviewRef}
-                    style={{
-                      maxHeight: 'calc(100vh - 180px)',
-                      overflow: 'auto',
-                      border: '1px solid #ddd',
-                      borderRadius: 6,
-                      padding: 10,
-                      background: '#fff'
-                    }}
-                  />
-                </div>
+                  id="backdrop"
+                  onClick={() => closePreview()}
+                   style={{
+                       position: "fixed",
+                       top: 0,
+                       left: 0,
+                       width: "100vw",
+                       height: "100vh",
+                       backgroundColor: "rgba(0, 0, 0, .5)",
+                       zIndex: 998
+                   }}>
               </div>
-            </div>
+
+              {
+                  docxPreviewVisible ?
+                      <div
+                          role="dialog"
+                          aria-modal="true"
+                          style={{
+                              position: 'fixed',
+                              top: '50%',
+                              left: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              width: 'min(1100px, calc(100vw - 32px))',
+                              maxHeight: 'calc(100vh - 32px)',
+                              zIndex: 1060
+                          }}
+                      >
+                          <div
+                              className="card"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                  boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
+                              }}
+                          >
+                              <div className="card-header d-flex justify-content-between align-items-center">
+                                  <div>
+                                      <strong>Preview</strong>
+                                      {fileInPreview ? (
+                                          <span className="text-muted ms-2">{fileInPreview.fileName}</span>
+                                      ) : null}
+                                  </div>
+                                  <Button variant="outline-secondary" size="sm" onClick={closeDocxPreview}>
+                                      Close
+                                  </Button>
+                              </div>
+                              <div className="card-body">
+                                  {previewingDocx ? (
+                                      <div className="py-2">
+                                          <Spinner animation="border" role="status" size="sm" className="me-2" />
+                                          <span>Rendering preview...</span>
+                                      </div>
+                                  ) : null}
+
+                                  <div
+                                      ref={docxPreviewRef}
+                                      style={{
+                                          maxHeight: 'calc(100vh - 180px)',
+                                          overflow: 'auto',
+                                          border: '1px solid #ddd',
+                                          borderRadius: 6,
+                                          padding: 10,
+                                          background: '#fff'
+                                      }}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+                      :
+                      // Non-DOCX: mostro iframe con il Blob URL
+                      <div
+                          role="dialog"
+                          aria-modal="true"
+                          style={{
+                              position: 'fixed',
+                              top: '50%',
+                              left: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              width: 'min(1100px, calc(100vw - 32px))',
+                              height: 'min(80vh, calc(100vh - 32px))',
+                              zIndex: 1060
+                          }}
+                      >
+                          <div className="card" onClick={(e) => e.stopPropagation()} style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
+                              <div className="card-header d-flex justify-content-between align-items-center">
+                                  <div>
+                                      <strong>Preview</strong>
+                                      {fileInPreview ? <span className="text-muted ms-2">{fileInPreview.fileName}</span> : null}
+                                  </div>
+                                  <Button variant="outline-secondary" size="sm" onClick={closePreview}>
+                                      Close
+                                  </Button>
+                              </div>
+                              <div className="card-body p-0" style={{ height: 'calc(80vh - 56px)' }}>
+                                  {iframeLoading ? (
+                                      <div className="p-3 text-center">
+                                          <Spinner animation="border" role="status" size="sm" className="me-2" />
+                                          <span>Loading preview...</span>
+                                      </div>
+                                  ) : null}
+                                  <iframe
+                                      ref={iframeRef}
+                                      src={iframeSrc}
+                                      title={fileInPreview?.fileName || 'file-preview'}
+                                      style={{
+                                          width: '100%',
+                                          height: '100%',
+                                          border: 'none'
+                                      }}
+                                      onLoad={() => setIframeLoading(false)}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+              }
           </>
         ) : null}
 
@@ -944,6 +1110,7 @@ export const StaffDashboard: React.FC = () => {
         show={showVersionHistoryModal}
         onHide={() => setShowVersionHistoryModal(false)}
         file={fileToViewHistory}
+        onPreviewRequested={handlePreviewVersionFromHistory}
       />
 
       {/* AI Metadata Modal */}
