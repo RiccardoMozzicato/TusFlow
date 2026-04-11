@@ -400,12 +400,12 @@ class FileService(
     override fun downloadFile(id: UUID,  version: Long?): DownloadDTO {
         log.debug("Download the resource {}", id)
 
-        /*val token= authService.getAccessToken()
+        val token= authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
         // Check permissions - if no exception is thrown, user has at least READ_ONLY access
-        getCurrentUserPermission(id, userDetails)*/
+        getCurrentUserPermission(id, userDetails)
 
         // Retrieve the file entity
         val file = fileRepository.findById(id).orElseThrow {
@@ -497,17 +497,19 @@ class FileService(
             }
 
             SharingScope.DEPARTMENT -> {
-                // Department files: check organization and department match
+                // Department files: check organization match first
                 if (file.organization != userDTO.organization) {
                     throw ForbiddenException("Access denied: file belongs to different organization")
                 }
-                if (file.department != userDTO.department) {
-                    throw ForbiddenException("Access denied: file belongs to different department")
-                }
 
-                // Admin: READ_WRITE on any file in their organization
+                // Admin: READ_WRITE on any file in their organization (can access any department)
                 if (userDTO.role == UserRole.ROLE_admin) {
                     return PERMISSION_LEVEL.READ_WRITE
+                }
+
+                // For non-admin roles, check department match
+                if (file.department != userDTO.department) {
+                    throw ForbiddenException("Access denied: file belongs to different department")
                 }
 
                 // Manager: READ_WRITE on department files

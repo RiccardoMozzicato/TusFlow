@@ -95,7 +95,6 @@ class UserController(
     //endregion
     @GetMapping("")
     @ResponseStatus(HttpStatus.OK)
-    //@PreAuthorize("hasRole('ROLE_admin')")
     fun getUsers(
         @RequestParam(defaultValue = "0") page: UInt,
         @RequestParam(defaultValue = "10") size: UInt

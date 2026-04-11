@@ -43,6 +43,7 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 /**
  * Test E2E con Keycloak Testcontainer
@@ -2311,6 +2312,1113 @@ class E2ETests : IntegrationTest() {
 
         assertEquals(HttpStatus.NOT_FOUND, response.statusCode)
         println("✅ Test passed! Create version for non-existent file returns 404")
+    }
+
+    // ============ Download File with Permission Checks Tests ============
+
+    /**
+     * Test: Owner can download their own file
+     * Scenario: testadmin (ROLE_admin, owner) downloads file they own
+     * Expected: 200 OK with file content
+     */
+    @Test
+    fun `downloadFile allows owner to download their own file`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode, "Owner should be able to download their own file")
+        assertNotNull(response.body, "File content should be present")
+        assertTrue(response.body!!.isNotEmpty(), "File content should not be empty")
+        assertNotNull(response.headers.getFirst("Content-Disposition"), "Content-Disposition header should be present")
+        println("✅ Test passed! Owner can download their own file")
+    }
+
+    /**
+     * Test: Unauthorized user cannot download file without authentication
+     * Scenario: Request without bearer token
+     * Expected: 401 UNAUTHORIZED
+     */
+    @Test
+    fun `downloadFile returns 401 when no authentication provided`() {
+        val headers = HttpHeaders() // No bearer token
+        val request = HttpEntity<String>(null, headers)
+
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download",
+            HttpMethod.GET,
+            request,
+            String::class.java
+        )
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode, "Should require authentication")
+        println("✅ Test passed! Download without authentication returns 401")
+    }
+
+    /**
+     * Test: User cannot download non-existent file
+     * Scenario: Download file with invalid UUID
+     * Expected: 404 NOT_FOUND
+     */
+    @Test
+    fun `downloadFile returns 404 for non-existent file`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+        val nonExistentFileId = UUID.randomUUID()
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$nonExistentFileId/download",
+            HttpMethod.GET,
+            request,
+            String::class.java
+        )
+
+        assertEquals(HttpStatus.NOT_FOUND, response.statusCode, "Non-existent file should return 404")
+        println("✅ Test passed! Download non-existent file returns 404")
+    }
+
+    /**
+     * Test: User cannot download specific version of non-existent file
+     * Scenario: Download specific version of non-existent file
+     * Expected: 404 NOT_FOUND
+     */
+    @Test
+    fun `downloadFile with version returns 404 for non-existent file`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+        val nonExistentFileId = UUID.randomUUID()
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$nonExistentFileId/download?version=1",
+            HttpMethod.GET,
+            request,
+            String::class.java
+        )
+
+        assertEquals(HttpStatus.NOT_FOUND, response.statusCode, "Non-existent file should return 404")
+        println("✅ Test passed! Download non-existent file with version returns 404")
+    }
+
+    /**
+     * Test: User cannot download non-existent version of existing file
+     * Scenario: Download version that doesn't exist for an existing file
+     * Expected: 404 NOT_FOUND
+     */
+    @Test
+    fun `downloadFile returns 404 when requested version does not exist`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+        val nonExistentVersion = 999L
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download?version=$nonExistentVersion",
+            HttpMethod.GET,
+            request,
+            String::class.java
+        )
+
+        assertEquals(HttpStatus.NOT_FOUND, response.statusCode, "Non-existent version should return 404")
+        println("✅ Test passed! Download non-existent version returns 404")
+    }
+
+    /**
+     * Test: Owner can download current version (default)
+     * Scenario: Download current version of file (no version parameter)
+     * Expected: 200 OK with correct content
+     */
+    @Test
+    fun `downloadFile downloads current version when no version specified`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertNotNull(response.body)
+        assertTrue(response.body!!.isNotEmpty())
+        println("✅ Test passed! Download defaults to current version")
+    }
+
+    /**
+     * Test: Owner can download specific version of their file
+     * Scenario: Download version 1 of file
+     * Expected: 200 OK with file content
+     */
+    @Test
+    fun `downloadFile allows owner to download specific version of their file`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+        val versionNumber = 1L
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download?version=$versionNumber",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode, "Owner should download specific version")
+        assertNotNull(response.body)
+        assertTrue(response.body!!.isNotEmpty())
+        println("✅ Test passed! Owner can download specific version")
+    }
+
+    /**
+     * Test: User with READ_ONLY share can download file
+     * Scenario: Shared user with READ_ONLY permission downloads file
+     * Expected: 200 OK with file content
+     */
+    @Test
+    fun `downloadFile allows user with READ_ONLY share to download file`() {
+        val sharedUserId = UUID.fromString("11111111-1111-1111-1111-111111111111")
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create a READ_ONLY share for sharedUserId
+        val fileEntity = fileRepository.findById(testFileId).orElseThrow()
+        val share = g11.tusuploaderservice.entities.FileShare(
+            id = null,
+            file = fileEntity,
+            userID = sharedUserId,
+            permission = g11.tusuploaderservice.entities.PERMISSION_LEVEL.READ_ONLY,
+            timestamp = Date.from(Instant.now())
+        )
+        fileShareRepository.save(share)
+
+        // Mock the userServiceClient to return the shared user info
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = sharedUserId,
+            fullName = "Shared User",
+            email = "shareduser@example.com",
+            organization = "Test Organization",
+            department = "Test Department",
+            role = UserRole.ROLE_staff
+        )
+
+        // Simulate request from the shared user
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken) // Still using testadmin token for simplicity
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode, "User with READ_ONLY share should download file")
+        assertNotNull(response.body)
+        assertTrue(response.body!!.isNotEmpty())
+        println("✅ Test passed! User with READ_ONLY share can download file")
+    }
+
+    /**
+     * Test: Personal file access by owner
+     * Scenario: Owner of PERSONAL file downloads it
+     * Expected: 200 OK
+     */
+    @Test
+    fun `downloadFile allows owner of PERSONAL file to download`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // testFileId is already a PERSONAL file owned by testUserId
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertNotNull(response.body)
+        println("✅ Test passed! Owner can download PERSONAL file")
+    }
+
+    /**
+     * Test: Department file access by manager in same department
+     * Scenario: Manager from same department downloads DEPARTMENT file
+     * Expected: 200 OK with READ_WRITE permission
+     */
+    @Test
+    fun `downloadFile allows manager to download DEPARTMENT file from same department`() {
+        val managerId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create a DEPARTMENT file
+        val deptFileId = UUID.randomUUID()
+        val file = File(
+            uuid = deptFileId,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "department-file.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",
+            department = "Test Department",
+            sharingScope = SharingScope.DEPARTMENT
+        )
+
+        val fileVersion = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file,
+            filename = "department-file.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "abc123",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = deptFileId.toString()
+        )
+
+        file.versions.add(fileVersion)
+        fileRepository.save(file)
+
+        // Upload test content to MinIO for the department file
+        val testContent = "Department file content".toByteArray()
+        minioClient.putObject(
+            PutObjectArgs.builder()
+                .bucket("files")
+                .`object`(deptFileId.toString())
+                .stream(ByteArrayInputStream(testContent), testContent.size.toLong(), -1)
+                .contentType("application/pdf")
+                .build()
+        )
+
+        // Mock manager user
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = managerId,
+            fullName = "Test Manager",
+            email = "manager@example.com",
+            organization = "Test Organization",
+            department = "Test Department",
+            role = UserRole.ROLE_manager
+        )
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$deptFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode, "Manager should download DEPARTMENT file from same dept")
+        assertNotNull(response.body)
+        println("✅ Test passed! Manager can download DEPARTMENT file")
+    }
+
+    /**
+     * Test: Organization file access by staff
+     * Scenario: Staff member downloads ORGANIZATION file from same organization
+     * Expected: 200 OK with READ_ONLY permission
+     */
+    @Test
+    fun `downloadFile allows staff to download ORGANIZATION file from same organization`() {
+        val staffUserId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create an ORGANIZATION file
+        val orgFileId = UUID.randomUUID()
+        val file = File(
+            uuid = orgFileId,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "organization-file.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",
+            department = "Different Department",
+            sharingScope = SharingScope.ORGANIZATION
+        )
+
+        val fileVersion = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file,
+            filename = "organization-file.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "def456",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = orgFileId.toString()
+        )
+
+        file.versions.add(fileVersion)
+        fileRepository.save(file)
+
+        // Upload test content to MinIO
+        val testContent = "Organization file content".toByteArray()
+        minioClient.putObject(
+            PutObjectArgs.builder()
+                .bucket("files")
+                .`object`(orgFileId.toString())
+                .stream(ByteArrayInputStream(testContent), testContent.size.toLong(), -1)
+                .contentType("application/pdf")
+                .build()
+        )
+
+        // Mock staff user
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = staffUserId,
+            fullName = "Test Staff",
+            email = "staff@example.com",
+            organization = "Test Organization",
+            department = "Different Department",
+            role = UserRole.ROLE_staff
+        )
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$orgFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode, "Staff should download ORGANIZATION file from same org")
+        assertNotNull(response.body)
+        println("✅ Test passed! Staff can download ORGANIZATION file")
+    }
+
+    /**
+     * Test: Download with Content-Disposition header
+     * Scenario: Download file and verify proper Content-Disposition header
+     * Expected: 200 OK with proper Content-Disposition header
+     */
+    @Test
+    fun `downloadFile includes correct Content-Disposition header`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val contentDisposition = response.headers.getFirst("Content-Disposition")
+        assertNotNull(contentDisposition, "Content-Disposition header must be present")
+        assertTrue(contentDisposition.contains("attachment") || contentDisposition.contains("inline"),
+            "Should contain attachment or inline disposition")
+        println("✅ Test passed! Content-Disposition header is correct: $contentDisposition")
+    }
+
+    /**
+     * Test: Download with Content-Type header
+     * Scenario: Download file and verify correct Content-Type
+     * Expected: 200 OK with correct Content-Type
+     */
+    @Test
+    fun `downloadFile includes correct Content-Type header`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$testFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val contentType = response.headers.contentType
+        assertNotNull(contentType, "Content-Type header must be present")
+        assertEquals("application/pdf", contentType.toString(), "Should have application/pdf content type")
+        println("✅ Test passed! Content-Type header is correct: $contentType")
+    }
+
+    // ============ Cross-Organization Access Control Tests ============
+
+    /**
+     * Test: User from Organization A cannot download file from Organization B
+     * Scenario: DEPARTMENT scope file, user from different organization tries to download
+     * Expected: 403 FORBIDDEN
+     */
+    @Test
+    fun `downloadFile denies access to DEPARTMENT file from different organization`() {
+        val userFromDifferentOrgId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create a DEPARTMENT file in "Test Organization"
+        val deptFileId = UUID.randomUUID()
+        val file = File(
+            uuid = deptFileId,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "org-a-file.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",  // Organization A
+            department = "Test Department",
+            sharingScope = SharingScope.DEPARTMENT
+        )
+
+        val fileVersion = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file,
+            filename = "org-a-file.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "org-a-checksum",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = deptFileId.toString()
+        )
+
+        file.versions.add(fileVersion)
+        fileRepository.save(file)
+
+        // Upload test content to MinIO
+        val testContent = "Organization A file".toByteArray()
+        minioClient.putObject(
+            PutObjectArgs.builder()
+                .bucket("files")
+                .`object`(deptFileId.toString())
+                .stream(ByteArrayInputStream(testContent), testContent.size.toLong(), -1)
+                .contentType("application/pdf")
+                .build()
+        )
+
+        // Mock user from different organization (Organization B)
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = userFromDifferentOrgId,
+            fullName = "User From Org B",
+            email = "user-org-b@example.com",
+            organization = "Different Organization",  // Organization B
+            department = "Test Department",
+            role = UserRole.ROLE_manager
+        )
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$deptFileId/download",
+            HttpMethod.GET,
+            request,
+            String::class.java
+        )
+
+        assertEquals(HttpStatus.FORBIDDEN, response.statusCode, "User from different organization should be denied access")
+        println("✅ Test passed! Cross-organization DEPARTMENT access denied")
+    }
+
+    /**
+     * Test: User from Organization A cannot download ORGANIZATION scope file from Organization B
+     * Scenario: ORGANIZATION scope file, user from different organization tries to download
+     * Expected: 403 FORBIDDEN
+     */
+    @Test
+    fun `downloadFile denies access to ORGANIZATION file from different organization`() {
+        val userFromDifferentOrgId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create an ORGANIZATION scope file in "Test Organization"
+        val orgFileId = UUID.randomUUID()
+        val file = File(
+            uuid = orgFileId,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "org-scope-file.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",  // Organization A
+            department = "Test Department",
+            sharingScope = SharingScope.ORGANIZATION
+        )
+
+        val fileVersion = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file,
+            filename = "org-scope-file.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "org-scope-checksum",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = orgFileId.toString()
+        )
+
+        file.versions.add(fileVersion)
+        fileRepository.save(file)
+
+        // Upload test content to MinIO
+        val testContent = "Organization scope file".toByteArray()
+        minioClient.putObject(
+            PutObjectArgs.builder()
+                .bucket("files")
+                .`object`(orgFileId.toString())
+                .stream(ByteArrayInputStream(testContent), testContent.size.toLong(), -1)
+                .contentType("application/pdf")
+                .build()
+        )
+
+        // Mock user from different organization
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = userFromDifferentOrgId,
+            fullName = "Admin From Org B",
+            email = "admin-org-b@example.com",
+            organization = "Different Organization",  // Organization B
+            department = "Different Department",
+            role = UserRole.ROLE_admin  // Even ROLE_admin from different org should be denied
+        )
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$orgFileId/download",
+            HttpMethod.GET,
+            request,
+            String::class.java
+        )
+
+        assertEquals(HttpStatus.FORBIDDEN, response.statusCode, "Admin from different organization should be denied access")
+        println("✅ Test passed! Cross-organization ORGANIZATION access denied even for admin")
+    }
+
+    /**
+     * Test: User from different organization cannot get file metadata
+     * Scenario: getFileById from different organization
+     * Expected: 403 FORBIDDEN or 404 NOT_FOUND (depending on implementation)
+     */
+    @Test
+    fun `getFileById denies access to file metadata from different organization`() {
+        val userFromDifferentOrgId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create a file in "Test Organization"
+        val fileId = UUID.randomUUID()
+        val file = File(
+            uuid = fileId,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "metadata-test.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",
+            department = "Test Department",
+            sharingScope = SharingScope.ORGANIZATION
+        )
+
+        val fileVersion = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file,
+            filename = "metadata-test.pdf",
+            size = 1024L,
+            metadata = mapOf("secret" to "data"),
+            checksum = "metadata-checksum",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = fileId.toString()
+        )
+
+        file.versions.add(fileVersion)
+        fileRepository.save(file)
+
+        // Mock user from different organization
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = userFromDifferentOrgId,
+            fullName = "User From Other Org",
+            email = "other-org@example.com",
+            organization = "Other Organization",
+            department = "Other Department",
+            role = UserRole.ROLE_staff
+        )
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$fileId",
+            HttpMethod.GET,
+            request,
+            String::class.java
+        )
+
+        assertTrue(
+            response.statusCode == HttpStatus.FORBIDDEN || response.statusCode == HttpStatus.NOT_FOUND,
+            "Access to file metadata from different organization should be denied"
+        )
+        println("✅ Test passed! File metadata access denied for different organization")
+    }
+
+    /**
+     * Test: User from different organization cannot delete file
+     * Scenario: deleteFile from different organization
+     * Expected: 403 FORBIDDEN or 404 NOT_FOUND
+     */
+    @Test
+    fun `deleteFile denies access to file from different organization`() {
+        val userFromDifferentOrgId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create a file in "Test Organization"
+        val fileId = UUID.randomUUID()
+        val file = File(
+            uuid = fileId,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "delete-test.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",
+            department = "Test Department",
+            sharingScope = SharingScope.ORGANIZATION
+        )
+
+        val fileVersion = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file,
+            filename = "delete-test.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "delete-checksum",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = fileId.toString()
+        )
+
+        file.versions.add(fileVersion)
+        fileRepository.save(file)
+
+        // Mock user from different organization
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = userFromDifferentOrgId,
+            fullName = "Admin Other Org",
+            email = "admin-other@example.com",
+            organization = "Other Organization",
+            department = "Other Department",
+            role = UserRole.ROLE_admin  // Even admin from different org should not delete
+        )
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$fileId",
+            HttpMethod.DELETE,
+            request,
+            String::class.java
+        )
+
+        assertTrue(
+            response.statusCode == HttpStatus.FORBIDDEN || response.statusCode == HttpStatus.NOT_FOUND,
+            "Delete access from different organization should be denied"
+        )
+        println("✅ Test passed! Delete denied for file from different organization")
+    }
+
+    /**
+     * Test: User from same organization but different department cannot access DEPARTMENT file
+     * Scenario: Staff from different department in same organization tries to access DEPARTMENT file
+     * Expected: 403 FORBIDDEN
+     */
+    @Test
+    fun `downloadFile denies access to DEPARTMENT file from different department in same organization`() {
+        val userFromDifferentDeptId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create a DEPARTMENT file in "Test Organization" - "Test Department"
+        val deptFileId = UUID.randomUUID()
+        val file = File(
+            uuid = deptFileId,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "dept-restricted.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",
+            department = "Test Department",  // Department A
+            sharingScope = SharingScope.DEPARTMENT
+        )
+
+        val fileVersion = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file,
+            filename = "dept-restricted.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "dept-checksum",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = deptFileId.toString()
+        )
+
+        file.versions.add(fileVersion)
+        fileRepository.save(file)
+
+        // Upload test content to MinIO
+        val testContent = "Department restricted file".toByteArray()
+        minioClient.putObject(
+            PutObjectArgs.builder()
+                .bucket("files")
+                .`object`(deptFileId.toString())
+                .stream(ByteArrayInputStream(testContent), testContent.size.toLong(), -1)
+                .contentType("application/pdf")
+                .build()
+        )
+
+        // Mock user from same organization but different department
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = userFromDifferentDeptId,
+            fullName = "Staff Different Dept",
+            email = "staff-other-dept@example.com",
+            organization = "Test Organization",  // Same organization
+            department = "Different Department",  // Different department
+            role = UserRole.ROLE_staff
+        )
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$deptFileId/download",
+            HttpMethod.GET,
+            request,
+            String::class.java
+        )
+
+        assertEquals(HttpStatus.FORBIDDEN, response.statusCode, "User from different department should be denied access")
+        println("✅ Test passed! Different department DEPARTMENT file access denied")
+    }
+
+    /**
+     * Test: Admin from same organization CAN access DEPARTMENT file from different department
+     * Scenario: Admin from different department in same organization downloads DEPARTMENT file
+     * Expected: 200 OK (admins can access files from any department within their organization)
+     */
+    @Test
+    fun `downloadFile allows admin to download DEPARTMENT file from different department in same organization`() {
+        val adminFromDifferentDeptId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create a DEPARTMENT file in "Test Organization" - "Test Department"
+        val deptFileId = UUID.randomUUID()
+        val file = File(
+            uuid = deptFileId,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "admin-cross-dept.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",
+            department = "Test Department",
+            sharingScope = SharingScope.DEPARTMENT
+        )
+
+        val fileVersion = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file,
+            filename = "admin-cross-dept.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "admin-checksum",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = deptFileId.toString()
+        )
+
+        file.versions.add(fileVersion)
+        fileRepository.save(file)
+
+        // Upload test content to MinIO
+        val testContent = "Admin cross department file".toByteArray()
+        minioClient.putObject(
+            PutObjectArgs.builder()
+                .bucket("files")
+                .`object`(deptFileId.toString())
+                .stream(ByteArrayInputStream(testContent), testContent.size.toLong(), -1)
+                .contentType("application/pdf")
+                .build()
+        )
+
+        // Mock admin from same organization but different department
+        val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+
+        every { userServiceClient.get() } returns requestHeadersUriSpec
+        every { requestHeadersUriSpec.uri(any<String>(), any<UUID>()) } returns requestHeadersSpec
+        every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
+        every { requestHeadersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
+            id = adminFromDifferentDeptId,
+            fullName = "Admin Different Dept",
+            email = "admin-diff-dept@example.com",
+            organization = "Test Organization",  // Same organization
+            department = "Different Department",  // Different department
+            role = UserRole.ROLE_admin  // Admins can access files from any department in their organization
+        )
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files/$deptFileId/download",
+            HttpMethod.GET,
+            request,
+            ByteArray::class.java
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode, "Admin from same organization can download files from different departments")
+        assertNotNull(response.body)
+        println("✅ Test passed! Admin can download DEPARTMENT file from different department in same organization")
+    }
+
+    /**
+     * Test: Verify organization boundary is enforced on file list
+     * Scenario: User tries to list/see files from different organization
+     * Expected: Files from other organization should not appear in list
+     */
+    @Test
+    fun `getFilesMetadata filters by current user organization`() {
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // Create file in "Test Organization"
+        val file1Id = UUID.randomUUID()
+        val file1 = File(
+            uuid = file1Id,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "test-org-file.pdf",
+            currentVersion = 1L,
+            ownerId = testUserId,
+            organization = "Test Organization",
+            department = "Test Department",
+            sharingScope = SharingScope.ORGANIZATION
+        )
+
+        val fileVersion1 = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file1,
+            filename = "test-org-file.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "file1-checksum",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = file1Id.toString()
+        )
+        file1.versions.add(fileVersion1)
+        fileRepository.save(file1)
+
+        // Create file in "Other Organization"
+        val file2Id = UUID.randomUUID()
+        val otherUserId = UUID.randomUUID()
+        val file2 = File(
+            uuid = file2Id,
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            lastFilename = "other-org-file.pdf",
+            currentVersion = 1L,
+            ownerId = otherUserId,
+            organization = "Other Organization",  // Different org
+            department = "Other Department",
+            sharingScope = SharingScope.ORGANIZATION
+        )
+
+        val fileVersion2 = FileVersion(
+            id = null,
+            version = 1L,
+            status = FileStatus.AVAILABLE,
+            file = file2,
+            filename = "other-org-file.pdf",
+            size = 1024L,
+            metadata = mapOf(),
+            checksum = "file2-checksum",
+            contentType = "application/pdf",
+            createdAt = Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
+            objectKey = file2Id.toString()
+        )
+        file2.versions.add(fileVersion2)
+        fileRepository.save(file2)
+
+        val headers = HttpHeaders().apply {
+            setBearerAuth(userToken)
+        }
+
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files?page=0&size=100",
+            HttpMethod.GET,
+            request,
+            object : ParameterizedTypeReference<RestResponsePage<FileDTO>>() {}
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertNotNull(response.body)
+
+        val files = response.body!!.content
+        // File from "Other Organization" should NEVER be visible to testadmin user
+        val hasOtherOrgFile = files.any { it.id == file2Id }
+
+        // The key assertion: other organization files should NOT appear
+        assertFalse(hasOtherOrgFile, "Should NOT see files from other organization")
+        println("✅ Test passed! File listing respects organization boundary")
     }
 }
 
