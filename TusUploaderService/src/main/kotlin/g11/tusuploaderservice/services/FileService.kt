@@ -14,6 +14,7 @@ import g11.tusuploaderservice.specs.FileSpecifications
 import g11.tusuploaderservice.utils.getUserIdFromJwt
 import g11.tusuploaderservice.utils.getUserTokenFromJwt
 import g11.tusuploaderservice.utils.mergeByteArrays
+import io.micrometer.tracing.Tracer
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.Page
@@ -45,6 +46,7 @@ class FileService(
     @Qualifier("userServiceClient") private val userServiceClient: RestClient,
     private val fileVersionRepository: FileVersionRepository,
     private val outboxRepository: g11.tusuploaderservice.repositories.FilesOutboxEventsRepository,
+    private val tracer: Tracer,
 ) : FileServiceInterface {
     private val log = LoggerFactory.getLogger(FileService::class.java)
 
@@ -314,27 +316,34 @@ class FileService(
      * Used by Kafka consumers and other internal services.
      */
     override fun updateFileMetadata(id: UUID, version: Long?, metadata: Map<String, String>) {
-        log.debug("Updating metadata internally of {} with {}", id, metadata)
+        val span = tracer.nextSpan().name("updateFileMetadata").start()
+        val scope = tracer.withSpan(span)
+        try {
+            log.debug("Updating metadata internally of {} with {}", id, metadata)
 
-        val file = fileVersionRepository.findByFileUuidAndVersion(id, version ?: 1L)
-            .orElseThrow {
-                log.warn("The resource $id does not exists")
-                ResourceNotFoundException("Resource does not exist, cannot update metadata for: $id")
-            }
+            val file = fileVersionRepository.findByFileUuidAndVersion(id, version ?: 1L)
+                .orElseThrow {
+                    log.warn("The resource $id does not exists")
+                    ResourceNotFoundException("Resource does not exist, cannot update metadata for: $id")
+                }
 
-        // Extract fileName from metadata if provided
-        metadata["filename"]?.let { file.filename = it }
+            // Extract fileName from metadata if provided
+            metadata["filename"]?.let { file.filename = it }
 
-        // Filter out fileName from metadata map for the metadata field update
-        val metadataToUpdate = metadata - "filename"
+            // Filter out fileName from metadata map for the metadata field update
+            val metadataToUpdate = metadata - "filename"
 
-        log.debug("updating file metadata: {}, for file {}", metadataToUpdate.toString(), id)
+            log.debug("updating file metadata: {}, for file {}", metadataToUpdate.toString(), id)
 
-        // Update metadata fields that exist in the entity and eventually
-        // add new fields specified in the metadata map
-        val currentMetadata = file.metadata?.toMutableMap() ?: mutableMapOf()
-        currentMetadata.putAll(metadataToUpdate)
-        file.metadata = currentMetadata
+            // Update metadata fields that exist in the entity and eventually
+            // add new fields specified in the metadata map
+            val currentMetadata = file.metadata?.toMutableMap() ?: mutableMapOf()
+            currentMetadata.putAll(metadataToUpdate)
+            file.metadata = currentMetadata
+        } finally {
+            scope.close()
+            span.end()
+        }
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
@@ -372,7 +381,9 @@ class FileService(
                 "fileId" to id.toString(),
                 "deletedAt" to Instant.now().toString(),
                 "deletedBy" to userDetails.id.toString(),
-                "fileVersionIds" to fileVersionIds.map { it.toString() }
+                "fileVersionIds" to fileVersionIds.map { it.toString() },
+                "traceparent" to tracer.currentSpan()?.context()
+                    ?.let { "00-${it.traceId()}-${it.spanId()}-01" }
             )
 
             log.info("Creating FILE_DELETED event with payload: $deletionEvent")
@@ -400,12 +411,19 @@ class FileService(
     override fun downloadFile(id: UUID,  version: Long?): DownloadDTO {
         log.debug("Download the resource {}", id)
 
-        val token= authService.getAccessToken()
-        val userDetails = getUserDetails(token)
-        log.debug("Current user details: {}", userDetails)
+        // AI service accounts (ROLE_ai_worker) are not registered in UserDetailService,
+        // so skip the user lookup and permission check. The ROLE_ai_worker JWT authority
+        // already guarantees the caller is a trusted internal service.
+        val isAiWorker = SecurityContextHolder.getContext().authentication.authorities
+            .any { it.authority == "ROLE_ai_worker" }
 
-        // Check permissions - if no exception is thrown, user has at least READ_ONLY access
-        getCurrentUserPermission(id, userDetails)
+        if (!isAiWorker) {
+            val token = authService.getAccessToken()
+            val userDetails = getUserDetails(token)
+            log.debug("Current user details: {}", userDetails)
+            // Check permissions - if no exception is thrown, user has at least READ_ONLY access
+            getCurrentUserPermission(id, userDetails)
+        }
 
         // Retrieve the file entity
         val file = fileRepository.findById(id).orElseThrow {

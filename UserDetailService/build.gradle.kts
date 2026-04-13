@@ -64,34 +64,10 @@ dependencies {
 
     // Observability - Loki log appender (LGTM stack)
     implementation("com.github.loki4j:loki-logback-appender:1.5.2")
-}
 
-// OpenTelemetry Java Agent
-val otelAgentVersion = "2.12.0"
-val otelAgentFile = file("$buildDir/otel/opentelemetry-javaagent.jar")
-
-tasks.register("downloadOtelAgent") {
-    group = "observability"
-    description = "Download the OpenTelemetry Java Agent JAR"
-    outputs.file(otelAgentFile)
-    doLast {
-        otelAgentFile.parentFile.mkdirs()
-        val url = "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v$otelAgentVersion/opentelemetry-javaagent.jar"
-        ant.invokeMethod("get", mapOf("src" to url, "dest" to otelAgentFile))
-    }
-}
-
-tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
-    dependsOn("downloadOtelAgent")
-    jvmArgs(
-        "-javaagent:${otelAgentFile.absolutePath}",
-    )
-    environment("OTEL_SERVICE_NAME", "UserDetailService")
-    environment("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-    environment("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
-    environment("OTEL_METRICS_EXPORTER", "otlp")
-    environment("OTEL_TRACES_EXPORTER", "otlp")
-    environment("OTEL_LOGS_EXPORTER", "none")
+    // Observability - Distributed Tracing (Micrometer + OTel bridge + OTLP exporter)
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 }
 
 kotlin {

@@ -42,3 +42,11 @@ keycloak-admin:
   client-id: user-admin
   secret: lgwvWQ7TnGvcRL1SYxsdzUu7j3hiXDNB
 
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+

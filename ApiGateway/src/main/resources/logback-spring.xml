@@ -11,7 +11,7 @@
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
-                ${LOG_DATE} ${LOG_THREAD} ${LOG_LEVEL} ${LOG_LOGGER}
+                ${LOG_DATE} ${LOG_THREAD} ${LOG_LEVEL} ${LOG_LOGGER} %clr([%mdc{traceId:-} %mdc{spanId:-}]){faint}
                 --> %msg%n%ex{full}
             </pattern>
         </encoder>

@@ -31,6 +31,10 @@ class KafkaConsumerConfig(
     fun kafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
         factory.consumerFactory = consumerFactory()
+        // Must be explicitly false — Spring Boot auto-config sets it to true on all factories.
+        // job-outbox comes from Debezium (no Kafka headers); trace propagation is handled
+        // manually inside the listener via Propagator.extract() on the message body.
+        factory.containerProperties.isObservationEnabled = false
         return factory
     }
 }

@@ -48,6 +48,7 @@ import java.util.Date
 import g11.tusuploaderservice.entities.FileVersion
 import g11.tusuploaderservice.entities.FilesOutboxEvent
 import g11.tusuploaderservice.repositories.FilesOutboxEventsRepository
+import io.micrometer.tracing.Tracer
 import kotlin.let
 
 
@@ -59,7 +60,8 @@ class TusService(
     private val authService: AuthService,
     private val outboxRepository: FilesOutboxEventsRepository,
     private val fileRepo: FileRepository,
-    private val repo: TusRepository
+    private val repo: TusRepository,
+    private val tracer: Tracer
 ): TusServiceInterface {
     @Value("\${tus.maxSize}") private lateinit var tusMaxSize:String
     @Value("\${tus.expirationPeriod}") private var expirationPeriod:Long = 0
@@ -312,7 +314,9 @@ class TusService(
                 "ownerUserId" to uploadEntity.ownerId.toString(),
                 "filename" to version.filename,
                 "contentType" to version.contentType,
-                "metadata" to version.metadata
+                "metadata" to version.metadata,
+                "traceparent" to tracer.currentSpan()?.context()
+                    ?.let { "00-${it.traceId()}-${it.spanId()}-01" }
             )
 
 

@@ -6,6 +6,7 @@ import g11.aiprocessingservice.dto.jobStatus
 import g11.aiprocessingservice.entities.JobOutbox
 import g11.aiprocessingservice.repositories.JobOutboxRepository
 import g11.aiprocessingservice.repositories.JobRepository
+import io.micrometer.tracing.Tracer
 import org.apache.kafka.common.errors.ResourceNotFoundException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -15,7 +16,8 @@ import java.util.*
 @Service
 class JobStatusService(
     private val jobRepository: JobRepository,
-    private val jobOutboxRepository: JobOutboxRepository
+    private val jobOutboxRepository: JobOutboxRepository,
+    private val tracer: Tracer,
 ) : JobStatusServiceInterface {
     private val log = LoggerFactory.getLogger(JobStatusService::class.java)
 
@@ -122,9 +124,14 @@ class JobStatusService(
         event_type: String,
         payload: Map<String, Any>
     ) {
+        val enrichedPayload = payload.toMutableMap().apply {
+            tracer.currentSpan()?.context()?.let {
+                put("traceparent", "00-${it.traceId()}-${it.spanId()}-01")
+            }
+        }
         val outboxEvent = JobOutbox(
             event_type = event_type,
-            payload = payload
+            payload = enrichedPayload
         )
         jobOutboxRepository.save(outboxEvent)
         log.debug("Created outbox event: $event_type")

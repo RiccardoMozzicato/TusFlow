@@ -3,6 +3,9 @@ package g11.aiprocessingservice.services
 import com.fasterxml.jackson.databind.ObjectMapper
 import g11.aiprocessingservice.dto.ChunkBatchEvent
 import g11.aiprocessingservice.dto.FileAnalyzedEvent
+import io.micrometer.tracing.Tracer
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.header.internals.RecordHeaders
 import org.apache.kafka.common.errors.ResourceNotFoundException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -27,7 +30,8 @@ class EmbeddingProcessor(
     private val kafkaTemplate: KafkaTemplate<String, String>,
     @Qualifier("TusUploaderService") private val fileServiceClient: RestClient,
     private val authService: AuthServiceInterface,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val tracer: Tracer,
 ) {
     private val log = LoggerFactory.getLogger(EmbeddingProcessor::class.java)
 
@@ -74,6 +78,10 @@ class EmbeddingProcessor(
             val batchSize = 5
             val batches = chunks.chunked(batchSize)
 
+            val traceparentHeader: ByteArray? = tracer.currentSpan()?.context()?.let {
+                "00-${it.traceId()}-${it.spanId()}-01".toByteArray(Charsets.UTF_8)
+            }
+
             batches.forEachIndexed { batchIndex, batch ->
                 val batchEvent = ChunkBatchEvent(
                     fileVersionId = event.fileVersionId,
@@ -89,12 +97,15 @@ class EmbeddingProcessor(
                     }
                 )
 
-                // Publish batch to embeddings-batch topic
-                kafkaTemplate.send(
-                    "embeddings-batch",
+                val headers = RecordHeaders().apply {
+                    traceparentHeader?.let { add("traceparent", it) }
+                }
+                kafkaTemplate.send(ProducerRecord(
+                    "embeddings-batch", null,
                     event.fileVersionId.toString(),
-                    objectMapper.writeValueAsString(batchEvent)
-                )
+                    objectMapper.writeValueAsString(batchEvent),
+                    headers
+                ))
             }
 
             log.info("Created ${batches.size} embedding batches for file ${event.fileId}")
