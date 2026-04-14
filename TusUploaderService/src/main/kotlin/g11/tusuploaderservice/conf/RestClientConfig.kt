@@ -14,4 +14,12 @@ class RestClientConfig {
             .baseUrl("http://localhost:8082")
             .build()
     }
+
+    @Bean
+    @Qualifier("aiProcessingServiceClient")
+    fun aiProcessingServiceClient(): RestClient {
+        return RestClient.builder()
+            .baseUrl("http://localhost:8081")
+            .build()
+    }
 }

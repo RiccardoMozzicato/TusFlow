@@ -480,3 +480,136 @@ export const getFileGeneratedMetadata = async (
   return response.json();
 };
 
+/**
+ * Stream AI metadata processing status via Server-Sent Events
+ * @param fileId The file UUID
+ * @param version Optional file version number
+ * @param onUpdate Callback when metadata is ready or processing status changes
+ * @param onError Callback when an error occurs
+ * @param signal AbortSignal to close the connection
+ * @returns EventSource instance or null if browser doesn't support it
+ */
+export const streamFileGeneratedMetadata = (
+  fileId: string,
+  version: number | undefined,
+  onUpdate: (data: any) => void,
+  onError: (error: string) => void,
+  signal: AbortSignal
+): EventSource | null => {
+  // Check browser support
+  if (typeof EventSource === 'undefined') {
+    onError('Server-Sent Events not supported by this browser');
+    return null;
+  }
+
+  const queryParams = version !== undefined ? `?version=${version}` : '';
+  const url = `${FILES_BASE_URL}/generatedmetadata/stream/${fileId}${queryParams}`;
+
+  console.log('Opening SSE connection to:', url);
+
+  try {
+    const eventSource = new EventSource(url);
+
+    // Listen for custom events
+    eventSource.addEventListener('completed', (event: MessageEvent) => {
+      console.log('SSE: Metadata completed', event.data);
+      try {
+        const metadata = JSON.parse(event.data);
+        onUpdate({ status: 'completed', data: metadata });
+        eventSource.close();
+      } catch (err) {
+        console.error('Failed to parse completed metadata:', err);
+        onError('Failed to parse metadata response');
+        eventSource.close();
+      }
+    });
+
+    eventSource.addEventListener('failed', (event: MessageEvent) => {
+      console.log('SSE: Job failed', event.data);
+      try {
+        const errorData = JSON.parse(event.data);
+        onUpdate({ status: 'failed', error: errorData.error || 'AI analysis failed' });
+      } catch (err) {
+        onUpdate({ status: 'failed', error: 'AI analysis failed' });
+      }
+      eventSource.close();
+    });
+
+    eventSource.addEventListener('unsupported', (event: MessageEvent) => {
+      console.log('SSE: File type unsupported', event.data);
+      try {
+        const errorData = JSON.parse(event.data);
+        onUpdate({ status: 'unsupported', error: errorData.error || 'File type not supported' });
+      } catch (err) {
+        onUpdate({ status: 'unsupported', error: 'File type not supported' });
+      }
+      eventSource.close();
+    });
+
+    eventSource.addEventListener('processing', (event: MessageEvent) => {
+      console.log('SSE: Still processing', event.data);
+      try {
+        const processingData = JSON.parse(event.data);
+        onUpdate({ status: 'processing', ...processingData });
+      } catch (err) {
+        console.error('Failed to parse processing update:', err);
+      }
+    });
+
+    eventSource.addEventListener('waiting', (event: MessageEvent) => {
+      console.log('SSE: Waiting for job', event.data);
+      try {
+        const waitData = JSON.parse(event.data);
+        onUpdate({ status: 'waiting', message: waitData.message });
+      } catch (err) {
+        onUpdate({ status: 'waiting', message: 'Waiting for job to be created...' });
+      }
+    });
+
+    eventSource.addEventListener('timeout', (event: MessageEvent) => {
+      console.log('SSE: Timeout', event.data);
+      try {
+        const timeoutData = JSON.parse(event.data);
+        onUpdate({ status: 'timeout', error: timeoutData.error || 'Request timeout' });
+      } catch (err) {
+        onUpdate({ status: 'timeout', error: 'Request timeout' });
+      }
+      eventSource.close();
+    });
+
+    eventSource.addEventListener('error', (event: MessageEvent) => {
+      console.log('SSE: Error event', event.data);
+      try {
+        const errorData = JSON.parse(event.data);
+        onUpdate({ status: 'error', error: errorData.error || 'Unknown error' });
+      } catch (err) {
+        onUpdate({ status: 'error', error: 'Unknown error occurred' });
+      }
+      eventSource.close();
+    });
+
+    // Handle EventSource errors
+    eventSource.onerror = () => {
+      console.error('SSE connection error');
+      if (eventSource.readyState === EventSource.CLOSED) {
+        console.log('SSE connection closed');
+      } else {
+        onError('Connection to metadata processing service failed');
+        eventSource.close();
+      }
+    };
+
+    // Handle abort signal
+    signal.addEventListener('abort', () => {
+      console.log('Aborting SSE connection');
+      eventSource.close();
+    });
+
+    return eventSource;
+  } catch (err) {
+    console.error('Error opening SSE connection:', err);
+    onError(err instanceof Error ? err.message : 'Failed to open connection');
+    return null;
+  }
+};
+

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Spinner, Alert, Badge, ListGroup } from 'react-bootstrap';
-import { getFileGeneratedMetadata } from '../services/fileApi';
+import { streamFileGeneratedMetadata, getFileGeneratedMetadata } from '../services/fileApi';
 import type { MetadataAIDTO } from '../services/fileApi';
 
 interface MetadataAIModalProps {
@@ -21,90 +21,144 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
   const [metadata, setMetadata] = useState<MetadataAIDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string>('idle');
+  const eventSourceRef = React.useRef<EventSource | null>(null);
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (show) {
       // Create new AbortController for this modal session
       abortControllerRef.current = new AbortController();
-      loadMetadata(abortControllerRef.current.signal);
+      startMetadataStream(abortControllerRef.current.signal);
     }
     
-    // Cleanup: abort ongoing requests when modal closes
+    // Cleanup: close SSE connection when modal closes
     return () => {
+      if (eventSourceRef.current) {
+        console.log('Closing SSE connection');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
       if (abortControllerRef.current) {
-        console.log('Aborting AI metadata polling requests');
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
     };
   }, [show, fileId, version]);
 
-  const loadMetadata = async (signal: AbortSignal) => {
+  const startMetadataStream = (signal: AbortSignal) => {
+    console.log('Starting metadata stream via SSE');
+    setLoading(true);
+    setError(null);
+    setProcessingStatus('connecting');
+
+    // Try SSE first
+    const eventSource = streamFileGeneratedMetadata(
+      fileId,
+      version,
+      handleSSEUpdate,
+      handleSSEError,
+      signal
+    );
+
+    if (eventSource) {
+      eventSourceRef.current = eventSource;
+    } else {
+      // SSE not supported, fallback to polling
+      console.warn('SSE not supported, falling back to polling');
+      fallbackToPolling(signal);
+    }
+  };
+
+  const handleSSEUpdate = (data: any) => {
+    console.log('SSE Update received:', data);
+    
+    switch (data.status) {
+      case 'completed':
+        console.log('Metadata received via SSE');
+        setMetadata(data.data);
+        setProcessingStatus('completed');
+        setLoading(false);
+        break;
+
+      case 'processing':
+        setProcessingStatus(`processing (attempt ${data.attempt})`);
+        break;
+
+      case 'waiting':
+        setProcessingStatus('waiting');
+        break;
+
+      case 'failed':
+        setError('AI analysis failed: ' + (data.error || 'Unknown error'));
+        setProcessingStatus('failed');
+        setLoading(false);
+        break;
+
+      case 'unsupported':
+        setError('File type not supported: ' + (data.error || 'This file format cannot be analyzed'));
+        setProcessingStatus('unsupported');
+        setLoading(false);
+        break;
+
+      case 'timeout':
+        setError(data.error || 'AI analysis is taking longer than expected. The file may be too large or complex. Please try again later.');
+        setProcessingStatus('timeout');
+        setLoading(false);
+        break;
+
+      case 'error':
+        setError(data.error || 'An error occurred during AI analysis');
+        setProcessingStatus('error');
+        setLoading(false);
+        break;
+    }
+  };
+
+  const handleSSEError = (errorMessage: string) => {
+    console.error('SSE Error:', errorMessage);
+    setError(errorMessage);
+    setProcessingStatus('error');
+    setLoading(false);
+  };
+
+  const fallbackToPolling = async (signal: AbortSignal) => {
+    // Fallback to the old polling mechanism if SSE is not supported
     const maxRetries = 5;
     let attempt = 0;
-    
+
     try {
-      setLoading(true);
-      setError(null);
-      
       while (attempt < maxRetries) {
-        // Check if request was aborted
         if (signal.aborted) {
-          console.log('AI metadata polling aborted by user');
+          console.log('Polling aborted');
           return;
         }
-        
+
         attempt++;
-        console.log(`AI metadata fetch attempt ${attempt}/${maxRetries}`);
-        
+        console.log(`Fallback: Polling for metadata - attempt ${attempt}/${maxRetries}`);
+        setProcessingStatus(`processing (attempt ${attempt})`);
+
         const data = await getFileGeneratedMetadata(fileId, version);
-        console.log('AI Metadata retrieved from server:', data);
-        console.log('Tags type:', typeof data.tags, 'Is array:', Array.isArray(data.tags));
-        console.log('Key Entities type:', typeof data.keyEntities, 'Is array:', Array.isArray(data.keyEntities));
-        console.log('Topics type:', typeof data.topics, 'Is array:', Array.isArray(data.topics));
-        
-        // Check if data is still being processed (null or "Failed" indicates processing/failure)
+        console.log('Metadata retrieved:', data);
+
         if (data.tags !== null && data.summary !== null && 
             data.summary !== 'Failed to analyze' && data.tags !== 'Failed') {
-          // Success - data is ready
-          console.log(`AI metadata ready on attempt ${attempt}`);
           setMetadata(data);
+          setProcessingStatus('completed');
           setLoading(false);
           return;
         }
-        
-        // Data still processing, retry with exponential backoff
+
         if (attempt < maxRetries) {
-          const delayMs = Math.min(1000 * attempt, 5000); // 1s, 2s, 3s, 4s, 5s max
-          console.log(`AI still processing, retrying in ${delayMs}ms...`);
-          setMetadata(data); // Show processing state
-          
-          // Wait with ability to abort
-          await new Promise((resolve, reject) => {
-            const timeout = setTimeout(resolve, delayMs);
-            signal.addEventListener('abort', () => {
-              clearTimeout(timeout);
-              reject(new DOMException('Aborted', 'AbortError'));
-            });
-          });
-        } else {
-          // Max retries reached, check if data is still null
-          console.log('Max retries reached, showing current state');
-          if (data.tags === null || data.summary === null) {
-            // AI processing failed or timed out
-            setError('AI analysis is taking longer than expected. The file may be too large or complex. Please try again later.');
-          }
-          setMetadata(data);
+          const delayMs = Math.min(1000 * attempt, 5000);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
       }
+
+      setError('AI analysis is taking longer than expected. Please try again later.');
+      setProcessingStatus('timeout');
     } catch (err) {
-      // Don't show error if it was just aborted by user
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        console.log('AI metadata fetch aborted');
-        return;
-      }
-      console.error('Error loading AI metadata:', err);
+      console.error('Error in fallback polling:', err);
       setError(err instanceof Error ? err.message : 'Failed to load AI-generated metadata');
     } finally {
       setLoading(false);
@@ -112,7 +166,10 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
   };
 
   const handleClose = () => {
-    // Abort ongoing requests
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -120,6 +177,7 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
     setMetadata(null);
     setError(null);
     setLoading(false);
+    setProcessingStatus('idle');
     onHide();
   };
 
@@ -164,12 +222,13 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
               </div>
             </div>
           </Alert>
-        ) : metadata && (metadata.tags === null || metadata.summary === null || loading) ? (
+        ) : loading || !metadata ? (
           <div className="text-center py-5">
             <Spinner animation="border" role="status" variant="primary">
               <span className="visually-hidden">AI processing...</span>
             </Spinner>
             <p className="mt-3">🤖 AI is analyzing the file...</p>
+            <p className="text-muted small">Status: {processingStatus}</p>
             <p className="text-muted small">This may take a few moments. Please wait...</p>
           </div>
         ) : metadata ? (
