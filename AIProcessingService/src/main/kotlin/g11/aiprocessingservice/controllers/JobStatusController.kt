@@ -32,8 +32,8 @@ class JobStatusController(
     ): ResponseEntity<JobStatusResponseDTO> {
         log.debug("Fetching job status for fileId: {}, version: {}", fileId, version)
         
-        val job = jobRepository.findLatestByFileIdAndVersion(fileId, version)
-            .orElse(null)
+        val jobs = jobRepository.findLatestByFileIdAndVersion(fileId, version)
+        val job = jobs.firstOrNull()
         
         return if (job != null) {
             val response = JobStatusResponseDTO(

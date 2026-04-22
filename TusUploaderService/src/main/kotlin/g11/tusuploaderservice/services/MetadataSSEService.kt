@@ -18,11 +18,7 @@ class MetadataSSEService(
     private val objectMapper = jacksonObjectMapper()
 
     private enum class AiJobStatusEnum {
-        PENDING,
-        PROCESSING,
-        COMPLETED,
-        FAILED,
-        UNSUPPORTED
+        PENDING, PROCESSING, COMPLETED, FAILED, UNSUPPORTED
     }
 
     private data class AiJobStatusDTO(
@@ -34,9 +30,9 @@ class MetadataSSEService(
     )
 
     private companion object {
-        const val MAX_RETRIES = 30  // 30 attempts
-        const val INITIAL_DELAY_MS = 1000L  // 1 second
-        const val MAX_DELAY_MS = 5000L  // 5 seconds max
+        const val MAX_RETRIES = 30
+        const val INITIAL_DELAY_MS = 1000L
+        const val MAX_DELAY_MS = 5000L
     }
 
     /**
@@ -111,13 +107,21 @@ class MetadataSSEService(
                                 Thread.sleep(calculateBackoff(attempt))
                             }
                         } else {
-                            log.error("Error querying job status: {}", e.message, e)
-                            sendSSEEvent(output, "error", mapOf("error" to "Failed to query job status: ${e.message}"))
+                            log.error("Error querying job status: {}", e.message)
+                            try {
+                                sendSSEEvent(output, "error", mapOf("error" to "Failed to query job status: ${e.message}"))
+                            } catch (sseError: Exception) {
+                                log.debug("Stream closed while sending error event")
+                            }
                             return@StreamingResponseBody
                         }
                     } catch (e: Exception) {
-                        log.error("Unexpected error in SSE stream: {}", e.message, e)
-                        sendSSEEvent(output, "error", mapOf("error" to "Unexpected error: ${e.message}"))
+                        log.debug("Unexpected error in SSE stream: {}", e.message)
+                        try {
+                            sendSSEEvent(output, "error", mapOf("error" to "Unexpected error: ${e.message}"))
+                        } catch (sseError: Exception) {
+                            log.debug("Stream closed while sending error event")
+                        }
                         return@StreamingResponseBody
                     }
                 }
@@ -129,14 +133,18 @@ class MetadataSSEService(
                 } else {
                     "AI analysis could not be completed."
                 }
-                sendSSEEvent(output, "timeout", mapOf("error" to errorMessage))
+                try {
+                    sendSSEEvent(output, "timeout", mapOf("error" to errorMessage))
+                } catch (e: Exception) {
+                    log.debug("Stream closed, cannot send timeout event: {}", e.message)
+                }
 
             } catch (e: Exception) {
-                log.error("Fatal error in SSE stream for file {}: {}", fileId, e.message, e)
+                log.debug("Fatal error in SSE stream for file {}: {}", fileId, e.message)
                 try {
                     sendSSEEvent(output, "error", mapOf("error" to "Internal server error"))
                 } catch (sseError: Exception) {
-                    log.error("Failed to send error SSE event: {}", sseError.message)
+                    log.debug("Stream already closed, cannot send final error event")
                 }
             }
         }
@@ -167,7 +175,8 @@ class MetadataSSEService(
             output.flush()
             log.debug("Sent SSE event: {}", eventType)
         } catch (e: Exception) {
-            log.error("Error sending SSE event: {}", e.message, e)
+            // Stream closed - this is expected when client disconnects
+            log.debug("SSE stream closed while sending event '{}': {}", eventType, e.javaClass.simpleName)
             throw e
         }
     }

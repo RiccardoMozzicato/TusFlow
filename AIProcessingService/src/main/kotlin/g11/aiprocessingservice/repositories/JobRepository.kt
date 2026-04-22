@@ -9,9 +9,10 @@ import java.util.Optional
 import java.util.UUID
 
 interface JobRepository : JpaRepository<Job, UUID>, JpaSpecificationExecutor<Job> {
-    @Query("SELECT j FROM Job j WHERE j.fileid = :fileId AND j.version = :version ORDER BY j.jobid DESC LIMIT 1")
+    @Query("SELECT j FROM Job j WHERE j.fileid = :fileId AND j.version = :version ORDER BY j.jobid DESC", 
+           nativeQuery = false)
     fun findLatestByFileIdAndVersion(
         @Param("fileId") fileId: UUID,
         @Param("version") version: Long
-    ): Optional<Job>
+    ): List<Job>
 }
