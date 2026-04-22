@@ -1,12 +1,8 @@
 package g11.tusuploaderservice.services
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import g11.tusuploaderservice.dto.JobStatusDTO
-import g11.tusuploaderservice.dto.JobStatusEnum
-import g11.tusuploaderservice.dto.MetadataAIDTO
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
@@ -15,11 +11,27 @@ import java.util.UUID
 
 @Service
 class MetadataSSEService(
-    @Qualifier("aiProcessingServiceClient") private val aiProcessingServiceClient: RestClient,
+    @Qualifier("aiProcessingServiceM2MClient") private val aiProcessingServiceClient: RestClient,
     private val fileService: FileServiceInterface
 ) {
     private val log = LoggerFactory.getLogger(MetadataSSEService::class.java)
     private val objectMapper = jacksonObjectMapper()
+
+    private enum class AiJobStatusEnum {
+        PENDING,
+        PROCESSING,
+        COMPLETED,
+        FAILED,
+        UNSUPPORTED
+    }
+
+    private data class AiJobStatusDTO(
+        val jobId: UUID? = null,
+        val fileId: UUID? = null,
+        val version: Long? = null,
+        val status: AiJobStatusEnum,
+        val payload: Map<String, Any>? = null
+    )
 
     private companion object {
         const val MAX_RETRIES = 30  // 30 attempts
@@ -40,7 +52,7 @@ class MetadataSSEService(
         return StreamingResponseBody { output ->
             try {
                 var attempt = 0
-                var lastStatus = JobStatusEnum.PENDING
+                var lastStatus = AiJobStatusEnum.PENDING
 
                 while (attempt < MAX_RETRIES) {
                     if (Thread.currentThread().isInterrupted) {
@@ -57,7 +69,7 @@ class MetadataSSEService(
                         lastStatus = jobStatus.status
 
                         when (jobStatus.status) {
-                            JobStatusEnum.COMPLETED -> {
+                            AiJobStatusEnum.COMPLETED -> {
                                 log.debug("Job COMPLETED for file {} version {}", fileId, version)
                                 // Fetch full metadata from FileService
                                 val metadata = fileService.getFileGeneratedMetadata(fileId, version)
@@ -65,19 +77,19 @@ class MetadataSSEService(
                                 return@StreamingResponseBody
                             }
 
-                            JobStatusEnum.FAILED -> {
+                            AiJobStatusEnum.FAILED -> {
                                 log.warn("Job FAILED for file {} version {}", fileId, version)
                                 sendSSEEvent(output, "failed", mapOf("error" to "AI analysis failed"))
                                 return@StreamingResponseBody
                             }
 
-                            JobStatusEnum.UNSUPPORTED -> {
+                            AiJobStatusEnum.UNSUPPORTED -> {
                                 log.warn("Job UNSUPPORTED for file {} version {}", fileId, version)
                                 sendSSEEvent(output, "unsupported", mapOf("error" to "File type not supported for AI analysis"))
                                 return@StreamingResponseBody
                             }
 
-                            JobStatusEnum.PENDING, JobStatusEnum.PROCESSING -> {
+                            AiJobStatusEnum.PENDING, AiJobStatusEnum.PROCESSING -> {
                                 log.debug("Job still processing: {} - attempt {}", jobStatus.status, attempt)
                                 sendSSEEvent(output, "processing", mapOf("status" to jobStatus.status.toString(), "attempt" to attempt))
                             }
@@ -112,7 +124,7 @@ class MetadataSSEService(
 
                 // Max retries reached
                 log.warn("Max retries reached for file {} - last status was: {}", fileId, lastStatus)
-                val errorMessage = if (lastStatus == JobStatusEnum.PENDING || lastStatus == JobStatusEnum.PROCESSING) {
+                val errorMessage = if (lastStatus == AiJobStatusEnum.PENDING || lastStatus == AiJobStatusEnum.PROCESSING) {
                     "AI analysis is taking longer than expected. The file may be too large or complex. Please try again later."
                 } else {
                     "AI analysis could not be completed."
@@ -133,7 +145,7 @@ class MetadataSSEService(
     /**
      * Query the AIProcessingService for the current job status.
      */
-    private fun getJobStatus(fileId: UUID, version: Long?): JobStatusDTO {
+    private fun getJobStatus(fileId: UUID, version: Long?): AiJobStatusDTO {
         val targetVersion = version ?: 1L
         log.debug("Querying job status from AIProcessingService for file {} version {}", fileId, targetVersion)
 
@@ -141,7 +153,7 @@ class MetadataSSEService(
             .get()
             .uri("/api/v1/jobs/status?fileId={fileId}&version={version}", fileId, targetVersion)
             .retrieve()
-            .body(JobStatusDTO::class.java) ?: throw IllegalStateException("Failed to retrieve job status")
+            .body(AiJobStatusDTO::class.java) ?: throw IllegalStateException("Failed to retrieve job status")
     }
 
     /**

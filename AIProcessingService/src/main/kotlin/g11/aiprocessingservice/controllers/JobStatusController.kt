@@ -5,6 +5,7 @@ import g11.aiprocessingservice.repositories.JobRepository
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
@@ -23,6 +24,7 @@ class JobStatusController(
      * @param version The version of the file
      * @return JobStatusResponseDTO with current job status
      */
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/status")
     fun getJobStatus(
         @RequestParam fileId: UUID,
