@@ -1,5 +1,8 @@
 package g11.aiprocessingservice.services
 
+import io.micrometer.tracing.Tracer
+import io.opentelemetry.api.common.AttributeKey
+import io.opentelemetry.api.trace.Span
 import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor
@@ -31,7 +34,8 @@ data class DocumentSource(
 class RagService(
     @Qualifier("ragChatClient") private val chatClient: ChatClient,
     private val vectorStore: VectorStore,
-    private val fileAccessService: FileAccessService
+    private val fileAccessService: FileAccessService,
+    private val tracer: Tracer,
 ) {
     private val log = LoggerFactory.getLogger(this.javaClass)
 
@@ -48,6 +52,24 @@ class RagService(
 
         val userIdString = filters["userId"] ?: filters["ownerId"]
             ?: throw IllegalArgumentException("User ID must be set (use 'userId' parameter)")
+
+        // Tag the active span with Langfuse user and session attributes so that
+        // all child spans (vector search, LLM call) are associated with this user.
+        tracer.currentSpan()?.let { span ->
+            span.tag("langfuse.user.id", userIdString)
+            span.tag("langfuse.session.id", UUID.randomUUID().toString())
+            span.tag("langfuse.observation.input", userQuery)
+            span.tag("langfuse.observation.type","event")
+            span.tag("langfuse.environment", "production")
+        }
+        // langfuse.trace.tags is a string[] — must be set via OTel API directly
+        // since Micrometer's span.tag() only supports scalar string values.
+        Span.current().setAttribute(
+            AttributeKey.stringArrayKey("langfuse.trace.tags"),
+            listOf("Prova", "Test", "Ciao")
+        )
+
+
 
         val userId = try {
             UUID.fromString(userIdString)
@@ -134,18 +156,27 @@ class RagService(
         log.info("Passing ${sources.size} document chunks to LLM as context")
         log.info("=== END CONTEXT DEBUG ===")
 
-        val result = chatClient.prompt()
-            .advisors(
-                QuestionAnswerAdvisor.builder(vectorStore)
-                    .searchRequest(searchRequest)
-                    .build(),
-                SimpleLoggerAdvisor()
-            )
-            .user(userQuery)
-            .call()
-            .content() ?: "Nessuna risposta disponibile"
+        val ragQuerySpan = tracer.nextSpan().name("RAG Query").start()
+        var result = "Nessuna risposta disponibile"
+        tracer.withSpan(ragQuerySpan).use {
+            ragQuerySpan.tag("langfuse.observation.input", userQuery)
+            ragQuerySpan.tag("rag.topK", topK.toString())
 
-        log.info("RAG query completed. Response length: ${result.length} chars")
+            result = chatClient.prompt()
+                .advisors(
+                    QuestionAnswerAdvisor.builder(vectorStore)
+                        .searchRequest(searchRequest)
+                        .build(),
+                    SimpleLoggerAdvisor()
+                )
+                .user(userQuery)
+                .call()
+                .content() ?: "Nessuna risposta disponibile"
+
+            log.info("RAG query completed. Response length: ${result.length} chars")
+            ragQuerySpan.tag("langfuse.observation.output", result)
+            ragQuerySpan.end()
+        }
 
         return RagResponse(
             answer = result,

@@ -6,6 +6,10 @@ spring:
     username: myuser
     password: secret
   ai:
+    chat:
+      observations:
+        include-prompt: true
+        include-completion: true
     retry:
       max-attempts: 1
       on-client-errors: false
@@ -111,5 +115,19 @@ management:
       probability: 1.0
   otlp:
     tracing:
-      endpoint: http://localhost:4318/v1/traces
+      # Set LANGFUSE_OTLP_ENDPOINT=https://cloud.langfuse.com/api/public/otel/v1/traces
+      # (or https://us.cloud.langfuse.com/api/public/otel/v1/traces for US region)
+      # to send traces to Langfuse. Defaults to local LGTM stack.
+      endpoint: ${LANGFUSE_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      headers:
+        # Set LANGFUSE_AUTH_HEADER="Basic <base64(publicKey:secretKey)>" for Langfuse auth.
+        # Leave unset (or empty) when using the local LGTM stack.
+        Authorization: ${LANGFUSE_AUTH_HEADER:}
+        x-langfuse-ingestion-version: "4"
 
+otel:
+  instrumentation:
+    spring-webmvc:
+      enabled: false # Suppress duplicate OTel HTTP server spans
+    spring-web:
+      enabled: false # Suppress duplicate OTel HTTP client spans
