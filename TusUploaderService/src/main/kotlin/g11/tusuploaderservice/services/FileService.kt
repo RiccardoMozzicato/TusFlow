@@ -84,6 +84,7 @@ class FileService(
             filename = filename,
             size = upload.size!!, // size is not null here because upload is completed
             metadata = upload.metadata,
+            aiMetadata = null,
             contentType = upload.contentType!!, // contentType is not null here because its autodetected before completion
             createdAt = upload.createdAt,
             objectKey = upload.objectKey!!, // objectKey is not null here because upload is completed
@@ -278,18 +279,18 @@ class FileService(
                 ResourceNotFoundException("File version $targetVersion for file $id not found")
             }
 
-        // Extract metadata fields from the metadata JSON
-        val metadata = fileVersion.metadata ?: emptyMap()
+        // Extract AI metadata fields from the dedicated aiMetadata map
+        val aiMetadata = fileVersion.aiMetadata ?: emptyMap()
 
         return MetadataAIDTO(
-            tags = metadata["tags"],
-            summary = metadata["summary"],
-            filename = metadata["filename"],
-            metadata = metadata["metadata"],
-            contentType = metadata["contentType"],
-            ownerUserId = metadata["ownerUserId"],
-            sensitivity = metadata["sensitivity"],
-            fileVersionId = metadata["fileVersionId"],
+            tags = aiMetadata["tags"],
+            summary = aiMetadata["summary"],
+            filename = fileVersion.filename,
+            metadata = null,
+            contentType = fileVersion.contentType,
+            ownerUserId = file.ownerId.toString(),
+            sensitivity = aiMetadata["sensitivity"],
+            fileVersionId = fileVersion.id?.toString(),
             status = fileVersion.status
         )
     }
@@ -331,7 +332,12 @@ class FileService(
             metadata["filename"]?.let { file.filename = it }
 
             // Filter out fileName from metadata map for the metadata field update
-            val metadataToUpdate = metadata - "filename"
+            var metadataToUpdate = metadata - "filename"
+
+            // Split AI-related metadata keys from the general metadata map
+            val aiMetadataKeys = setOf("tags", "summary", "sensitivity")
+            val aiMetadataToUpdate = metadataToUpdate.filterKeys { it in aiMetadataKeys }
+            metadataToUpdate = metadataToUpdate - aiMetadataKeys
 
             log.debug("updating file metadata: {}, for file {}", metadataToUpdate.toString(), id)
 
@@ -340,6 +346,12 @@ class FileService(
             val currentMetadata = file.metadata?.toMutableMap() ?: mutableMapOf()
             currentMetadata.putAll(metadataToUpdate)
             file.metadata = currentMetadata
+
+            if (aiMetadataToUpdate.isNotEmpty()) {
+                val currentAiMetadata = file.aiMetadata?.toMutableMap() ?: mutableMapOf()
+                currentAiMetadata.putAll(aiMetadataToUpdate)
+                file.aiMetadata = currentAiMetadata
+            }
         } finally {
             scope.close()
             span.end()
