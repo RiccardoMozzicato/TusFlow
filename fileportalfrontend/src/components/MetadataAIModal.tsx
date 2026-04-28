@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Spinner, Alert, Badge, ListGroup } from 'react-bootstrap';
-import { streamFileGeneratedMetadata, getFileGeneratedMetadata } from '../services/fileApi';
+import { streamFileGeneratedMetadata } from '../services/fileApi';
 import type { MetadataAIDTO } from '../services/fileApi';
 
 interface MetadataAIModalProps {
@@ -63,10 +63,6 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
 
     if (eventSource) {
       eventSourceRef.current = eventSource;
-    } else {
-      // SSE not supported, fallback to polling
-      console.warn('SSE not supported, falling back to polling');
-      fallbackToPolling(signal);
     }
   };
 
@@ -120,49 +116,6 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
     setError(errorMessage);
     setProcessingStatus('error');
     setLoading(false);
-  };
-
-  const fallbackToPolling = async (signal: AbortSignal) => {
-    // Fallback to the old polling mechanism if SSE is not supported
-    const maxRetries = 5;
-    let attempt = 0;
-
-    try {
-      while (attempt < maxRetries) {
-        if (signal.aborted) {
-          console.log('Polling aborted');
-          return;
-        }
-
-        attempt++;
-        console.log(`Fallback: Polling for metadata - attempt ${attempt}/${maxRetries}`);
-        setProcessingStatus(`processing (attempt ${attempt})`);
-
-        const data = await getFileGeneratedMetadata(fileId, version);
-        console.log('Metadata retrieved:', data);
-
-        if (data.tags !== null && data.summary !== null && 
-            data.summary !== 'Failed to analyze' && data.tags !== 'Failed') {
-          setMetadata(data);
-          setProcessingStatus('completed');
-          setLoading(false);
-          return;
-        }
-
-        if (attempt < maxRetries) {
-          const delayMs = Math.min(1000 * attempt, 5000);
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
-      }
-
-      setError('AI analysis is taking longer than expected. Please try again later.');
-      setProcessingStatus('timeout');
-    } catch (err) {
-      console.error('Error in fallback polling:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load AI-generated metadata');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleClose = () => {

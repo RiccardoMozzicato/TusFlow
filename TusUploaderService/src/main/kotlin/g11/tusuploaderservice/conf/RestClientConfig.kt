@@ -20,7 +20,7 @@ class RestClientConfig {
     @Qualifier("aiProcessingServiceClient")
     fun aiProcessingServiceClient(): RestClient {
         return RestClient.builder()
-            .baseUrl("http://localhost:8081")
+            .baseUrl("http://localhost:8083")
             .build()
     }
 
@@ -28,7 +28,7 @@ class RestClientConfig {
     @Qualifier("aiProcessingServiceM2MClient")
     fun aiProcessingServiceM2MClient(oAuth2Service: OAuth2Service): RestClient {
         return RestClient.builder()
-            .baseUrl("http://localhost:8081")
+            .baseUrl("http://localhost:8083")
             .requestInterceptor { request, body, execution ->
                 // Get M2M access token and add it to the request
                 val token = oAuth2Service.getM2MAccessToken()

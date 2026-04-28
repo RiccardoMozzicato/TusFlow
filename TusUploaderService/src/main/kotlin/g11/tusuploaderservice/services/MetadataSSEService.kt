@@ -3,6 +3,7 @@ package g11.tusuploaderservice.services
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
@@ -12,7 +13,10 @@ import java.util.UUID
 @Service
 class MetadataSSEService(
     @Qualifier("aiProcessingServiceM2MClient") private val aiProcessingServiceClient: RestClient,
-    private val fileService: FileServiceInterface
+    private val fileService: FileServiceInterface,
+    @Value("\${ai.metadata.sse.max-retries:30}") private val maxRetries: Int,
+    @Value("\${ai.metadata.sse.initial-delay-ms:1000}") private val initialDelayMs: Long,
+    @Value("\${ai.metadata.sse.max-delay-ms:5000}") private val maxDelayMs: Long
 ) {
     private val log = LoggerFactory.getLogger(MetadataSSEService::class.java)
     private val objectMapper = jacksonObjectMapper()
@@ -29,12 +33,6 @@ class MetadataSSEService(
         val payload: Map<String, Any>? = null
     )
 
-    private companion object {
-        const val MAX_RETRIES = 30
-        const val INITIAL_DELAY_MS = 1000L
-        const val MAX_DELAY_MS = 5000L
-    }
-
     /**
      * Stream metadata processing status via Server-Sent Events (SSE).
      * Polls the AIProcessingService until the job is COMPLETED, FAILED, or UNSUPPORTED.
@@ -50,14 +48,14 @@ class MetadataSSEService(
                 var attempt = 0
                 var lastStatus = AiJobStatusEnum.PENDING
 
-                while (attempt < MAX_RETRIES) {
+                while (attempt < maxRetries) {
                     if (Thread.currentThread().isInterrupted) {
                         log.debug("SSE stream interrupted for file {}", fileId)
                         break
                     }
 
                     attempt++
-                    log.debug("Polling job status for file {} - attempt {}/{}", fileId, attempt, MAX_RETRIES)
+                    log.debug("Polling job status for file {} - attempt {}/{}", fileId, attempt, maxRetries)
 
                     try {
                         // Query AIProcessingService for job status
@@ -92,7 +90,7 @@ class MetadataSSEService(
                         }
 
                         // Calculate exponential backoff delay
-                        if (attempt < MAX_RETRIES) {
+                        if (attempt < maxRetries) {
                             val delayMs = calculateBackoff(attempt)
                             log.debug("Waiting {}ms before next poll", delayMs)
                             Thread.sleep(delayMs)
@@ -103,7 +101,7 @@ class MetadataSSEService(
                             // Job not yet created, wait and retry
                             log.debug("Job not found yet for file {} - attempt {}", fileId, attempt)
                             sendSSEEvent(output, "waiting", mapOf("message" to "Waiting for job to be created"))
-                            if (attempt < MAX_RETRIES) {
+                            if (attempt < maxRetries) {
                                 Thread.sleep(calculateBackoff(attempt))
                             }
                         } else {
@@ -185,7 +183,7 @@ class MetadataSSEService(
      * Calculate exponential backoff with jitter, capped at MAX_DELAY_MS.
      */
     private fun calculateBackoff(attempt: Int): Long {
-        val exponentialDelay = INITIAL_DELAY_MS * attempt
-        return Math.min(exponentialDelay, MAX_DELAY_MS)
+        val exponentialDelay = initialDelayMs * attempt
+        return Math.min(exponentialDelay, maxDelayMs)
     }
 }
