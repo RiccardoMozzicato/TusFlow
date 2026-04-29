@@ -290,6 +290,7 @@ class FileService(
             ownerUserId = metadata["ownerUserId"],
             sensitivity = metadata["sensitivity"],
             fileVersionId = metadata["fileVersionId"],
+            analysisStatus = metadata["analysisStatus"],
             status = fileVersion.status
         )
     }

@@ -1,189 +1,197 @@
 package g11.tusuploaderservice.services
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import g11.tusuploaderservice.dto.MetadataAIDTO
+import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
-import org.springframework.web.client.RestClient
-import org.springframework.web.client.RestClientResponseException
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 @Service
 class MetadataSSEService(
-    @Qualifier("aiProcessingServiceM2MClient") private val aiProcessingServiceClient: RestClient,
     private val fileService: FileServiceInterface,
-    @Value("\${ai.metadata.sse.max-retries:30}") private val maxRetries: Int,
-    @Value("\${ai.metadata.sse.initial-delay-ms:1000}") private val initialDelayMs: Long,
-    @Value("\${ai.metadata.sse.max-delay-ms:5000}") private val maxDelayMs: Long
+    @Value("\${ai.metadata.sse.timeout-ms:60000}") private val timeoutMs: Long
 ) {
     private val log = LoggerFactory.getLogger(MetadataSSEService::class.java)
-    private val objectMapper = jacksonObjectMapper()
-
-    private enum class AiJobStatusEnum {
-        PENDING, PROCESSING, COMPLETED, FAILED, UNSUPPORTED
+    private val emitters = ConcurrentHashMap<StreamKey, MutableSet<SseEmitter>>()
+    private val timeoutTasks = ConcurrentHashMap<SseEmitter, ScheduledFuture<*>>()
+    private val timeoutScheduler = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "metadata-sse-timeout").apply { isDaemon = true }
     }
 
-    private data class AiJobStatusDTO(
-        val jobId: UUID? = null,
-        val fileId: UUID? = null,
-        val version: Long? = null,
-        val status: AiJobStatusEnum,
-        val payload: Map<String, Any>? = null
-    )
+    private data class StreamKey(val fileId: UUID, val version: Long?)
 
     /**
      * Stream metadata processing status via Server-Sent Events (SSE).
-     * Polls the AIProcessingService until the job is COMPLETED, FAILED, or UNSUPPORTED.
-     * Returns the final metadata when ready.
+     * The stream is notified by Kafka job-outbox events instead of polling AIProcessingService.
      *
      * @param fileId The UUID of the file
      * @param version The version of the file (optional, defaults to current version)
-     * @return StreamingResponseBody that emits SSE events
+     * @return SseEmitter that emits status events
      */
-    fun streamMetadataProcessingStatus(fileId: UUID, version: Long?): StreamingResponseBody {
-        return StreamingResponseBody { output ->
-            try {
-                var attempt = 0
-                var lastStatus = AiJobStatusEnum.PENDING
+    fun streamMetadataProcessingStatus(fileId: UUID, version: Long?): SseEmitter {
+        val existingMetadata = fileService.getFileGeneratedMetadata(fileId, version)
+        val emitter = SseEmitter(timeoutMs + EMITTER_TIMEOUT_GRACE_MS)
+        val key = StreamKey(fileId, version)
 
-                while (attempt < maxRetries) {
-                    if (Thread.currentThread().isInterrupted) {
-                        log.debug("SSE stream interrupted for file {}", fileId)
-                        break
-                    }
+        emitter.onCompletion { removeEmitter(key, emitter) }
+        emitter.onError { removeEmitter(key, emitter) }
+        emitter.onTimeout {
+            log.debug("SSE emitter timed out for file {} version {}", fileId, version)
+            removeEmitter(key, emitter)
+        }
 
-                    attempt++
-                    log.debug("Polling job status for file {} - attempt {}/{}", fileId, attempt, maxRetries)
-
-                    try {
-                        // Query AIProcessingService for job status
-                        val jobStatus = getJobStatus(fileId, version)
-                        lastStatus = jobStatus.status
-
-                        when (jobStatus.status) {
-                            AiJobStatusEnum.COMPLETED -> {
-                                log.debug("Job COMPLETED for file {} version {}", fileId, version)
-                                // Fetch full metadata from FileService
-                                val metadata = fileService.getFileGeneratedMetadata(fileId, version)
-                                sendSSEEvent(output, "completed", metadata)
-                                return@StreamingResponseBody
-                            }
-
-                            AiJobStatusEnum.FAILED -> {
-                                log.warn("Job FAILED for file {} version {}", fileId, version)
-                                sendSSEEvent(output, "failed", mapOf("error" to "AI analysis failed"))
-                                return@StreamingResponseBody
-                            }
-
-                            AiJobStatusEnum.UNSUPPORTED -> {
-                                log.warn("Job UNSUPPORTED for file {} version {}", fileId, version)
-                                sendSSEEvent(output, "unsupported", mapOf("error" to "File type not supported for AI analysis"))
-                                return@StreamingResponseBody
-                            }
-
-                            AiJobStatusEnum.PENDING, AiJobStatusEnum.PROCESSING -> {
-                                log.debug("Job still processing: {} - attempt {}", jobStatus.status, attempt)
-                                sendSSEEvent(output, "processing", mapOf("status" to jobStatus.status.toString(), "attempt" to attempt))
-                            }
-                        }
-
-                        // Calculate exponential backoff delay
-                        if (attempt < maxRetries) {
-                            val delayMs = calculateBackoff(attempt)
-                            log.debug("Waiting {}ms before next poll", delayMs)
-                            Thread.sleep(delayMs)
-                        }
-
-                    } catch (e: RestClientResponseException) {
-                        if (e.statusCode.value() == 404) {
-                            // Job not yet created, wait and retry
-                            log.debug("Job not found yet for file {} - attempt {}", fileId, attempt)
-                            sendSSEEvent(output, "waiting", mapOf("message" to "Waiting for job to be created"))
-                            if (attempt < maxRetries) {
-                                Thread.sleep(calculateBackoff(attempt))
-                            }
-                        } else {
-                            log.error("Error querying job status: {}", e.message)
-                            try {
-                                sendSSEEvent(output, "error", mapOf("error" to "Failed to query job status: ${e.message}"))
-                            } catch (sseError: Exception) {
-                                log.debug("Stream closed while sending error event")
-                            }
-                            return@StreamingResponseBody
-                        }
-                    } catch (e: Exception) {
-                        log.debug("Unexpected error in SSE stream: {}", e.message)
-                        try {
-                            sendSSEEvent(output, "error", mapOf("error" to "Unexpected error: ${e.message}"))
-                        } catch (sseError: Exception) {
-                            log.debug("Stream closed while sending error event")
-                        }
-                        return@StreamingResponseBody
-                    }
+        when {
+            isUnsupported(existingMetadata) -> {
+                log.debug("Metadata already marked unsupported for file {} version {}", fileId, version)
+                sendAndComplete(key, emitter, "unsupported", mapOf("error" to "File type not supported for AI analysis"))
+            }
+            isFailed(existingMetadata) -> {
+                log.debug("Metadata already marked failed for file {} version {}", fileId, version)
+                sendAndComplete(key, emitter, "failed", mapOf("error" to "AI analysis failed"))
+            }
+            isCompleted(existingMetadata) -> {
+                log.debug("Metadata already available for file {} version {}", fileId, version)
+                sendAndComplete(key, emitter, "completed", existingMetadata)
+            }
+            else -> {
+                registerEmitter(key, emitter)
+                if (!sendEvent(emitter, "waiting", mapOf("message" to "Waiting for AI analysis to complete"))) {
+                    removeEmitter(key, emitter)
                 }
+            }
+        }
 
-                // Max retries reached
-                log.warn("Max retries reached for file {} - last status was: {}", fileId, lastStatus)
-                val errorMessage = if (lastStatus == AiJobStatusEnum.PENDING || lastStatus == AiJobStatusEnum.PROCESSING) {
-                    "AI analysis is taking longer than expected. The file may be too large or complex. Please try again later."
-                } else {
-                    "AI analysis could not be completed."
-                }
-                try {
-                    sendSSEEvent(output, "timeout", mapOf("error" to errorMessage))
-                } catch (e: Exception) {
-                    log.debug("Stream closed, cannot send timeout event: {}", e.message)
-                }
+        return emitter
+    }
 
-            } catch (e: Exception) {
-                log.debug("Fatal error in SSE stream for file {}: {}", fileId, e.message)
-                try {
-                    sendSSEEvent(output, "error", mapOf("error" to "Internal server error"))
-                } catch (sseError: Exception) {
-                    log.debug("Stream already closed, cannot send final error event")
-                }
+    @PreDestroy
+    fun shutdown() {
+        timeoutScheduler.shutdownNow()
+    }
+
+    fun notifyAnalysisCompleted(fileId: UUID, version: Long, metadata: MetadataAIDTO) {
+        notifyMatchingEmitters(fileId, version, "completed", metadata)
+    }
+
+    fun notifyAnalysisUnsupported(fileId: UUID, version: Long, reason: String?) {
+        notifyMatchingEmitters(
+            fileId,
+            version,
+            "unsupported",
+            mapOf("error" to (reason ?: "File type not supported for AI analysis"))
+        )
+    }
+
+    fun notifyAnalysisFailed(fileId: UUID, version: Long, error: String?) {
+        notifyMatchingEmitters(
+            fileId,
+            version,
+            "failed",
+            mapOf("error" to (error ?: "AI analysis failed"))
+        )
+    }
+
+    private fun registerEmitter(key: StreamKey, emitter: SseEmitter) {
+        val keyEmitters = emitters.computeIfAbsent(key) {
+            ConcurrentHashMap.newKeySet()
+        }
+        keyEmitters.add(emitter)
+        scheduleTimeout(key, emitter)
+        log.debug("Registered SSE emitter for file {} version {}", key.fileId, key.version)
+    }
+
+    private fun removeEmitter(key: StreamKey, emitter: SseEmitter) {
+        timeoutTasks.remove(emitter)?.cancel(false)
+        emitters[key]?.let { keyEmitters ->
+            keyEmitters.remove(emitter)
+            if (keyEmitters.isEmpty()) {
+                emitters.remove(key)
             }
         }
     }
 
-    /**
-     * Query the AIProcessingService for the current job status.
-     */
-    private fun getJobStatus(fileId: UUID, version: Long?): AiJobStatusDTO {
-        val targetVersion = version ?: 1L
-        log.debug("Querying job status from AIProcessingService for file {} version {}", fileId, targetVersion)
-
-        return aiProcessingServiceClient
-            .get()
-            .uri("/api/v1/jobs/status?fileId={fileId}&version={version}", fileId, targetVersion)
-            .retrieve()
-            .body(AiJobStatusDTO::class.java) ?: throw IllegalStateException("Failed to retrieve job status")
+    private fun scheduleTimeout(key: StreamKey, emitter: SseEmitter) {
+        val timeoutTask = timeoutScheduler.schedule(
+            {
+                if (emitters[key]?.contains(emitter) == true) {
+                    sendAndComplete(
+                        key,
+                        emitter,
+                        "timeout",
+                        mapOf("error" to "AI analysis is taking longer than expected. The file may be too large or complex. Please try again later.")
+                    )
+                }
+            },
+            timeoutMs,
+            TimeUnit.MILLISECONDS
+        )
+        timeoutTasks[emitter] = timeoutTask
     }
 
-    /**
-     * Send an SSE event to the client.
-     */
-    private fun sendSSEEvent(output: java.io.OutputStream, eventType: String, data: Any) {
-        try {
-            val json = objectMapper.writeValueAsString(data)
-            val sseMessage = "event: $eventType\ndata: $json\n\n"
-            output.write(sseMessage.toByteArray())
-            output.flush()
-            log.debug("Sent SSE event: {}", eventType)
-        } catch (e: Exception) {
-            // Stream closed - this is expected when client disconnects
-            log.debug("SSE stream closed while sending event '{}': {}", eventType, e.javaClass.simpleName)
-            throw e
+    private fun notifyMatchingEmitters(fileId: UUID, version: Long, eventType: String, data: Any) {
+        val keys = listOf(StreamKey(fileId, version), StreamKey(fileId, null))
+        keys.forEach { key ->
+            val keyEmitters = emitters[key]?.toList().orEmpty()
+            keyEmitters.forEach { emitter ->
+                sendAndComplete(key, emitter, eventType, data)
+            }
         }
     }
 
-    /**
-     * Calculate exponential backoff with jitter, capped at MAX_DELAY_MS.
-     */
-    private fun calculateBackoff(attempt: Int): Long {
-        val exponentialDelay = initialDelayMs * attempt
-        return Math.min(exponentialDelay, maxDelayMs)
+    private fun sendAndComplete(key: StreamKey, emitter: SseEmitter, eventType: String, data: Any) {
+        try {
+            if (sendEvent(emitter, eventType, data)) {
+                emitter.complete()
+            }
+        } finally {
+            removeEmitter(key, emitter)
+        }
+    }
+
+    private fun sendEvent(emitter: SseEmitter, eventType: String, data: Any): Boolean {
+        return try {
+            emitter.send(
+                SseEmitter.event()
+                    .name(eventType)
+                    .data(data)
+            )
+            log.debug("Sent SSE event: {}", eventType)
+            true
+        } catch (e: Exception) {
+            log.debug("SSE stream closed while sending event '{}': {}", eventType, e.javaClass.simpleName)
+            false
+        }
+    }
+
+    private fun isCompleted(metadata: MetadataAIDTO): Boolean {
+        if (metadata.analysisStatus == "COMPLETED") {
+            return true
+        }
+
+        // Backward compatibility for files analyzed before analysisStatus was persisted.
+        return metadata.analysisStatus.isNullOrBlank() &&
+                !metadata.summary.isNullOrBlank() &&
+                !metadata.tags.isNullOrBlank() &&
+                !metadata.sensitivity.isNullOrBlank() &&
+                !isFailed(metadata) &&
+                !isUnsupported(metadata)
+    }
+
+    private fun isFailed(metadata: MetadataAIDTO): Boolean {
+        return metadata.summary == "AI analysis failed"
+    }
+
+    private fun isUnsupported(metadata: MetadataAIDTO): Boolean {
+        return metadata.summary == "AI analysis not supported"
+    }
+
+    private companion object {
+        const val EMITTER_TIMEOUT_GRACE_MS = 5000L
     }
 }

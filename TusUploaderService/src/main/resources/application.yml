@@ -54,9 +54,7 @@ tus:
 ai:
   metadata:
     sse:
-      max-retries: 10
-      initial-delay-ms: 6000
-      max-delay-ms: 6000
+      timeout-ms: 60000
 minio:
   url: http://localhost:9000
   access-key: minioadmin

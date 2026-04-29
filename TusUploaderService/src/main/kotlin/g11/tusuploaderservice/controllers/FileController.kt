@@ -43,7 +43,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.client.RestClient
 import org.springframework.web.server.ResponseStatusException
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
@@ -345,16 +345,16 @@ class FileController(
     fun streamMetadataProcessingStatus(
         @PathVariable id: UUID,
         @RequestParam(required = false) version: Long?
-    ): ResponseEntity<StreamingResponseBody> {
+    ): ResponseEntity<SseEmitter> {
         log.debug("Opening SSE stream for AI metadata processing - fileId: {} version: {}", id, version)
         
-        val streamingBody = metadataSSEService.streamMetadataProcessingStatus(id, version)
+        val emitter = metadataSSEService.streamMetadataProcessingStatus(id, version)
         
         return ResponseEntity.ok()
             .contentType(MediaType.TEXT_EVENT_STREAM)
             .header("Cache-Control", "no-cache")
             .header("X-Accel-Buffering", "no")
-            .body(streamingBody)
+            .body(emitter)
     }
 
     //region Swagger Documentation
@@ -1075,5 +1075,4 @@ class FileController(
     }
 
 }
-
 

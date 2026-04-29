@@ -11,6 +11,6 @@ data class MetadataAIDTO(
     val ownerUserId: String?,
     val sensitivity: String?,
     val fileVersionId: String?,
+    val analysisStatus: String?,
     val status: FileStatus
 )
-

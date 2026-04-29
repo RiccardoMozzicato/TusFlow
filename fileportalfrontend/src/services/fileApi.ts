@@ -453,6 +453,7 @@ export interface MetadataAIDTO {
   topics?: string | string[];
   sentiment?: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
   confidenceScore?: number;
+  analysisStatus?: 'COMPLETED' | 'UNSUPPORTED' | 'FAILED';
 }
 
 /**
@@ -612,4 +613,3 @@ export const streamFileGeneratedMetadata = (
     return null;
   }
 };
-
