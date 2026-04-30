@@ -15,6 +15,7 @@ import g11.tusuploaderservice.exceptions.ResourceNotFoundException
 import g11.tusuploaderservice.exceptions.ResourceUncompletedException
 import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.FileServiceInterface
+import g11.tusuploaderservice.services.MetadataSSEService
 import g11.tusuploaderservice.services.StorageService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -32,6 +33,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -41,6 +43,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.client.RestClient
 import org.springframework.web.server.ResponseStatusException
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
@@ -57,6 +60,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/files")
 class FileController(
     private val fileService: FileServiceInterface,
+    private val metadataSSEService: MetadataSSEService,
     @Qualifier("aiServiceClient") private val aiServiceClient: RestClient
 ) {
     private val log = LoggerFactory.getLogger(FileController::class.java)
@@ -314,6 +318,43 @@ class FileController(
         log.debug("Fetching AI-generated metadata for file: {} version: {}", id, version)
         val metadata = fileService.getFileGeneratedMetadata(id, version)
         return ResponseEntity.ok(metadata)
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["File Management"],
+        summary = "Stream AI metadata processing status via Server-Sent Events",
+        description = "Opens a Server-Sent Events connection that streams the status of AI metadata processing. Returns metadata when processing is complete.",
+        parameters = [
+            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "File version number (optional)", required = false, `in` = ParameterIn.QUERY, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "SSE stream opened successfully",
+        content = [Content(mediaType = "text/event-stream")]
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @GetMapping("/generatedmetadata/stream/{id}")
+    fun streamMetadataProcessingStatus(
+        @PathVariable id: UUID,
+        @RequestParam(required = false) version: Long?
+    ): ResponseEntity<SseEmitter> {
+        log.debug("Opening SSE stream for AI metadata processing - fileId: {} version: {}", id, version)
+        
+        val emitter = metadataSSEService.streamMetadataProcessingStatus(id, version)
+        
+        return ResponseEntity.ok()
+            .contentType(MediaType.TEXT_EVENT_STREAM)
+            .header("Cache-Control", "no-cache")
+            .header("X-Accel-Buffering", "no")
+            .body(emitter)
     }
 
     //region Swagger Documentation
@@ -1034,5 +1075,4 @@ class FileController(
     }
 
 }
-
 

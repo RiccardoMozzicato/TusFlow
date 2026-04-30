@@ -31,6 +31,7 @@ class JobStatusService(
         updatedPayload["summary"] = metadata.summary!!
         updatedPayload["tags"] = metadata.tags!!
         updatedPayload["sensitivity"] = metadata.sensitivity!!.name
+        updatedPayload["analysisStatus"] = jobStatus.COMPLETED.name
 
         jobEntity.payload = updatedPayload
         jobEntity.status = jobStatus.COMPLETED
@@ -137,4 +138,3 @@ class JobStatusService(
         log.debug("Created outbox event: $event_type")
     }
 }
-
