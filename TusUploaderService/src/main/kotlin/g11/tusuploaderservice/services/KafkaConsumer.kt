@@ -135,7 +135,6 @@ class KafkaConsumer(
             tags = this["tags"],
             summary = this["summary"],
             filename = this["filename"],
-            metadata = this["metadata"],
             contentType = this["contentType"],
             ownerUserId = this["ownerUserId"],
             sensitivity = this["sensitivity"],

@@ -347,14 +347,71 @@ class FileController(
         @RequestParam(required = false) version: Long?
     ): ResponseEntity<SseEmitter> {
         log.debug("Opening SSE stream for AI metadata processing - fileId: {} version: {}", id, version)
-        
+
         val emitter = metadataSSEService.streamMetadataProcessingStatus(id, version)
-        
+
         return ResponseEntity.ok()
             .contentType(MediaType.TEXT_EVENT_STREAM)
             .header("Cache-Control", "no-cache")
             .header("X-Accel-Buffering", "no")
             .body(emitter)
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["File Management"],
+        summary = "Update AI-generated metadata for a file",
+        description = "Updates AI-generated metadata (summary, tags, sensitivity) for a specific file version.",
+        parameters = [
+            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "File version (optional, defaults to current version)", required = false, `in` = ParameterIn.QUERY, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "AI metadata successfully updated"
+    )
+    @ApiResponse(
+        responseCode = "400",
+        description = "Bad Request - Invalid metadata or empty payload",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File or file version not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    @ApiResponse(
+        responseCode = "500",
+        description = "Internal Server Error",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @PatchMapping("/generatedmetadata/{id}")
+    fun updateFileGeneratedMetadata(
+        @PathVariable id: UUID,
+        @RequestParam(required = false) version: Long?,
+        @RequestBody metadata: Map<String, String>
+    ): ResponseEntity<HttpStatus> {
+
+        if (metadata.isEmpty()) {
+            throw ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Metadata cannot be empty"
+            )
+        }
+
+        metadata.keys.forEach { key ->
+            if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                throw ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Metadata key '$key' must be ASCII encoded"
+                )
+            }
+        }
+
+        fileService.updateGeneratedMetadataByUser(id, version, metadata)
+        return ResponseEntity.ok(HttpStatus.OK)
     }
 
     //region Swagger Documentation

@@ -4,6 +4,7 @@ import g11.tusuploaderservice.dto.*
 import g11.tusuploaderservice.dto.toDTO
 import g11.tusuploaderservice.entities.*
 import g11.tusuploaderservice.exceptions.ForbiddenException
+import g11.tusuploaderservice.exceptions.InvalidFormatException
 import g11.tusuploaderservice.exceptions.ResourceNotFoundException
 import g11.tusuploaderservice.exceptions.StorageException
 import g11.tusuploaderservice.repositories.FileRepository
@@ -12,7 +13,6 @@ import g11.tusuploaderservice.repositories.FileVersionRepository
 import g11.tusuploaderservice.repositories.TusRepository
 import g11.tusuploaderservice.specs.FileSpecifications
 import g11.tusuploaderservice.utils.getUserIdFromJwt
-import g11.tusuploaderservice.utils.getUserTokenFromJwt
 import g11.tusuploaderservice.utils.mergeByteArrays
 import io.micrometer.tracing.Tracer
 import org.slf4j.LoggerFactory
@@ -51,7 +51,7 @@ class FileService(
     private val log = LoggerFactory.getLogger(FileService::class.java)
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun createFile(fileId: UUID, upload: Upload) : File {
+    override fun createFile(fileId: UUID, upload: Upload): File {
 
         //ACLs controls not needed here because this function is called on upload completion by appendChunk, thus is, checks are already done
 
@@ -60,7 +60,7 @@ class FileService(
         val fileEntity = File(
             uuid = fileId,
             createdAt = Date.from(Instant.now()),
-            lastUpdateAt =  Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
             lastFilename = filename,
             currentVersion = 1L,
             ownerId = upload.ownerId,
@@ -75,7 +75,7 @@ class FileService(
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun createFileVersion(upload: Upload,file: File): FileVersion {
+    override fun createFileVersion(upload: Upload, file: File): FileVersion {
         //ACLs controls not needed here because this function is called on upload completion by appendChunk, thus is, checks are already done
 
         val filename = upload.filename ?: LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))
@@ -84,6 +84,7 @@ class FileService(
             filename = filename,
             size = upload.size!!, // size is not null here because upload is completed
             metadata = upload.metadata,
+            aiMetadata = null,
             contentType = upload.contentType!!, // contentType is not null here because its autodetected before completion
             createdAt = upload.createdAt,
             objectKey = upload.objectKey!!, // objectKey is not null here because upload is completed
@@ -120,12 +121,14 @@ class FileService(
         log.debug("Retrieving organization/department files with criteria {}", filtersDTO)
 
         // Verifica che lo sharingScope sia ORGANIZATION o DEPARTMENT
-        require(filtersDTO.sharingScope == SharingScope.ORGANIZATION ||
-                filtersDTO.sharingScope == SharingScope.DEPARTMENT) {
+        require(
+            filtersDTO.sharingScope == SharingScope.ORGANIZATION ||
+                    filtersDTO.sharingScope == SharingScope.DEPARTMENT
+        ) {
             "getOrganizationDepartmentFiles requires sharingScope to be ORGANIZATION or DEPARTMENT"
         }
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
@@ -146,7 +149,7 @@ class FileService(
 
         val files = fileRepository.findAll(spec, pageable)
 
-        if(files.isEmpty) {
+        if (files.isEmpty) {
             log.warn("No organization/department file found")
             throw ResourceNotFoundException("No files found matching the specified criteria")
         }
@@ -200,7 +203,7 @@ class FileService(
 
         log.debug("files: {}", files.toString())
 
-        if(files.isEmpty) {
+        if (files.isEmpty) {
             log.warn("No personal file found")
             throw ResourceNotFoundException("No files found matching the specified criteria")
         }
@@ -223,7 +226,7 @@ class FileService(
 
         val files = fileRepository.findAll()
 
-        if(files.isEmpty()) {
+        if (files.isEmpty()) {
             log.warn("No files found in repository")
             throw ResourceNotFoundException("No files found in the repository")
         }
@@ -236,7 +239,7 @@ class FileService(
     override fun getFileMetadata(id: UUID): FileDTO {
         log.debug("Retrieving metadata for {}", id)
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
@@ -244,7 +247,7 @@ class FileService(
         getCurrentUserPermission(id, userDetails)
 
         return fileRepository.findById(id)
-            .orElseThrow{
+            .orElseThrow {
                 log.error("File: {}, does not exists", id)  // Should not happen due to permission check above
                 ResourceNotFoundException("Resource does not exists, no metadata found for: $id")
             }
@@ -278,38 +281,89 @@ class FileService(
                 ResourceNotFoundException("File version $targetVersion for file $id not found")
             }
 
-        // Extract metadata fields from the metadata JSON
-        val metadata = fileVersion.metadata ?: emptyMap()
+        // Extract AI metadata fields from the dedicated aiMetadata map
+        val aiMetadata = fileVersion.aiMetadata ?: emptyMap()
 
         return MetadataAIDTO(
-            tags = metadata["tags"],
-            summary = metadata["summary"],
-            filename = metadata["filename"],
-            metadata = metadata["metadata"],
-            contentType = metadata["contentType"],
-            ownerUserId = metadata["ownerUserId"],
-            sensitivity = metadata["sensitivity"],
-            fileVersionId = metadata["fileVersionId"],
-            analysisStatus = metadata["analysisStatus"],
+            tags = aiMetadata["tags"],
+            summary = aiMetadata["summary"],
+            filename = fileVersion.filename,
+            contentType = fileVersion.contentType,
+            ownerUserId = file.ownerId.toString(),
+            sensitivity = aiMetadata["sensitivity"],
+            fileVersionId = fileVersion.id?.toString(),
+            analysisStatus = fileVersion.metadata?.get("analysisStatus"),
             status = fileVersion.status
         )
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff', 'ROLE_ai_worker')")
-    override fun updateFileMetadataByUser(id: UUID, version:Long?, metadata: Map<String, String>) {
+    override fun updateFileMetadataByUser(id: UUID, version: Long?, metadata: Map<String, String>) {
         log.debug("Updating metadata of {} with {}", id, metadata)
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
         // Check permissions
-        if(getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+        if (getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
             log.warn("User {} does not have WRITE permission for file {}", userDetails.id, id)
             throw ForbiddenException("Access denied: insufficient permissions to update metadata for file $id")
         }
 
         updateFileMetadata(id, version, metadata)
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff', 'ROLE_ai_worker')")
+    override fun updateGeneratedMetadataByUser(id: UUID, version: Long?, metadata: Map<String, String>) {
+        log.debug("Updating AI metadata of {} with {}", id, metadata)
+
+        val token = authService.getAccessToken()
+        val userDetails = getUserDetails(token)
+        log.debug("Current user details: {}", userDetails)
+
+        if (getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+            log.warn("User {} does not have WRITE permission for file {}", userDetails.id, id)
+            throw ForbiddenException("Access denied: insufficient permissions to update AI metadata for file $id")
+        }
+
+        if (metadata.isEmpty()) {
+            throw InvalidFormatException("AI metadata cannot be empty")
+        }
+
+        metadata.keys.forEach { key ->
+            if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                throw InvalidFormatException("Metadata key '$key' must be ASCII encoded")
+            }
+            if (AiMetadataField.entries.none { it.key == key }) {
+                throw InvalidFormatException("Only AI metadata keys [summary, tags, sensitivity] are allowed")
+            }
+        }
+
+        metadata["sensitivity"]?.let { sensitivity ->
+            try {
+                SensitivityLevel.valueOf(sensitivity)
+            } catch (e: IllegalArgumentException) {
+                throw InvalidFormatException("Invalid sensitivity value '$sensitivity'")
+            }
+        }
+
+        val filteredMetadata =
+            metadata.filterKeys { key -> AiMetadataField.entries.any { it.key == key } }.toMutableMap()
+
+        filteredMetadata["summary"]?.let {
+            if (it.length > 500) {
+                filteredMetadata["summary"] = it.take(500)
+            }
+        }
+
+        filteredMetadata["tags"]?.let {
+            if (it.length > 100) {
+                filteredMetadata["tags"] = it.take(100)
+            }
+        }
+
+        updateFileMetadata(id, version, filteredMetadata)
     }
 
     /**
@@ -332,7 +386,12 @@ class FileService(
             metadata["filename"]?.let { file.filename = it }
 
             // Filter out fileName from metadata map for the metadata field update
-            val metadataToUpdate = metadata - "filename"
+            var metadataToUpdate = metadata - "filename"
+
+            // Split AI-related metadata keys from the general metadata map
+            val aiMetadataKeys = AiMetadataField.entries.map { it.key }.toSet()
+            val aiMetadataToUpdate = metadataToUpdate.filterKeys { it in aiMetadataKeys }
+            metadataToUpdate = metadataToUpdate - aiMetadataKeys
 
             log.debug("updating file metadata: {}, for file {}", metadataToUpdate.toString(), id)
 
@@ -341,6 +400,12 @@ class FileService(
             val currentMetadata = file.metadata?.toMutableMap() ?: mutableMapOf()
             currentMetadata.putAll(metadataToUpdate)
             file.metadata = currentMetadata
+
+            if (aiMetadataToUpdate.isNotEmpty()) {
+                val currentAiMetadata = file.aiMetadata?.toMutableMap() ?: mutableMapOf()
+                currentAiMetadata.putAll(aiMetadataToUpdate)
+                file.aiMetadata = currentAiMetadata
+            }
         } finally {
             scope.close()
             span.end()
@@ -350,12 +415,12 @@ class FileService(
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun deleteFile(id: UUID) {
         //WARNING: Actually a user can deletes a file even if is not the owner but has WRITE permission
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
         // Check permissions
-        if(getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+        if (getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
             log.warn("User {} does not have WRITE permission for file {}", userDetails.id, id)
             throw ForbiddenException("Access denied: insufficient permissions to delete file $id")
         }
@@ -375,7 +440,7 @@ class FileService(
         // Delete all file shares first to avoid foreign key constraint violation
         log.debug("Deleting all shares for file {}", id)
         fileShareRepository.deleteByFile_Uuid(id)
-        
+
         // Pubblica evento di cancellazione nell'outbox prima di cancellare il file
         try {
             val deletionEvent = mapOf(
@@ -396,7 +461,11 @@ class FileService(
             )
 
             outboxRepository.save(outboxEvent)
-            log.info("Successfully saved FILE_DELETED outbox event for file {} with {} versions", id, fileVersionIds.size)
+            log.info(
+                "Successfully saved FILE_DELETED outbox event for file {} with {} versions",
+                id,
+                fileVersionIds.size
+            )
         } catch (e: Exception) {
             log.error("Failed to publish FILE_DELETED event for file {}: {}", id, e.message, e)
             // Continua comunque con la cancellazione del file
@@ -409,7 +478,7 @@ class FileService(
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff','ROLE_ai_worker')")
-    override fun downloadFile(id: UUID,  version: Long?): DownloadDTO {
+    override fun downloadFile(id: UUID, version: Long?): DownloadDTO {
         log.debug("Download the resource {}", id)
 
         // AI service accounts (ROLE_ai_worker) are not registered in UserDetailService,
@@ -434,10 +503,10 @@ class FileService(
 
         // Retrieve information about the current version
         //if version is null, download the current version
-        val fileVersion: FileVersion = if(version == null) {
+        val fileVersion: FileVersion = if (version == null) {
             file.versions.find { it.version == file.currentVersion }
                 ?: throw ResourceNotFoundException("Current version not found for file $id")
-        } else{
+        } else {
             file.versions.find { it.version == version }
                 ?: throw ResourceNotFoundException("Version $version not found for file $id")
         }
@@ -573,7 +642,7 @@ class FileService(
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun getFileShares(fileId: UUID, pageable: Pageable): Page<FileShareDTO> {
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
@@ -591,12 +660,12 @@ class FileService(
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun createFileShare(fileShareDTO: FileShareDTO): FileShareDTO {
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
         // Check permissions
-        if(getCurrentUserPermission(fileShareDTO.fileID, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+        if (getCurrentUserPermission(fileShareDTO.fileID, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
             log.warn("User {} does not have WRITE permission for file {}", userDetails.id, fileShareDTO.fileID)
             throw ForbiddenException("Access denied: insufficient permissions to share file ${fileShareDTO.fileID}")
         }
@@ -619,7 +688,7 @@ class FileService(
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun getFilesSharedWithCurrentUser( pageable: Pageable): Page<FileDTO> {
+    override fun getFilesSharedWithCurrentUser(pageable: Pageable): Page<FileDTO> {
 
         // Get user ID directly from JWT in SecurityContext
         val userId = getUserIdFromJwt()
@@ -643,7 +712,7 @@ class FileService(
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun deleteFileShare(fileId: UUID, shareId: Long) {
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
@@ -717,7 +786,7 @@ class FileService(
                     "${upload.id}/part-$index"
                 }
                 log.debug("Deleting from part {} to part {} for upload {}", startIndex, chunkCounter, upload.id)
-                storageService.deleteObjects("uploads",objectsToDelete)
+                storageService.deleteObjects("uploads", objectsToDelete)
 
                 //compatta
                 val composedChunk = mergeByteArrays(byteArrays)
@@ -728,7 +797,7 @@ class FileService(
                     size = totalSize.toLong(),
                     contentType = upload.contentType,
                     filename = upload.filename,
-                    bucket="uploads"
+                    bucket = "uploads"
                 )
                 log.debug("Creating composed object {} in MINIO for upload {}", chunkDTO.number, upload.id)
                 storageService.putObject(chunkDTO)
@@ -789,8 +858,8 @@ class FileService(
         }
     }
 
-    override fun mergeObject(upload: Upload){
-        if (upload.mergeMode == MergeMode.CLIENT_SIDE){
+    override fun mergeObject(upload: Upload) {
+        if (upload.mergeMode == MergeMode.CLIENT_SIDE) {
             composeObjectClientSide(upload)
         }
 
@@ -808,8 +877,8 @@ class FileService(
         storageService.deletePartialObjects(upload.id.toString())
     }
 
-    override fun moveSingleChunkUpload(upload: Upload){
-        val chunkBytes = storageService.getObject("uploads","${upload.id}/part-1")
+    override fun moveSingleChunkUpload(upload: Upload) {
+        val chunkBytes = storageService.getObject("uploads", "${upload.id}/part-1")
 
         val versionId = upload.fileVersionId
             ?: throw ResourceNotFoundException("FileVersion id not set for upload ${upload.id}")
@@ -830,7 +899,7 @@ class FileService(
             bucket = "files",
             version = fileVersion.version
         )
-        storageService.putFinalObject( mergedChunk)
+        storageService.putFinalObject(mergedChunk)
 
         // aggiorno objectKey e stato su FileVersion
         fileVersion.objectKey = finalObjectKey
@@ -840,7 +909,7 @@ class FileService(
         storageService.deletePartialObjects(upload.id.toString())
     }
 
-    override fun getUserDetails(token:String): UserDTO {
+    override fun getUserDetails(token: String): UserDTO {
         // Get user ID directly from JWT in SecurityContext
         val userId = getUserIdFromJwt()
         log.debug("Current user ID: {}", userId)
@@ -927,7 +996,10 @@ class FileService(
 
         // Check if version is available
         if (fileVersion.status != FileStatus.AVAILABLE) {
-            throw ResponseStatusException(HttpStatus.CONFLICT, "File version is not available for download (status: ${fileVersion.status})")
+            throw ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "File version is not available for download (status: ${fileVersion.status})"
+            )
         }
 
         // Download from storage - getObject returns ByteArray
@@ -940,3 +1012,5 @@ class FileService(
         )
     }
 }
+
+

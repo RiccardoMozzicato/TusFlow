@@ -398,7 +398,6 @@ export interface FileVersion {
   contentType: string;
   checksum?: string;
   status: 'MERGE_PENDING' | 'AVAILABLE' | 'DELETED';
-  metadata?: Record<string, string>;
   createdAt: string;
   lastUpdateAt: string;
 }
@@ -443,10 +442,12 @@ export const downloadFileVersion = async (fileId: string, version: number): Prom
 };
 
 // AI-generated metadata type
+export type SensitivityLevel = 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGHLY_CONFIDENTIAL';
+
 export interface MetadataAIDTO {
   tags?: string | string[];
   summary?: string;
-  sensitivity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'PUBLIC';
+  sensitivity?: SensitivityLevel;
   category?: string;
   language?: string;
   keyEntities?: string | string[];
@@ -454,6 +455,12 @@ export interface MetadataAIDTO {
   sentiment?: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
   confidenceScore?: number;
   analysisStatus?: 'COMPLETED' | 'UNSUPPORTED' | 'FAILED';
+}
+
+export interface UpdateGeneratedMetadataRequest {
+  summary?: string;
+  tags?: string;
+  sensitivity?: SensitivityLevel;
 }
 
 /**
@@ -611,5 +618,37 @@ export const streamFileGeneratedMetadata = (
     console.error('Error opening SSE connection:', err);
     onError(err instanceof Error ? err.message : 'Failed to open connection');
     return null;
+  }
+};
+/**
+ * Update AI-generated metadata for a file
+ */
+export const updateGeneratedMetadata = async (
+  fileId: string,
+  metadata: UpdateGeneratedMetadataRequest,
+  version?: number
+): Promise<void> => {
+  const csrfToken = getCsrfToken();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  if (csrfToken) {
+    headers['X-XSRF-TOKEN'] = csrfToken;
+    headers['X-CSRF-TOKEN'] = csrfToken;
+  }
+
+  const queryParams = version !== undefined ? `?version=${version}` : '';
+  const response = await fetch(`${FILES_BASE_URL}/generatedmetadata/${fileId}${queryParams}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(metadata),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Update AI metadata error:', errorText);
+    throw new Error(`Failed to update AI-generated metadata: ${response.statusText}`);
   }
 };
