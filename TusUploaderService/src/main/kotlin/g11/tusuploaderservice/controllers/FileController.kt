@@ -29,6 +29,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.core.io.InputStreamResource
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -634,6 +635,19 @@ class FileController(
         res.setHeader("Content-Type", download.contentType)
         res.outputStream.use { output -> output.write(download.file) }
     }
+
+    @GetMapping("/{id}/preview")
+    fun previewFile(
+        @PathVariable id: UUID,
+        @RequestParam("version") version: Long? = null,
+        res: HttpServletResponse
+    ) {
+        val preview: DownloadDTO = fileService.downloadFile(id, version)
+        res.setHeader("Content-Disposition", "inline; filename=\"${preview.filename}\"")
+        res.setHeader("Content-Type", preview.contentType)
+        res.outputStream.use { output -> output.write(preview.file) }
+    }
+
 
    //region Swagger Documentation
    @Operation(

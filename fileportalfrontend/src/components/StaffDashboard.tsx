@@ -1,13 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Container, Table, Button, Alert, Spinner, Badge, Form, Row, Col, Modal } from 'react-bootstrap';
 import { Layout } from './Layout';
-import { getFilesMetadata, getSharedFiles, getAllFiles, deleteFile, downloadFile, SharingScope } from '../services/fileApi';
+import {
+    getFilesMetadata,
+    getSharedFiles,
+    getAllFiles,
+    deleteFile,
+    downloadFile,
+    SharingScope,
+    previewFile,
+    previewFileVersion
+} from '../services/fileApi';
 import type { FileMetadata } from '../services/fileApi';
 import { ShareFileModal } from './ShareFileModal';
 import { UploadVersionModal } from './UploadVersionModal';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { MetadataAIModal } from './MetadataAIModal';
+import { renderAsync } from 'docx-preview';
 
 export const StaffDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -59,15 +69,55 @@ export const StaffDashboard: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => {
-    loadPersonalFiles();
-  }, [currentPage, contentTypeFilter, dateFromFilter, dateToFilter, sortField, sortDirection, pageSize]);
+  // DOCX preview state (inline)
+  const [docxPreviewVisible, setDocxPreviewVisible] = useState(false);
+  const [previewingDocx, setPreviewingDocx] = useState(false);
+  const [fileInPreview, setFileInPreview] = useState<FileMetadata | null>(null);
+  const docxPreviewRef = useRef<HTMLDivElement | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
+
+  // iframe preview state (for non-DOCX files)
+  const [iframeSrc, setIframeSrc] = useState<string>('');
+  const [iframeLoading, setIframeLoading] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // unified close that cleans both docx preview and iframe (revokes object URLs)
+  const closePreview = useCallback(() => {
+    setPreviewVisible(false);
+    setDocxPreviewVisible(false);
+    setPreviewingDocx(false);
+    setFileInPreview(null);
+    if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
+    if (iframeSrc) {
+      try {
+        window.URL.revokeObjectURL(iframeSrc);
+      } catch {
+        // ignore
+      }
+      setIframeSrc('');
+    }
+    setIframeLoading(false);
+  }, [iframeSrc]);
+
+  // wrapper kept for backward compatibility with existing code that uses closeDocxPreview
+  const closeDocxPreview = useCallback(() => {
+    closePreview();
+  }, [closePreview]);
 
   useEffect(() => {
-    loadSharedFiles();
-  }, [sharedCurrentPage, sharedPageSize]);
+    if (!docxPreviewVisible) return;
 
-  const loadPersonalFiles = async () => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeDocxPreview();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [docxPreviewVisible, closeDocxPreview]);
+
+  const loadPersonalFiles = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -79,7 +129,7 @@ export const StaffDashboard: React.FC = () => {
         sort: `${sortField},${sortDirection}`,
         contentType: contentTypeFilter || undefined,
         dateFrom: dateFromFilter ? `${dateFromFilter}T00:00:00Z` : undefined,
-        dateTo: dateToFilter ? `${dateToFilter}T23:59:59Z` : undefined,
+        dateTo: dateToFilter ? `${dateToFilter}T23:59:59Z` : undefined
       });
 
       console.log(response);
@@ -98,9 +148,17 @@ export const StaffDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    contentTypeFilter,
+    currentPage,
+    dateFromFilter,
+    dateToFilter,
+    pageSize,
+    sortDirection,
+    sortField
+  ]);
 
-  const loadSharedFiles = async () => {
+  const loadSharedFiles = useCallback(async () => {
     try {
       setSharedLoading(true);
       setSharedError(null);
@@ -120,7 +178,15 @@ export const StaffDashboard: React.FC = () => {
     } finally {
       setSharedLoading(false);
     }
-  };
+  }, [sharedCurrentPage, sharedPageSize]);
+
+  useEffect(() => {
+    void loadPersonalFiles();
+  }, [loadPersonalFiles]);
+
+  useEffect(() => {
+    void loadSharedFiles();
+  }, [loadSharedFiles]);
 
   const handleDownload = async (file: FileMetadata) => {
     try {
@@ -136,6 +202,141 @@ export const StaffDashboard: React.FC = () => {
     } catch (err) {
       console.error('Error downloading file:', err);
       setError(err instanceof Error ? err.message : 'Failed to download file');
+    }
+  };
+
+  const handlePreview = async (file: FileMetadata) => {
+    try {
+      setError(null);
+
+      const baseContentType = (file.contentType ?? '').split(';')[0].trim();
+      const isDocx =
+        baseContentType ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      // Imposto il file corrente in preview (utile anche per la header dell'overlay)
+      setFileInPreview(file);
+
+      if (isDocx) {
+        setPreviewVisible(true);
+        setDocxPreviewVisible(true);
+        setPreviewingDocx(true);
+
+        // pulisci eventuale preview precedente
+        if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
+
+        const blob = await previewFile(file.id);
+        const arrayBuffer = await blob.arrayBuffer();
+
+        if (!docxPreviewRef.current) {
+          setError('Preview container non disponibile');
+          setPreviewingDocx(false);
+          return;
+        }
+
+        await renderAsync(arrayBuffer, docxPreviewRef.current, undefined, {
+          inWrapper: true,
+          breakPages: true
+        });
+
+        setPreviewingDocx(false);
+        return;
+      }
+
+      // Non-DOCX: mostro il file nell'iframe dell'overlay usando un Blob URL
+      const blob = await previewFile(file.id);
+      const url = window.URL.createObjectURL(blob);
+      // pulisco eventuale iframe precedente
+      if (iframeSrc) {
+        try {
+          window.URL.revokeObjectURL(iframeSrc);
+        } catch {
+          // ignore
+        }
+      }
+      setIframeSrc(url);
+      setIframeLoading(true);
+      setDocxPreviewVisible(false);
+      setPreviewVisible(true);
+    } catch (err) {
+      console.error('Error previewing file:', err);
+      setError(err instanceof Error ? err.message : 'Failed to preview file');
+      closePreview();
+    }
+  };
+
+  // Preview di una versione specifica richiesta dalla history
+  const handlePreviewVersionFromHistory = async (args: {
+    fileId: string;
+    version: number;
+    contentType: string;
+    filename: string;
+  }) => {
+    try {
+      setError(null);
+
+      const baseContentType = (args.contentType ?? '').split(';')[0].trim();
+      const isDocx =
+        baseContentType ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+      // recupero il metadato del file attuale per mostrare nome/id nell'header
+      const meta = files.find((f) => f.id === args.fileId) ||
+        sharedFiles.find((f) => f.id === args.fileId) ||
+        null;
+
+      setFileInPreview(
+        meta || {
+          id: args.fileId,
+          fileName: args.filename,
+          contentType: args.contentType,
+          version: args.version,
+          size: 0,
+          createdAt: new Date().toISOString(),
+          completedAt: undefined,
+          ownerName: undefined,
+          sharingScope: SharingScope.PERSONAL
+        }
+      );
+
+      if (isDocx) {
+        setPreviewVisible(true);
+        setDocxPreviewVisible(true);
+        setPreviewingDocx(true);
+
+        if (docxPreviewRef.current) docxPreviewRef.current.innerHTML = '';
+
+        const blob = await previewFileVersion(args.fileId, args.version);
+        const arrayBuffer = await blob.arrayBuffer();
+
+        if (!docxPreviewRef.current) {
+          setError('Preview container non disponibile');
+          setPreviewingDocx(false);
+          return;
+        }
+
+        await renderAsync(arrayBuffer, docxPreviewRef.current, undefined, {
+          inWrapper: true,
+          breakPages: true
+        });
+
+        setPreviewingDocx(false);
+        return;
+      }
+
+      // Non-DOCX: preview in iframe
+      const blob = await previewFileVersion(args.fileId, args.version);
+      const url = window.URL.createObjectURL(blob);
+      if (iframeSrc) {
+        try { window.URL.revokeObjectURL(iframeSrc); } catch { /* ignore */ }
+      }
+      setIframeSrc(url);
+      setIframeLoading(true);
+      setDocxPreviewVisible(false);
+      setPreviewVisible(true);
+    } catch (err) {
+      console.error('Error previewing file version:', err);
+      setError(err instanceof Error ? err.message : 'Failed to preview file version');
+      closePreview();
     }
   };
 
@@ -256,6 +457,127 @@ export const StaffDashboard: React.FC = () => {
             {error}
           </Alert>
         )}
+
+        {previewVisible ? (
+          <>
+              <div
+                  id="backdrop"
+                  onClick={() => closePreview()}
+                   style={{
+                       position: "fixed",
+                       top: 0,
+                       left: 0,
+                       width: "100vw",
+                       height: "100vh",
+                       backgroundColor: "rgba(0, 0, 0, .5)",
+                       zIndex: 998
+                   }}>
+              </div>
+
+              {
+                  docxPreviewVisible ?
+                      <div
+                          role="dialog"
+                          aria-modal="true"
+                          style={{
+                              position: 'fixed',
+                              top: '50%',
+                              left: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              width: 'min(1100px, calc(100vw - 32px))',
+                              maxHeight: 'calc(100vh - 32px)',
+                              zIndex: 1060
+                          }}
+                      >
+                          <div
+                              className="card"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                  boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
+                              }}
+                          >
+                              <div className="card-header d-flex justify-content-between align-items-center">
+                                  <div>
+                                      <strong>Preview</strong>
+                                      {fileInPreview ? (
+                                          <span className="text-muted ms-2">{fileInPreview.fileName}</span>
+                                      ) : null}
+                                  </div>
+                                  <Button variant="outline-secondary" size="sm" onClick={closeDocxPreview}>
+                                      Close
+                                  </Button>
+                              </div>
+                              <div className="card-body">
+                                  {previewingDocx ? (
+                                      <div className="py-2">
+                                          <Spinner animation="border" role="status" size="sm" className="me-2" />
+                                          <span>Rendering preview...</span>
+                                      </div>
+                                  ) : null}
+
+                                  <div
+                                      ref={docxPreviewRef}
+                                      style={{
+                                          maxHeight: 'calc(100vh - 180px)',
+                                          overflow: 'auto',
+                                          border: '1px solid #ddd',
+                                          borderRadius: 6,
+                                          padding: 10,
+                                          background: '#fff'
+                                      }}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+                      :
+                      // Non-DOCX: mostro iframe con il Blob URL
+                      <div
+                          role="dialog"
+                          aria-modal="true"
+                          style={{
+                              position: 'fixed',
+                              top: '50%',
+                              left: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              width: 'min(1100px, calc(100vw - 32px))',
+                              height: 'min(80vh, calc(100vh - 32px))',
+                              zIndex: 1060
+                          }}
+                      >
+                          <div className="card" onClick={(e) => e.stopPropagation()} style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
+                              <div className="card-header d-flex justify-content-between align-items-center">
+                                  <div>
+                                      <strong>Preview</strong>
+                                      {fileInPreview ? <span className="text-muted ms-2">{fileInPreview.fileName}</span> : null}
+                                  </div>
+                                  <Button variant="outline-secondary" size="sm" onClick={closePreview}>
+                                      Close
+                                  </Button>
+                              </div>
+                              <div className="card-body p-0" style={{ height: 'calc(80vh - 56px)' }}>
+                                  {iframeLoading ? (
+                                      <div className="p-3 text-center">
+                                          <Spinner animation="border" role="status" size="sm" className="me-2" />
+                                          <span>Loading preview...</span>
+                                      </div>
+                                  ) : null}
+                                  <iframe
+                                      ref={iframeRef}
+                                      src={iframeSrc}
+                                      title={fileInPreview?.fileName || 'file-preview'}
+                                      style={{
+                                          width: '100%',
+                                          height: '100%',
+                                          border: 'none'
+                                      }}
+                                      onLoad={() => setIframeLoading(false)}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+              }
+          </>
+        ) : null}
 
         {/* Filters and Sorting */}
         <div className="card mb-3">
@@ -428,6 +750,14 @@ export const StaffDashboard: React.FC = () => {
                           >
                             📥 Download
                           </Button>
+                            <Button
+                                variant="outline-secondary"
+                                size="sm"
+                                className="me-2"
+                                onClick={() => handlePreview(file)}
+                            >
+                                👁️ Preview
+                            </Button>
                           <Button
                             variant="outline-secondary"
                             size="sm"
@@ -592,6 +922,14 @@ export const StaffDashboard: React.FC = () => {
                           >
                             📥 Download
                           </Button>
+                            <Button
+                                variant="outline-secondary"
+                                size="sm"
+                                className="me-2"
+                                onClick={() => handlePreview(file)}
+                            >
+                                👁️ Preview
+                            </Button>
                           <Button
                             variant="outline-warning"
                             size="sm"
@@ -772,6 +1110,7 @@ export const StaffDashboard: React.FC = () => {
         show={showVersionHistoryModal}
         onHide={() => setShowVersionHistoryModal(false)}
         file={fileToViewHistory}
+        onPreviewRequested={handlePreviewVersionFromHistory}
       />
 
       {/* AI Metadata Modal */}

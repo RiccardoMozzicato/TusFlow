@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Table, Button, Alert, Spinner, Badge } from 'react-bootstrap';
 import { getFileVersions, downloadFileVersion } from '../services/fileApi';
 import type { FileMetadata, FileVersion } from '../services/fileApi';
@@ -7,25 +7,24 @@ interface VersionHistoryModalProps {
   show: boolean;
   onHide: () => void;
   file: FileMetadata | null;
+  // callback opzionale verso il padre per chiedere la preview di una certa versione
+  onPreviewRequested?: (args: { fileId: string; version: number; contentType: string; filename: string }) => void;
 }
 
 export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   show,
   onHide,
-  file
+  file,
+  onPreviewRequested
 }) => {
   const [versions, setVersions] = useState<FileVersion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [downloadingVersion, setDownloadingVersion] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (show && file) {
-      loadVersions();
-    }
-  }, [show, file]);
+  // non gestiamo più la preview internamente; la UI di history si limita a chiedere al padre di aprire la preview
 
-  const loadVersions = async () => {
+  const loadVersions = useCallback(async () => {
     if (!file) return;
 
     setLoading(true);
@@ -39,7 +38,13 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [file]);
+
+  useEffect(() => {
+    if (show && file) {
+      void loadVersions();
+    }
+  }, [show, file, loadVersions]);
 
   const handleDownloadVersion = async (version: number, filename: string) => {
     if (!file) return;
@@ -62,6 +67,18 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     } finally {
       setDownloadingVersion(null);
     }
+  };
+
+  const handlePreviewVersion = (version: number, contentType: string, filename: string) => {
+    if (!file) return;
+    // deleghiamo al padre la gestione della preview (docx o iframe) e chiudiamo il modal di history
+    onPreviewRequested?.({
+      fileId: file.id,
+      version,
+      contentType,
+      filename
+    });
+    onHide();
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -101,12 +118,12 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
           </Alert>
         )}
 
+        {/* Il modal di history non contiene più la preview: la preview viene gestita dal componente padre */}
+
         {file && (
           <div className="mb-3">
             <h6>File: {file.fileName}</h6>
-            <small className="text-muted">
-              Current Version: v{file.version || 1}
-            </small>
+            <small className="text-muted">Current Version: v{file.version || 1}</small>
           </div>
         )}
 
@@ -178,6 +195,14 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                         '📥 Download'
                       )}
                     </Button>
+
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => handlePreviewVersion(version.version, version.contentType, version.filename)}
+                    >
+                      👁️ Preview
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -193,4 +218,3 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     </Modal>
   );
 };
-
