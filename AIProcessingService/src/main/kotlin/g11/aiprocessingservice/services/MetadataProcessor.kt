@@ -182,7 +182,7 @@ class MetadataProcessor(
                 log.warn("Resuming stuck job: {}", jobEntity.jobid)
                 jobId
             } else {
-                log.info("Job {} already {}. Skipping.", jobEntity.jobid, jobEntity.status)
+                log.info("Job {} already existing and {}. Skipping creation.", jobEntity.jobid, jobEntity.status)
                 null
             }
         }
@@ -389,7 +389,7 @@ class MetadataProcessor(
                     "Image base64-encoded size (${"%.2f".format(base64SizeBytes / 1_048_576.0)} MB) exceeds the 4 MB limit"
                 )
             }
-            log.info(
+            log.debug(
                 "Image accepted: base64 size {} KB (limit 4 MB)",
                 base64SizeBytes / 1024
             )
@@ -412,13 +412,13 @@ class MetadataProcessor(
         }
 
         // PDFs and text files: extract text then send to the LLM
-        val contenutoFile = if (baseMimeType.equals("application/pdf", ignoreCase = true)) {
+        val fileContent = if (baseMimeType.equals("application/pdf", ignoreCase = true)) {
             extractTextFromPdf(inputStream)
         } else {
             inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
         }
 
-        val truncatedContent = truncateContent(contenutoFile, maxContentChars)
+        val truncatedContent = truncateContent(fileContent, maxContentChars)
         val prompt = promptTemplate.inputStream.bufferedReader().use { it.readText() }
             .replace("{document}", truncatedContent)
 
@@ -526,7 +526,8 @@ class MetadataProcessor(
                 throw e
             } catch (e: NonTransientAiException) {
                 // 4xx status response, do not retry
-                throw AIAnalysisUnsupportedException(e.message?: "Bad Request")
+                log.error("Non transient exception occurred for job {} : {}", jobId, e.message)
+                throw NonTransientAiException(e.message?: "Bad Request")
             } catch (e: Exception) {
                 lastException = e
                 log.warn("AI analysis attempt {} failed for job {}: {}", attempt, jobId, e.message)
