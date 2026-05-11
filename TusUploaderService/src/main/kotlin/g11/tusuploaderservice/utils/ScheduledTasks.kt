@@ -1,24 +1,24 @@
 package g11.tusuploaderservice.utils
+
 import g11.tusuploaderservice.entities.MergeMode
-import g11.tusuploaderservice.entities.Upload
 import g11.tusuploaderservice.entities.UploadStatus
-import org.slf4j.LoggerFactory
-import org.springframework.scheduling.annotation.Scheduled
-import org.springframework.stereotype.Component
-import java.util.Collections.emptyList
 import g11.tusuploaderservice.repositories.TusRepository
 import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.StorageService
 import jakarta.transaction.Transactional
+import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.stereotype.Component
+import java.util.Collections.emptyList
 import java.util.Date
 import java.util.UUID
 
 @Component
-class ScheduledTasks (
+class ScheduledTasks(
     private val tusRepository: TusRepository,
     private val storageService: StorageService,
-    private val fileService: FileService
-    ) {
+    private val fileService: FileService,
+) {
 
 
     private val log = LoggerFactory.getLogger(ScheduledTasks::class.java)

@@ -45,7 +45,6 @@ class FileService(
     private val fileShareRepository: FileShareRepository,
     @Qualifier("userServiceClient") private val userServiceClient: RestClient,
     private val fileVersionRepository: FileVersionRepository,
-    private val outboxRepository: g11.tusuploaderservice.repositories.FilesOutboxEventsRepository,
     private val tracer: Tracer,
 ) : FileServiceInterface {
     private val log = LoggerFactory.getLogger(FileService::class.java)
@@ -375,32 +374,6 @@ class FileService(
         log.debug("Deleting all shares for file {}", id)
         fileShareRepository.deleteByFile_Uuid(id)
         
-        // Pubblica evento di cancellazione nell'outbox prima di cancellare il file
-        try {
-            val deletionEvent = mapOf(
-                "fileId" to id.toString(),
-                "deletedAt" to Instant.now().toString(),
-                "deletedBy" to userDetails.id.toString(),
-                "fileVersionIds" to fileVersionIds.map { it.toString() },
-                "traceparent" to tracer.currentSpan()?.context()
-                    ?.let { "00-${it.traceId()}-${it.spanId()}-01" }
-            )
-
-            log.info("Creating FILE_DELETED event with payload: $deletionEvent")
-
-            val outboxEvent = FilesOutboxEvent(
-                eventType = "FILE_DELETED",
-                payload = deletionEvent,
-                createdAt = Date.from(Instant.now())
-            )
-
-            outboxRepository.save(outboxEvent)
-            log.info("Successfully saved FILE_DELETED outbox event for file {} with {} versions", id, fileVersionIds.size)
-        } catch (e: Exception) {
-            log.error("Failed to publish FILE_DELETED event for file {}: {}", id, e.message, e)
-            // Continua comunque con la cancellazione del file
-        }
-
         fileRepository.deleteById(id)
         storageService.deleteAllVersions(id.toString())
 

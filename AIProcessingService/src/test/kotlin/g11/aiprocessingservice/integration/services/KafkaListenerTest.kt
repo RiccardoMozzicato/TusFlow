@@ -60,6 +60,9 @@ class KafkaListenerTest : IntegrationTest() {
     @MockkBean(name = "pdfAnalysisChatClient")
     private lateinit var pdfAnalysisChatClient: ChatClient
 
+    @MockkBean(name = "imageChatClient")
+    private lateinit var imageChatClient: ChatClient
+
     @MockkBean
     private lateinit var jobStatusService: JobStatusServiceInterface
 
@@ -106,6 +109,7 @@ class KafkaListenerTest : IntegrationTest() {
         every { fileServiceClient.get() } returns mockRequestHeadersSpec
 
         // Mock per jobStatusService (evita chiamate reali durante i test)
+        every { jobStatusService.createJobIfNotExists(any()) } returns null
         justRun { jobStatusService.markJobAsFailed(any(), any(), any()) }
         justRun { jobStatusService.markJobAsCompleted(any(), any(), any()) }
         justRun { jobStatusService.markJobAsUnsupported(any(), any(), any()) }

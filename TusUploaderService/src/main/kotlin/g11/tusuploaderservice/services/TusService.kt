@@ -1,7 +1,6 @@
 package g11.tusuploaderservice.services
 
 import g11.tusuploaderservice.dto.ChunkDTO
-import g11.tusuploaderservice.dto.FileUploadEvent
 import g11.tusuploaderservice.dto.SharingScope
 import g11.tusuploaderservice.dto.UploadDTO
 import g11.tusuploaderservice.dto.UserDTO
@@ -46,9 +45,8 @@ import java.time.ZonedDateTime
 import java.util.Base64
 import java.util.Date
 import g11.tusuploaderservice.entities.FileVersion
-import g11.tusuploaderservice.entities.FilesOutboxEvent
-import g11.tusuploaderservice.repositories.FilesOutboxEventsRepository
-import io.micrometer.tracing.Tracer
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import org.springframework.kafka.core.KafkaTemplate
 import kotlin.let
 
 
@@ -58,11 +56,11 @@ class TusService(
     private val storageService: StorageServiceInterface,
     private val fileService: FileServiceInterface,
     private val authService: AuthService,
-    private val outboxRepository: FilesOutboxEventsRepository,
+    private val kafkaTemplate: KafkaTemplate<String, String>,
     private val fileRepo: FileRepository,
     private val repo: TusRepository,
-    private val tracer: Tracer
 ): TusServiceInterface {
+    private val objectMapper = jacksonObjectMapper()
     @Value("\${tus.maxSize}") private lateinit var tusMaxSize:String
     @Value("\${tus.expirationPeriod}") private var expirationPeriod:Long = 0
 
@@ -306,29 +304,24 @@ class TusService(
                 throw GenericException("File version creation failed for upload: ${uploadEntity.id}")
             }
 
-            // Crea l'evento di upload come Map
-            val fileUploadEvent = mapOf(
+            val fileUploadPayload = mapOf(
                 "fileId" to uploadEntity.fileId.toString(),
-                "fileVersionId" to version.id.toString(),
+                "fileVersionId" to version.id,
                 "version" to version.version,
                 "ownerUserId" to uploadEntity.ownerId.toString(),
                 "filename" to version.filename,
                 "contentType" to version.contentType,
                 "metadata" to version.metadata,
-                "traceparent" to tracer.currentSpan()?.context()
-                    ?.let { "00-${it.traceId()}-${it.spanId()}-01" }
             )
 
+            val envelope = objectMapper.writeValueAsString(mapOf(
+                "id" to UUID.randomUUID().toString(),
+                "event_type" to "FILE_INSERTED",
+                "payload" to objectMapper.writeValueAsString(fileUploadPayload)
+            ))
 
-            // Salva evento nella tabella outbox per Kafka
-            val outboxEvent = FilesOutboxEvent(
-                eventType = "FILE_INSERTED",
-                payload = fileUploadEvent,
-                createdAt = Date.from(Instant.now())
-            )
-
-            outboxRepository.save(outboxEvent)
-            log.debug("Saved outbox event for upload {}", uploadEntity.id)
+            kafkaTemplate.send("file-outbox", uploadEntity.fileId.toString(), envelope)
+            log.debug("Published FILE_INSERTED event for upload {}", uploadEntity.id)
         }
 
         return uploadEntity.toDTO()
