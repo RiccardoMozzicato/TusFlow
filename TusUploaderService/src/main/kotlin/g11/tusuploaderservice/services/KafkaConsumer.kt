@@ -1,6 +1,8 @@
 package g11.tusuploaderservice.services
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import g11.tusuploaderservice.dto.MetadataAIDTO
+import g11.tusuploaderservice.entities.FileStatus
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Service
@@ -97,6 +99,30 @@ class KafkaConsumer(
         } catch (e: Exception) {
             log.error("Error processing Kafka message: {}", message, e)
             throw e
+        }
+    }
+
+    private fun Map<String, String>.toMetadataAIDTO(): MetadataAIDTO {
+        return MetadataAIDTO(
+            tags = this["tags"],
+            summary = this["summary"],
+            filename = this["filename"],
+            contentType = this["contentType"],
+            ownerUserId = this["ownerUserId"],
+            sensitivity = this["sensitivity"],
+            fileVersionId = this["fileVersionId"],
+            analysisStatus = this["analysisStatus"],
+            status = FileStatus.AVAILABLE
+        )
+    }
+
+    private fun Map<String, String>.withFailureStatus(error: String?): Map<String, String> {
+        val failureDetails = mapOf("error" to (error ?: "AI analysis failed"))
+        return this.toMutableMap().apply {
+            put("summary", "AI analysis failed")
+            put("tags", "failed")
+            put("analysisStatus", "FAILED")
+            put("metadata", objectMapper.writeValueAsString(failureDetails))
         }
     }
 }
