@@ -22,7 +22,8 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.kafka.test.context.EmbeddedKafka
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
 import org.springframework.web.client.RestClient
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -30,19 +31,21 @@ import java.util.concurrent.TimeUnit
 @SpringBootTest
 @DirtiesContext
 @ActiveProfiles("test")
-@EmbeddedKafka(
-    partitions = 1,
-    topics = ["file-outbox", "file-outbox-dlt"],
-    brokerProperties = ["listeners=PLAINTEXT://localhost:9094", "port=9094"]
-)
-@TestPropertySource(properties = [
-    "kafka.bootstrap-servers=localhost:9094",
-    "kafka.consumer.bootstrap-servers=localhost:9094",
-    "kafka.consumer.group-id=test-group",
-    "kafka.consumer.auto-offset-reset=earliest",
-    "kafka.producer.bootstrap-servers=localhost:9094"
-])
+@EmbeddedKafka(partitions = 1, topics = ["file-outbox", "file-outbox-dlt"])
 class KafkaListenerTest : IntegrationTest() {
+
+    companion object {
+        @JvmStatic
+        @DynamicPropertySource
+        fun kafkaProperties(registry: DynamicPropertyRegistry) {
+            val brokers = System.getProperty("spring.embedded.kafka.brokers")
+            registry.add("kafka.bootstrap-servers") { brokers }
+            registry.add("kafka.consumer.bootstrap-servers") { brokers }
+            registry.add("kafka.producer.bootstrap-servers") { brokers }
+            registry.add("kafka.consumer.group-id") { "test-group" }
+            registry.add("kafka.consumer.auto-offset-reset") { "earliest" }
+        }
+    }
 
     @Autowired
     private lateinit var jobRepository: JobRepository
@@ -73,9 +76,9 @@ class KafkaListenerTest : IntegrationTest() {
         // Pulisco il database prima di ogni test
         jobRepository.deleteAll()
 
-        // Setup Kafka producer
+        val brokers = System.getProperty("spring.embedded.kafka.brokers")
         val producerProps = mapOf(
-            "bootstrap.servers" to "localhost:9094",
+            "bootstrap.servers" to brokers,
             "key.serializer" to StringSerializer::class.java.name,
             "value.serializer" to StringSerializer::class.java.name,
             "acks" to "all",
@@ -83,7 +86,7 @@ class KafkaListenerTest : IntegrationTest() {
         )
         producer = KafkaProducer(producerProps)
 
-        println("✓ Kafka producer configured for localhost:9094")
+        println("✓ Kafka producer configured for $brokers")
 
         // Setup mocks per le dipendenze esterne
         setupMocks()
