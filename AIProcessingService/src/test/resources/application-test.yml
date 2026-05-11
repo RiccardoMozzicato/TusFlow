@@ -18,7 +18,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:9090/realms/file-management
+          jwk-set-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/certs
   flyway:
     enabled: true
     baseline-on-migrate: true
