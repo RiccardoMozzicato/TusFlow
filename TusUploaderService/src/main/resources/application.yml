@@ -51,6 +51,10 @@ tus:
   exposeHeaders: location,upload-offset,upload-length,upload-expires,tus-version,tus-extension,tus-resumable,tus-checksum-algorithm,upload-metadata
   allowOrigin: "*"
   expirationPeriod: 3600
+ai:
+  metadata:
+    sse:
+      timeout-ms: 60000
 minio:
   url: http://localhost:9000
   access-key: minioadmin

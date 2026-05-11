@@ -15,6 +15,7 @@ import g11.tusuploaderservice.exceptions.ResourceNotFoundException
 import g11.tusuploaderservice.exceptions.ResourceUncompletedException
 import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.FileServiceInterface
+import g11.tusuploaderservice.services.MetadataSSEService
 import g11.tusuploaderservice.services.StorageService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -28,10 +29,12 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.core.io.InputStreamResource
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -41,6 +44,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.client.RestClient
 import org.springframework.web.server.ResponseStatusException
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
@@ -57,6 +61,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/files")
 class FileController(
     private val fileService: FileServiceInterface,
+    private val metadataSSEService: MetadataSSEService,
     @Qualifier("aiServiceClient") private val aiServiceClient: RestClient
 ) {
     private val log = LoggerFactory.getLogger(FileController::class.java)
@@ -319,6 +324,100 @@ class FileController(
     //region Swagger Documentation
     @Operation(
         tags = ["File Management"],
+        summary = "Stream AI metadata processing status via Server-Sent Events",
+        description = "Opens a Server-Sent Events connection that streams the status of AI metadata processing. Returns metadata when processing is complete.",
+        parameters = [
+            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "File version number (optional)", required = false, `in` = ParameterIn.QUERY, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "SSE stream opened successfully",
+        content = [Content(mediaType = "text/event-stream")]
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @GetMapping("/generatedmetadata/stream/{id}")
+    fun streamMetadataProcessingStatus(
+        @PathVariable id: UUID,
+        @RequestParam(required = false) version: Long?
+    ): ResponseEntity<SseEmitter> {
+        log.debug("Opening SSE stream for AI metadata processing - fileId: {} version: {}", id, version)
+
+        val emitter = metadataSSEService.streamMetadataProcessingStatus(id, version)
+
+        return ResponseEntity.ok()
+            .contentType(MediaType.TEXT_EVENT_STREAM)
+            .header("Cache-Control", "no-cache")
+            .header("X-Accel-Buffering", "no")
+            .body(emitter)
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["File Management"],
+        summary = "Update AI-generated metadata for a file",
+        description = "Updates AI-generated metadata (summary, tags, sensitivity) for a specific file version.",
+        parameters = [
+            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "File version (optional, defaults to current version)", required = false, `in` = ParameterIn.QUERY, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "AI metadata successfully updated"
+    )
+    @ApiResponse(
+        responseCode = "400",
+        description = "Bad Request - Invalid metadata or empty payload",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File or file version not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    @ApiResponse(
+        responseCode = "500",
+        description = "Internal Server Error",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @PatchMapping("/generatedmetadata/{id}")
+    fun updateFileGeneratedMetadata(
+        @PathVariable id: UUID,
+        @RequestParam(required = false) version: Long?,
+        @RequestBody metadata: Map<String, String>
+    ): ResponseEntity<HttpStatus> {
+
+        if (metadata.isEmpty()) {
+            throw ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Metadata cannot be empty"
+            )
+        }
+
+        metadata.keys.forEach { key ->
+            if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                throw ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Metadata key '$key' must be ASCII encoded"
+                )
+            }
+        }
+
+        fileService.updateGeneratedMetadataByUser(id, version, metadata)
+        return ResponseEntity.ok(HttpStatus.OK)
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["File Management"],
         summary = "Update file metadata",
         description = "Updates metadata for a specific file version. All metadata keys must be ASCII encoded.",
         parameters = [
@@ -536,6 +635,19 @@ class FileController(
         res.setHeader("Content-Type", download.contentType)
         res.outputStream.use { output -> output.write(download.file) }
     }
+
+    @GetMapping("/{id}/preview")
+    fun previewFile(
+        @PathVariable id: UUID,
+        @RequestParam("version") version: Long? = null,
+        res: HttpServletResponse
+    ) {
+        val preview: DownloadDTO = fileService.downloadFile(id, version)
+        res.setHeader("Content-Disposition", "inline; filename=\"${preview.filename}\"")
+        res.setHeader("Content-Type", preview.contentType)
+        res.outputStream.use { output -> output.write(preview.file) }
+    }
+
 
    //region Swagger Documentation
    @Operation(
@@ -1034,5 +1146,4 @@ class FileController(
     }
 
 }
-
 

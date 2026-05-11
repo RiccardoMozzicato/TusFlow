@@ -65,10 +65,14 @@ class JobStatusService(
         val jobEntity = jobRepository.findById(jobId)
             .orElseThrow { ResourceNotFoundException("Job not found: $jobId") }
 
-        val updatedPayload = (jobEntity.payload ?: mutableMapOf()).toMutableMap()
+        var updatedPayload = (jobEntity.payload ?: mutableMapOf()).toMutableMap()
         updatedPayload["summary"] = metadata.summary!!
         updatedPayload["tags"] = metadata.tags!!
         updatedPayload["sensitivity"] = metadata.sensitivity!!.name
+        updatedPayload["analysisStatus"] = jobStatus.COMPLETED.name
+
+        // Prevent nested metadata: keep AI-enriched fields only
+        updatedPayload.remove("metadata")
 
         jobEntity.payload = updatedPayload
         jobEntity.status = jobStatus.COMPLETED
@@ -95,9 +99,12 @@ class JobStatusService(
         val jobEntity = jobRepository.findById(jobId)
             .orElseThrow { ResourceNotFoundException("Job not found: $jobId") }
 
-        val updatedPayload = (jobEntity.payload ?: mutableMapOf()).toMutableMap()
+        var updatedPayload = (jobEntity.payload ?: mutableMapOf()).toMutableMap()
         updatedPayload["summary"] = "AI analysis not supported"
         updatedPayload["analysisStatus"] = "UNSUPPORTED"
+
+        // Prevent nested metadata: keep AI-enriched fields only
+        updatedPayload.remove("metadata")
 
         jobEntity.payload = updatedPayload
         jobEntity.status = jobStatus.UNSUPPORTED
@@ -167,4 +174,3 @@ class JobStatusService(
         log.debug("Published job event: {}", eventType)
     }
 }
-

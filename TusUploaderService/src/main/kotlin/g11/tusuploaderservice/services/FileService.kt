@@ -4,6 +4,7 @@ import g11.tusuploaderservice.dto.*
 import g11.tusuploaderservice.dto.toDTO
 import g11.tusuploaderservice.entities.*
 import g11.tusuploaderservice.exceptions.ForbiddenException
+import g11.tusuploaderservice.exceptions.InvalidFormatException
 import g11.tusuploaderservice.exceptions.ResourceNotFoundException
 import g11.tusuploaderservice.exceptions.StorageException
 import g11.tusuploaderservice.repositories.FileRepository
@@ -12,7 +13,6 @@ import g11.tusuploaderservice.repositories.FileVersionRepository
 import g11.tusuploaderservice.repositories.TusRepository
 import g11.tusuploaderservice.specs.FileSpecifications
 import g11.tusuploaderservice.utils.getUserIdFromJwt
-import g11.tusuploaderservice.utils.getUserTokenFromJwt
 import g11.tusuploaderservice.utils.mergeByteArrays
 import io.micrometer.tracing.Tracer
 import org.slf4j.LoggerFactory
@@ -83,6 +83,7 @@ class FileService(
             filename = filename,
             size = upload.size!!, // size is not null here because upload is completed
             metadata = upload.metadata,
+            aiMetadata = null,
             contentType = upload.contentType!!, // contentType is not null here because its autodetected before completion
             createdAt = upload.createdAt,
             objectKey = upload.objectKey!!, // objectKey is not null here because upload is completed
@@ -277,18 +278,18 @@ class FileService(
                 ResourceNotFoundException("File version $targetVersion for file $id not found")
             }
 
-        // Extract metadata fields from the metadata JSON
-        val metadata = fileVersion.metadata ?: emptyMap()
+        // Extract AI metadata fields from the dedicated aiMetadata map
+        val aiMetadata = fileVersion.aiMetadata ?: emptyMap()
 
         return MetadataAIDTO(
-            tags = metadata["tags"],
-            summary = metadata["summary"],
-            filename = metadata["filename"],
-            metadata = metadata["metadata"],
-            contentType = metadata["contentType"],
-            ownerUserId = metadata["ownerUserId"],
-            sensitivity = metadata["sensitivity"],
-            fileVersionId = metadata["fileVersionId"],
+            tags = aiMetadata["tags"],
+            summary = aiMetadata["summary"],
+            filename = fileVersion.filename,
+            contentType = fileVersion.contentType,
+            ownerUserId = file.ownerId.toString(),
+            sensitivity = aiMetadata["sensitivity"],
+            fileVersionId = fileVersion.id?.toString(),
+            analysisStatus = fileVersion.metadata?.get("analysisStatus"),
             status = fileVersion.status
         )
     }
@@ -308,6 +309,58 @@ class FileService(
         }
 
         updateFileMetadata(id, version, metadata)
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff', 'ROLE_ai_worker')")
+    override fun updateGeneratedMetadataByUser(id: UUID, version: Long?, metadata: Map<String, String>) {
+        log.debug("Updating AI metadata of {} with {}", id, metadata)
+
+        val token = authService.getAccessToken()
+        val userDetails = getUserDetails(token)
+        log.debug("Current user details: {}", userDetails)
+
+        if (getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+            log.warn("User {} does not have WRITE permission for file {}", userDetails.id, id)
+            throw ForbiddenException("Access denied: insufficient permissions to update AI metadata for file $id")
+        }
+
+        if (metadata.isEmpty()) {
+            throw InvalidFormatException("AI metadata cannot be empty")
+        }
+
+        metadata.keys.forEach { key ->
+            if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                throw InvalidFormatException("Metadata key '$key' must be ASCII encoded")
+            }
+            if (AiMetadataField.entries.none { it.key == key }) {
+                throw InvalidFormatException("Only AI metadata keys [summary, tags, sensitivity] are allowed")
+            }
+        }
+
+        metadata["sensitivity"]?.let { sensitivity ->
+            try {
+                SensitivityLevel.valueOf(sensitivity)
+            } catch (e: IllegalArgumentException) {
+                throw InvalidFormatException("Invalid sensitivity value '$sensitivity'")
+            }
+        }
+
+        val filteredMetadata =
+            metadata.filterKeys { key -> AiMetadataField.entries.any { it.key == key } }.toMutableMap()
+
+        filteredMetadata["summary"]?.let {
+            if (it.length > 500) {
+                filteredMetadata["summary"] = it.take(500)
+            }
+        }
+
+        filteredMetadata["tags"]?.let {
+            if (it.length > 100) {
+                filteredMetadata["tags"] = it.take(100)
+            }
+        }
+
+        updateFileMetadata(id, version, filteredMetadata)
     }
 
     /**
@@ -330,7 +383,12 @@ class FileService(
             metadata["filename"]?.let { file.filename = it }
 
             // Filter out fileName from metadata map for the metadata field update
-            val metadataToUpdate = metadata - "filename"
+            var metadataToUpdate = metadata - "filename"
+
+            // Split AI-related metadata keys from the general metadata map
+            val aiMetadataKeys = AiMetadataField.entries.map { it.key }.toSet()
+            val aiMetadataToUpdate = metadataToUpdate.filterKeys { it in aiMetadataKeys }
+            metadataToUpdate = metadataToUpdate - aiMetadataKeys
 
             log.debug("updating file metadata: {}, for file {}", metadataToUpdate.toString(), id)
 
@@ -339,6 +397,12 @@ class FileService(
             val currentMetadata = file.metadata?.toMutableMap() ?: mutableMapOf()
             currentMetadata.putAll(metadataToUpdate)
             file.metadata = currentMetadata
+
+            if (aiMetadataToUpdate.isNotEmpty()) {
+                val currentAiMetadata = file.aiMetadata?.toMutableMap() ?: mutableMapOf()
+                currentAiMetadata.putAll(aiMetadataToUpdate)
+                file.aiMetadata = currentAiMetadata
+            }
         } finally {
             scope.close()
             span.end()
@@ -373,7 +437,7 @@ class FileService(
         // Delete all file shares first to avoid foreign key constraint violation
         log.debug("Deleting all shares for file {}", id)
         fileShareRepository.deleteByFile_Uuid(id)
-        
+
         fileRepository.deleteById(id)
         storageService.deleteAllVersions(id.toString())
 
@@ -381,7 +445,7 @@ class FileService(
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff','ROLE_ai_worker')")
-    override fun downloadFile(id: UUID,  version: Long?): DownloadDTO {
+    override fun downloadFile(id: UUID, version: Long?): DownloadDTO {
         log.debug("Download the resource {}", id)
 
         // AI service accounts (ROLE_ai_worker) are not registered in UserDetailService,
@@ -899,7 +963,10 @@ class FileService(
 
         // Check if version is available
         if (fileVersion.status != FileStatus.AVAILABLE) {
-            throw ResponseStatusException(HttpStatus.CONFLICT, "File version is not available for download (status: ${fileVersion.status})")
+            throw ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "File version is not available for download (status: ${fileVersion.status})"
+            )
         }
 
         // Download from storage - getObject returns ByteArray

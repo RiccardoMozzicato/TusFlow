@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import java.util.UUID
 
 interface JobRepository : JpaRepository<Job, UUID>, JpaSpecificationExecutor<Job> {
-
+    fun findFirstByFileidAndVersionOrderByJobidDesc(fileId: UUID, version: Long): Job?
 }

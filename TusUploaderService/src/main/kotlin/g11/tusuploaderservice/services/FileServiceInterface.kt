@@ -27,6 +27,7 @@ interface FileServiceInterface {
     fun getFileMetadata(id: UUID): FileDTO
     fun getFileGeneratedMetadata(id: UUID, version: Long?): MetadataAIDTO
     fun updateFileMetadataByUser(id: UUID,version:Long?, metadata: Map<String, String>)
+    fun updateGeneratedMetadataByUser(id: UUID, version: Long?, metadata: Map<String, String>)
     fun updateFileMetadata(id: UUID, version: Long?, metadata: Map<String, String>)
     fun deleteFile(id: UUID)
     fun downloadFile(id: UUID, version: Long? = null): DownloadDTO

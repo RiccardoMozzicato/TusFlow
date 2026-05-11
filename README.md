@@ -1280,7 +1280,7 @@ Create a `.env` file in the project root:
 ```bash
 # Groq AI Configuration
 GROQ_API_KEY=your-groq-api-key-here
-GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_BASE_URL=https://api.groq.com/openai
 GROQ_MODEL=llama-3.1-8b-instant
 
 # AI Model Configuration

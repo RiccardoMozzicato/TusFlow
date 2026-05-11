@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Spinner, Alert, Badge, ListGroup } from 'react-bootstrap';
-import { getFileGeneratedMetadata } from '../services/fileApi';
-import type { MetadataAIDTO } from '../services/fileApi';
+import { Modal, Button, Spinner, Alert, Badge, Form } from 'react-bootstrap';
+import { updateGeneratedMetadata, streamFileGeneratedMetadata } from '../services/fileApi';
+import type { MetadataAIDTO, SensitivityLevel } from '../services/fileApi';
 
 interface MetadataAIModalProps {
   show: boolean;
@@ -21,98 +21,126 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
   const [metadata, setMetadata] = useState<MetadataAIDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string>('idle');
+  const eventSourceRef = React.useRef<EventSource | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [editSummary, setEditSummary] = useState('');
+  const [editTags, setEditTags] = useState('');
+  const [editSensitivity, setEditSensitivity] = useState<SensitivityLevel | ''>('');
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (show) {
       // Create new AbortController for this modal session
       abortControllerRef.current = new AbortController();
-      loadMetadata(abortControllerRef.current.signal);
+      startMetadataStream(abortControllerRef.current.signal);
     }
     
-    // Cleanup: abort ongoing requests when modal closes
+    // Cleanup: close SSE connection when modal closes
     return () => {
+      if (eventSourceRef.current) {
+        console.log('Closing SSE connection');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
       if (abortControllerRef.current) {
-        console.log('Aborting AI metadata polling requests');
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
     };
   }, [show, fileId, version]);
 
-  const loadMetadata = async (signal: AbortSignal) => {
-    const maxRetries = 5;
-    let attempt = 0;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      while (attempt < maxRetries) {
-        // Check if request was aborted
-        if (signal.aborted) {
-          console.log('AI metadata polling aborted by user');
-          return;
-        }
-        
-        attempt++;
-        console.log(`AI metadata fetch attempt ${attempt}/${maxRetries}`);
-        
-        const data = await getFileGeneratedMetadata(fileId, version);
-        console.log('AI Metadata retrieved from server:', data);
-        console.log('Tags type:', typeof data.tags, 'Is array:', Array.isArray(data.tags));
-        console.log('Key Entities type:', typeof data.keyEntities, 'Is array:', Array.isArray(data.keyEntities));
-        console.log('Topics type:', typeof data.topics, 'Is array:', Array.isArray(data.topics));
-        
-        // Check if data is still being processed (null or "Failed" indicates processing/failure)
-        if (data.tags !== null && data.summary !== null && 
-            data.summary !== 'Failed to analyze' && data.tags !== 'Failed') {
-          // Success - data is ready
-          console.log(`AI metadata ready on attempt ${attempt}`);
-          setMetadata(data);
-          setLoading(false);
-          return;
-        }
-        
-        // Data still processing, retry with exponential backoff
-        if (attempt < maxRetries) {
-          const delayMs = Math.min(1000 * attempt, 5000); // 1s, 2s, 3s, 4s, 5s max
-          console.log(`AI still processing, retrying in ${delayMs}ms...`);
-          setMetadata(data); // Show processing state
-          
-          // Wait with ability to abort
-          await new Promise((resolve, reject) => {
-            const timeout = setTimeout(resolve, delayMs);
-            signal.addEventListener('abort', () => {
-              clearTimeout(timeout);
-              reject(new DOMException('Aborted', 'AbortError'));
-            });
-          });
-        } else {
-          // Max retries reached, check if data is still null
-          console.log('Max retries reached, showing current state');
-          if (data.tags === null || data.summary === null) {
-            // AI processing failed or timed out
-            setError('AI analysis is taking longer than expected. The file may be too large or complex. Please try again later.');
-          }
-          setMetadata(data);
-        }
-      }
-    } catch (err) {
-      // Don't show error if it was just aborted by user
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        console.log('AI metadata fetch aborted');
-        return;
-      }
-      console.error('Error loading AI metadata:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load AI-generated metadata');
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (metadata && !formDirty) {
+      setEditSummary(metadata.summary ?? '');
+      const tagsValue = Array.isArray(metadata.tags)
+        ? metadata.tags.join(', ')
+        : metadata.tags ?? '';
+      setEditTags(tagsValue);
+      setEditSensitivity((metadata.sensitivity ?? '') as SensitivityLevel | '');
+    }
+  }, [metadata, formDirty]);
+
+  const startMetadataStream = (signal: AbortSignal) => {
+    console.log('Starting metadata stream via SSE');
+    setLoading(true);
+    setError(null);
+    setProcessingStatus('connecting');
+
+    // Try SSE first
+    const eventSource = streamFileGeneratedMetadata(
+      fileId,
+      version,
+      handleSSEUpdate,
+      handleSSEError,
+      signal
+    );
+
+    if (eventSource) {
+      eventSourceRef.current = eventSource;
     }
   };
 
+  const handleSSEUpdate = (data: any) => {
+    console.log('SSE Update received:', data);
+
+    switch (data.status) {
+      case 'completed':
+        console.log('Metadata received via SSE');
+        setMetadata(data.data);
+        setProcessingStatus('completed');
+        setLoading(false);
+        break;
+
+      case 'processing':
+        setProcessingStatus(`processing (attempt ${data.attempt})`);
+        break;
+
+      case 'waiting':
+        setProcessingStatus('waiting');
+        break;
+
+      case 'failed':
+        setError('AI analysis failed: ' + (data.error || 'Unknown error'));
+        setProcessingStatus('failed');
+        setLoading(false);
+        break;
+
+      case 'unsupported':
+        setError('File type not supported: ' + (data.error || 'This file format cannot be analyzed'));
+        setProcessingStatus('unsupported');
+        setLoading(false);
+        break;
+
+      case 'timeout':
+        setError(data.error || 'AI analysis is taking longer than expected. The file may be too large or complex. Please try again later.');
+        setProcessingStatus('timeout');
+        setLoading(false);
+        break;
+
+      case 'error':
+        setError(data.error || 'An error occurred during AI analysis');
+        setProcessingStatus('error');
+        setLoading(false);
+        break;
+    }
+  };
+
+  const handleSSEError = (errorMessage: string) => {
+    console.error('SSE Error:', errorMessage);
+    setError(errorMessage);
+    setProcessingStatus('error');
+    setLoading(false);
+  };
+
   const handleClose = () => {
-    // Abort ongoing requests
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -120,7 +148,54 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
     setMetadata(null);
     setError(null);
     setLoading(false);
+    setProcessingStatus('idle');
+    setSaveError(null);
+    setSaveSuccess(null);
+    setSaving(false);
+    setFormDirty(false);
+    setEditSummary('');
+    setEditTags('');
+    setEditSensitivity('');
     onHide();
+  };
+
+  const handleSaveMetadata = async () => {
+    if (!fileId) return;
+
+    if (!editSensitivity) {
+      setSaveError('Please choose a sensitivity level.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setSaveError(null);
+      setSaveSuccess(null);
+
+      await updateGeneratedMetadata(
+        fileId,
+        {
+          summary: editSummary.trim(),
+          tags: editTags.trim(),
+          sensitivity: editSensitivity,
+        },
+        version
+      );
+
+      setMetadata((prev) => ({
+        ...(prev ?? {}),
+        summary: editSummary.trim(),
+        tags: editTags.trim(),
+        sensitivity: editSensitivity,
+      }));
+      setFormDirty(false);
+      setSaveSuccess('AI metadata updated successfully.');
+    } catch (err) {
+      console.error('Error updating AI metadata:', err);
+      setSaveError(err instanceof Error ? err.message : 'Failed to update AI metadata');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -164,12 +239,13 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
               </div>
             </div>
           </Alert>
-        ) : metadata && (metadata.tags === null || metadata.summary === null || loading) ? (
+        ) : loading || !metadata ? (
           <div className="text-center py-5">
             <Spinner animation="border" role="status" variant="primary">
               <span className="visually-hidden">AI processing...</span>
             </Spinner>
             <p className="mt-3">🤖 AI is analyzing the file...</p>
+            <p className="text-muted small">Status: {processingStatus}</p>
             <p className="text-muted small">This may take a few moments. Please wait...</p>
           </div>
         ) : metadata ? (
@@ -217,10 +293,10 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
                 <h6>🔒 Sensitivity Level</h6>
                 <Badge 
                   bg={
-                    metadata.sensitivity === 'HIGH' ? 'danger' :
-                    metadata.sensitivity === 'MEDIUM' ? 'warning' :
-                    metadata.sensitivity === 'PUBLIC' ? 'info' :
-                    'success'
+                    metadata.sensitivity === 'HIGHLY_CONFIDENTIAL' ? 'danger' :
+                    metadata.sensitivity === 'CONFIDENTIAL' ? 'warning' :
+                    metadata.sensitivity === 'INTERNAL' ? 'secondary' :
+                    'info'
                   }
                 >
                   {metadata.sensitivity}
@@ -228,92 +304,87 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
               </div>
             )}
 
-            {/* Category */}
-            {metadata.category && (
-              <div className="mb-3">
-                <h6>📂 Category</h6>
-                <Badge bg="secondary">{metadata.category}</Badge>
-              </div>
+            <hr />
+
+            <h6 className="mb-3">✏️ Edit AI Metadata</h6>
+            {saveError && (
+              <Alert variant="danger" onClose={() => setSaveError(null)} dismissible>
+                {saveError}
+              </Alert>
+            )}
+            {saveSuccess && (
+              <Alert variant="success" onClose={() => setSaveSuccess(null)} dismissible>
+                {saveSuccess}
+              </Alert>
             )}
 
-            {/* Language */}
-            {metadata.language && (
-              <div className="mb-3">
-                <h6>🌐 Language</h6>
-                <Badge bg="info">{metadata.language}</Badge>
-              </div>
-            )}
+            <Form.Group className="mb-3">
+              <Form.Label>Summary <small className="text-muted">(max 500 characters)</small></Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                maxLength={500}
+                value={editSummary}
+                onChange={(e) => {
+                  setEditSummary(e.target.value);
+                  setFormDirty(true);
+                }}
+                disabled={saving}
+              />
+            </Form.Group>
 
-            {/* Key Entities */}
-            {metadata.keyEntities && Array.isArray(metadata.keyEntities) && metadata.keyEntities.length > 0 && (
-              <div className="mb-3">
-                <h6>🎯 Key Entities</h6>
-                <ListGroup variant="flush">
-                  {metadata.keyEntities.map((entity, index) => (
-                    <ListGroup.Item key={index}>{entity}</ListGroup.Item>
-                  ))}
-                </ListGroup>
-              </div>
-            )}
+            <Form.Group className="mb-3">
+              <Form.Label>Tags (comma-separated) <small className="text-muted">(max 100 characters)</small></Form.Label>
+              <Form.Control
+                type="text"
+                maxLength={100}
+                value={editTags}
+                onChange={(e) => {
+                  setEditTags(e.target.value);
+                  setFormDirty(true);
+                }}
+                disabled={saving}
+              />
+            </Form.Group>
 
-            {/* Topics */}
-            {metadata.topics && Array.isArray(metadata.topics) && metadata.topics.length > 0 && (
-              <div className="mb-3">
-                <h6>💡 Topics</h6>
-                <div className="d-flex flex-wrap gap-2">
-                  {metadata.topics.map((topic, index) => (
-                    <Badge key={index} bg="info" className="text-dark">{topic}</Badge>
-                  ))}
-                </div>
-              </div>
-            )}
+            <Form.Group className="mb-3">
+              <Form.Label>Sensitivity</Form.Label>
+              <Form.Select
+                value={editSensitivity}
+                onChange={(e) => {
+                  setEditSensitivity(e.target.value as SensitivityLevel);
+                  setFormDirty(true);
+                }}
+                disabled={saving}
+              >
+                <option value="" disabled>
+                  Select a level
+                </option>
+                <option value="PUBLIC">PUBLIC</option>
+                <option value="INTERNAL">INTERNAL</option>
+                <option value="CONFIDENTIAL">CONFIDENTIAL</option>
+                <option value="HIGHLY_CONFIDENTIAL">HIGHLY_CONFIDENTIAL</option>
+              </Form.Select>
+            </Form.Group>
 
-            {/* Sentiment */}
-            {metadata.sentiment && (
-              <div className="mb-3">
-                <h6>😊 Sentiment</h6>
-                <Badge 
-                  bg={
-                    metadata.sentiment === 'POSITIVE' ? 'success' :
-                    metadata.sentiment === 'NEGATIVE' ? 'danger' :
-                    'secondary'
-                  }
-                >
-                  {metadata.sentiment}
-                </Badge>
-              </div>
-            )}
-
-            {/* Confidence Score */}
-            {metadata.confidenceScore !== undefined && metadata.confidenceScore !== null && (
-              <div className="mb-3">
-                <h6>📊 Confidence Score</h6>
-                <div className="d-flex align-items-center">
-                  <div className="progress flex-grow-1 me-2" style={{ height: '25px' }}>
-                    <div 
-                      className={`progress-bar ${
-                        metadata.confidenceScore >= 0.8 ? 'bg-success' :
-                        metadata.confidenceScore >= 0.5 ? 'bg-warning' :
-                        'bg-danger'
-                      }`}
-                      role="progressbar" 
-                      style={{ width: `${metadata.confidenceScore * 100}%` }}
-                      aria-valuenow={metadata.confidenceScore * 100} 
-                      aria-valuemin={0} 
-                      aria-valuemax={100}
-                    >
-                      {(metadata.confidenceScore * 100).toFixed(1)}%
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <div className="d-grid">
+              <Button
+                variant="primary"
+                onClick={handleSaveMetadata}
+                disabled={saving || !editSensitivity}
+              >
+                {saving ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-2" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save AI Metadata'
+                )}
+              </Button>
+            </div>
           </>
-        ) : (
-          <Alert variant="info">
-            No metadata available for this file.
-          </Alert>
-        )}
+        ) : null}
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={handleClose}>

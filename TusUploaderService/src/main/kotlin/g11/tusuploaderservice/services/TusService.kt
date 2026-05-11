@@ -232,7 +232,7 @@ class TusService(
 
 
         // Detect content type if not provided
-        if(actualUpload.contentType == null) {
+        if(actualUpload.contentType.isNullOrBlank()) {
             actualUpload.contentType = tika.detect(content)
             log.debug("Content type detected: ${actualUpload.contentType}")
         }
