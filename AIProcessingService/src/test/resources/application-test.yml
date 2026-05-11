@@ -31,12 +31,6 @@ keycloak:
   token-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/token
 
 kafka:
-  bootstrap-servers: "localhost:9094"
   consumer:
     auto-offset-reset: earliest
     group-id: "test-group"
-    bootstrap-servers: "localhost:9094"
-  producer:
-    bootstrap-servers: "localhost:9094"
-    key-serializer: org.apache.kafka.common.serialization.StringSerializer
-    value-serializer: org.apache.kafka.common.serialization.StringSerializer

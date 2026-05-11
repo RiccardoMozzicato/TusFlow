@@ -22,7 +22,6 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.kafka.test.context.EmbeddedKafka
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.TestPropertySource
 import org.springframework.web.client.RestClient
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -33,15 +32,8 @@ import java.util.concurrent.TimeUnit
 @EmbeddedKafka(
     partitions = 1,
     topics = ["file-outbox", "file-outbox-dlt"],
-    brokerProperties = ["listeners=PLAINTEXT://localhost:9094", "port=9094"]
+    bootstrapServersProperty = "kafka.bootstrap-servers"
 )
-@TestPropertySource(properties = [
-    "kafka.bootstrap-servers=localhost:9094",
-    "kafka.consumer.bootstrap-servers=localhost:9094",
-    "kafka.consumer.group-id=test-group",
-    "kafka.consumer.auto-offset-reset=earliest",
-    "kafka.producer.bootstrap-servers=localhost:9094"
-])
 class KafkaListenerTest : IntegrationTest() {
 
     @Autowired
@@ -66,16 +58,17 @@ class KafkaListenerTest : IntegrationTest() {
     @MockkBean
     private lateinit var jobStatusService: JobStatusServiceInterface
 
+    @Autowired
+    private lateinit var embeddedKafka: org.springframework.kafka.test.EmbeddedKafkaBroker
+
     private lateinit var producer: KafkaProducer<String, String>
 
     @BeforeEach
     fun setup() {
-        // Pulisco il database prima di ogni test
         jobRepository.deleteAll()
 
-        // Setup Kafka producer
         val producerProps = mapOf(
-            "bootstrap.servers" to "localhost:9094",
+            "bootstrap.servers" to embeddedKafka.brokersAsString,
             "key.serializer" to StringSerializer::class.java.name,
             "value.serializer" to StringSerializer::class.java.name,
             "acks" to "all",
@@ -83,7 +76,7 @@ class KafkaListenerTest : IntegrationTest() {
         )
         producer = KafkaProducer(producerProps)
 
-        println("✓ Kafka producer configured for localhost:9094")
+        println("✓ Kafka producer configured for ${embeddedKafka.brokersAsString}")
 
         // Setup mocks per le dipendenze esterne
         setupMocks()
