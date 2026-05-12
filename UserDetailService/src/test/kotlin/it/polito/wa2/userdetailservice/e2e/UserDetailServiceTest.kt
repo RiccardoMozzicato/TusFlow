@@ -40,7 +40,7 @@ class UserDetailServiceTest : IntegrationTest() {
     @Autowired private lateinit var restTemplate: TestRestTemplate
     @Autowired private lateinit var dataSource: DataSource
     @Autowired private lateinit var jdbcTemplate: JdbcTemplate
-    @Autowired private lateinit var keycloak: Keycloak
+    @Autowired private lateinit var keycloakAdminClient: Keycloak
 
     @BeforeEach
     fun setupDB() {
@@ -51,7 +51,7 @@ class UserDetailServiceTest : IntegrationTest() {
     }
 
     private fun getKeycloakAccessToken(userRole: UserRole): String {
-        val tokenUrl = "http://localhost:9090/realms/file-management/protocol/openid-connect/token"
+        val tokenUrl = "${IntegrationTest.keycloakContainer.authServerUrl.trimEnd('/')}/realms/file-management/protocol/openid-connect/token"
 
         val credentials = when (userRole) {
             UserRole.ROLE_admin -> mapOf("username" to "riccardo", "password" to "password")
@@ -320,7 +320,7 @@ class UserDetailServiceTest : IntegrationTest() {
         assertEquals(0, userExists)
 
         // Verify Keycloak was called
-        verify(atLeast = 1) { keycloak.realm("file-management") }
+        verify(atLeast = 1) { keycloakAdminClient.realm("file-management") }
     }
 
     @Test
