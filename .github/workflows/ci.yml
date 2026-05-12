@@ -48,6 +48,9 @@ jobs:
         working-directory: ${{ matrix.service }}
         run: ./gradlew test
         continue-on-error: true  # ← key fix
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+          DOCKER_HOST: "unix:///var/run/docker.sock"
 
       - name: Publish test results
         if: always()

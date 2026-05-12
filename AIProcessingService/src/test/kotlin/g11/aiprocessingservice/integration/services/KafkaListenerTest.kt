@@ -16,6 +16,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import g11.aiprocessingservice.services.EmbeddingGenerator
+import g11.aiprocessingservice.services.EmbeddingProcessor
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -58,6 +60,12 @@ class KafkaListenerTest : IntegrationTest() {
 
     @MockkBean
     private lateinit var jobStatusService: JobStatusServiceInterface
+
+    @MockkBean
+    private lateinit var embeddingProcessor: EmbeddingProcessor
+
+    @MockkBean
+    private lateinit var embeddingGenerator: EmbeddingGenerator
 
     @Autowired
     private lateinit var embeddedKafka: org.springframework.kafka.test.EmbeddedKafkaBroker
