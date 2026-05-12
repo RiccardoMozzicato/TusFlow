@@ -10,6 +10,9 @@ jobs:
   build:
     name: Build & Test (${{ matrix.service }})
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
 
     strategy:
       fail-fast: false
@@ -43,6 +46,7 @@ jobs:
       - name: Test
         working-directory: ${{ matrix.service }}
         run: ./gradlew test
+        continue-on-error: true  # ← key fix
 
       - name: Publish test results
         if: always()
@@ -51,3 +55,10 @@ jobs:
           report_paths: "${{ matrix.service }}/build/test-results/**/*.xml"
           check_name: "Test Results (${{ matrix.service }})"
           fail_on_failure: true
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ matrix.service }}
+          path: ${{ matrix.service }}/build/reports/tests/
