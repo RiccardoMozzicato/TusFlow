@@ -2,6 +2,7 @@ package g11.tusuploaderservice.integration.services
 
 import com.ninjasquad.springmockk.MockkBean
 import g11.tusuploaderservice.services.FileService
+import g11.tusuploaderservice.services.StorageService
 import io.mockk.every
 import io.mockk.verify
 import io.mockk.clearMocks
@@ -49,6 +50,9 @@ import kotlin.test.Test
 class KafkaConsumerIntegrationTest {
     @MockkBean
     private lateinit var fileService: FileService
+
+    @MockkBean
+    private lateinit var storageService: StorageService
 
     private lateinit var producer: KafkaProducer<String, String>
 

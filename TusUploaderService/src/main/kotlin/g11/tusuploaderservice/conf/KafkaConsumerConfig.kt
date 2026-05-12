@@ -18,7 +18,8 @@ import org.springframework.kafka.core.ProducerFactory
 @EnableKafka
 @Configuration
 class KafkaConsumerConfig(
-    @Value("\${kafka.bootstrap-servers}") private val bootstrapAddress: String
+    @Value("\${kafka.bootstrap-servers}") private val bootstrapAddress: String,
+    @Value("\${spring.kafka.listener.auto-startup:true}") private val autoStartup: Boolean
 ) {
 
     @Bean
@@ -37,6 +38,7 @@ class KafkaConsumerConfig(
         val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
         factory.consumerFactory = consumerFactory()
         factory.containerProperties.isObservationEnabled = true
+        factory.setAutoStartup(autoStartup)
         return factory
     }
 
