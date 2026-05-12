@@ -51,13 +51,12 @@ class UserDetailServiceTest : IntegrationTest() {
     }
 
     private fun getKeycloakAccessToken(userRole: UserRole): String {
-        val tokenUrl = "${IntegrationTest.keycloakContainer.authServerUrl.trimEnd('/')}/realms/file-management/protocol/openid-connect/token"
+        val keycloakBaseUrl = IntegrationTest.keycloakContainer.authServerUrl.trimEnd('/')
+        val tokenUrl = "$keycloakBaseUrl/realms/${IntegrationTest.realmName}/protocol/openid-connect/token"
 
-        val credentials = when (userRole) {
-            UserRole.ROLE_admin -> mapOf("username" to "riccardo", "password" to "password")
-            UserRole.ROLE_manager -> mapOf("username" to "samuele", "password" to "SamueleScapellato")
-            else -> mapOf("username" to "test_staff", "password" to "SamueleScapellato")
-        }
+        val roleName = userRole.name.removePrefix("ROLE_")
+        val realmUser = IntegrationTest.usersByRole[roleName]
+            ?: error("No user found in realm for role '$roleName'")
 
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_FORM_URLENCODED
@@ -65,10 +64,10 @@ class UserDetailServiceTest : IntegrationTest() {
 
         val body = LinkedMultiValueMap<String, String>().apply {
             add("grant_type", "password")
-            add("client_id", "gateway-client")
-            add("client_secret", "UDeZXlu98uuR15s27yHyGyWOvNj7h2VU")
-            add("username", credentials["username"])
-            add("password", credentials["password"])
+            add("client_id", IntegrationTest.gatewayClientId)
+            add("client_secret", IntegrationTest.gatewayClientSecret)
+            add("username", realmUser.username)
+            add("password", realmUser.password)
         }
 
         val response = RestTemplate().postForEntity(
