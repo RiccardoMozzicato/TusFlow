@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit
 @ActiveProfiles("test")
 @EmbeddedKafka(
     partitions = 1,
-    topics = ["file-outbox", "file-outbox-dlt"],
+    topics = ["file-outbox", "file-outbox-dlt", "file-analyzed", "embeddings-batch"],
     bootstrapServersProperty = "kafka.bootstrap-servers"
 )
 @ExtendWith(OutputCaptureExtension::class)

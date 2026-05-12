@@ -11,6 +11,7 @@ jobs:
     name: Build & Test (${{ matrix.service }})
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       checks: write
       pull-requests: write
 
