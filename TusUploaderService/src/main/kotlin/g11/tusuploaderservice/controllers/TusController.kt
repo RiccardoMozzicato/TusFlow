@@ -111,12 +111,11 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         res.setHeader("Access-Control-Expose-Headers", tus.exposeHeaders?.joinToString(separator = ","))
 
     }
-    //region Swagger Documentation
-    // @ApiResponse(
+    //region Swagger Do   @ApiResponse(
     //       responseCode = "404",
     //       description = "File not found. Returned when the specified file UUID does not exist.",
     //       content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
-    //   )
+    //   )cumentation
     @Operation(
         tags = [ "File Handling" ],
         summary = "Create a new upload",

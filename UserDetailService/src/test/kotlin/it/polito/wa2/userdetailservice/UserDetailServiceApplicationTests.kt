@@ -1,10 +1,10 @@
 package it.polito.wa2.userdetailservice
 
 import org.junit.jupiter.api.Test
-import org.springframework.test.context.ActiveProfiles
+import org.springframework.boot.test.context.SpringBootTest
 
-@ActiveProfiles("test")
-class UserDetailServiceApplicationTests : IntegrationTest() {
+@SpringBootTest
+class UserDetailServiceApplicationTests {
 
     @Test
     fun contextLoads() {

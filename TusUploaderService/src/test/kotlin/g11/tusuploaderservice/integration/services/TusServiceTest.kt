@@ -53,9 +53,6 @@ class TusServiceTest : IntegrationTest() {
     @MockitoBean
     private lateinit var fileService: FileService
 
-    @MockitoBean
-    private lateinit var kafkaTemplate: org.springframework.kafka.core.KafkaTemplate<String, String>
-
     private fun setupJwtAuthentication(
         userId: UUID = UUID.randomUUID(),
         roles: List<String> = listOf("admin"),

@@ -3,6 +3,8 @@ package g11.tusuploaderservice.services
 import com.fasterxml.jackson.databind.ObjectMapper
 import g11.tusuploaderservice.dto.MetadataAIDTO
 import g11.tusuploaderservice.entities.FileStatus
+import io.micrometer.tracing.Tracer
+import io.micrometer.tracing.propagation.Propagator
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Service
@@ -13,6 +15,8 @@ class KafkaConsumer(
     private val fileService: FileServiceInterface,
     private val metadataSSEService: MetadataSSEService,
     private val objectMapper: ObjectMapper,
+    private val tracer: Tracer,
+    private val propagator: Propagator,
 ): KafkaConsumerInterface {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -23,6 +27,16 @@ class KafkaConsumer(
     override fun consumeFileUploadCompleted(message: String) {
         log.info("Received Kafka message: {}", message)
 
+        // Resume the upstream trace carried in the Debezium outbox payload body.
+        val traceparent = extractTraceparentFromPayload(message)
+        val span = if (traceparent != null) {
+            propagator.extract(mapOf("traceparent" to traceparent)) { map, key -> map[key] }
+                .name("kafka receive job-outbox")
+                .start()
+        } else {
+            tracer.nextSpan().name("kafka receive job-outbox").start()
+        }
+        val scope = tracer.withSpan(span)
         try {
             // Parse the message
             val jsonNode = objectMapper.readTree(message)
@@ -99,8 +113,22 @@ class KafkaConsumer(
         } catch (e: Exception) {
             log.error("Error processing Kafka message: {}", message, e)
             throw e
+        } finally {
+            scope.close()
+            span.end()
         }
     }
+
+    /**
+     * Extracts the W3C traceparent from the Debezium outbox message body.
+     * Debezium wraps the DB payload as an escaped JSON string in the "payload" field.
+     */
+    private fun extractTraceparentFromPayload(message: String): String? = try {
+        val root = objectMapper.readTree(message)
+        root["payload"]?.asText()?.let { payloadStr ->
+            objectMapper.readTree(payloadStr)["traceparent"]?.asText()?.takeIf { it.isNotBlank() }
+        } ?: root["traceparent"]?.asText()?.takeIf { it.isNotBlank() }
+    } catch (_: Exception) { null }
 
     private fun Map<String, String>.toMetadataAIDTO(): MetadataAIDTO {
         return MetadataAIDTO(

@@ -2,9 +2,14 @@ package g11.aiprocessingservice.services
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import g11.aiprocessingservice.dto.FileAnalyzedEvent
+import io.micrometer.tracing.Tracer
+import io.micrometer.tracing.propagation.Propagator
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.header.internals.RecordHeaders
 import g11.aiprocessingservice.dto.JobDTO
 import g11.aiprocessingservice.dto.MetadataDTO
 import g11.aiprocessingservice.dto.jobStatus
+import g11.aiprocessingservice.entities.Job
 import g11.aiprocessingservice.exceptions.AIAnalysisUnsupportedException
 import g11.aiprocessingservice.repositories.JobRepository
 import org.apache.kafka.common.errors.ResourceNotFoundException
@@ -21,6 +26,8 @@ import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.support.Acknowledgment
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 import org.springframework.web.server.ResponseStatusException
@@ -38,74 +45,172 @@ class MetadataProcessor(
     @Qualifier("imageChatClient") private val imageChatClient: ChatClient,
     private val jobStatusService: JobStatusServiceInterface,
     private val kafkaTemplate: KafkaTemplate<String, String>,
+    private val tracer: Tracer,
+    private val propagator: Propagator,
     @Value("classpath:prompts/file-analysis-prompt.st") private val promptTemplate: Resource,
     @Value("\${ai.document.max-content-chars:15000}") private val maxContentChars: Int,
     @Value("\${ai.document.beginning-percentage:70}") private val beginningPercentage: Int
 ) : KafkaInterface {
-    private val log = LoggerFactory.getLogger(MetadataProcessor::class.java)
+    private val log = LoggerFactory.getLogger(g11.aiprocessingservice.services.MetadataProcessor::class.java)
     private val objectMapper = jacksonObjectMapper()
 
-    @KafkaListener(id = "Ai-service-consumer", topics = ["file-outbox"])
+    @KafkaListener(id = "Ai-service-consumer", topics = ["file-outbox"], containerFactory = "debeziumKafkaListenerContainerFactory")
     override fun onMessage(message: String, acknowledgment: Acknowledgment){
         log.debug("This is the message from Kafka \n {}" ,message)
 
-        // Filter by event_type first to avoid processing irrelevant events
+        // Resume the upstream trace carried in the Debezium outbox payload body.
+        // The RecordInterceptor approach fires too late (after Spring Kafka creates the
+        // observation from the original record headers), so we do it manually here.
+        val traceparent = extractTraceparentFromPayload(message)
+        val span = if (traceparent != null) {
+            propagator.extract(mapOf("traceparent" to traceparent)) { map, key -> map[key] }
+                .name("kafka receive file-outbox")
+                .start()
+        } else {
+            tracer.nextSpan().name("kafka receive file-outbox").start()
+        }
+        val scope = tracer.withSpan(span)
         try {
-            val kafkaEvent = objectMapper.readTree(message)
-            val eventType = kafkaEvent.get("event_type")?.asText()
-            if (eventType != "FILE_INSERTED") {
-                log.debug("MetadataProcessor: Ignoring event type: {}", eventType)
+            // Prima filtra per event_type per evitare di processare eventi non pertinenti
+            try {
+                val mapper = jacksonObjectMapper()
+                val kafkaEvent = mapper.readTree(message)
+                val eventType = kafkaEvent.get("event_type")?.asText()
+
+                if (eventType != "FILE_INSERTED") {
+                    log.debug("MetadataProcessor: Ignoring event type: {}", eventType)
+                    acknowledgment.acknowledge()
+                    return
+                }
+            } catch (e: Exception) {
+                log.error("Failed to parse event_type from Kafka message: {}", e.message, e)
+            }
+
+            // Parse JSON message
+            val job = try {
+                readJson(message)
+            } catch (e: Exception) {
+                log.error("Failed to parse Kafka message: {}", e.message, e)
+                throw e // Cannot proceed without valid message
+            }
+
+            log.debug("Converted to json: {}", job.toString())
+
+            // Create or check if job exists
+            val jobId = try {
+                createJobIfNotExists(job)
+            } catch (e: Exception) {
+                log.error("Failed to create/check job for file {}: {}", job.fileId, e.message, e)
+                throw e // Cannot proceed without job record
+            }
+
+            if(jobId == null){
+                log.info("Skipping job for file {} - already processed or in progress", job.fileId)
+                // Job already exists and is not PENDING - acknowledge the message to commit offset
                 acknowledgment.acknowledge()
                 return
             }
-        } catch (e: Exception) {
-            log.error("Failed to parse event_type from Kafka message: {}", e.message, e)
-        }
 
-        val job = try {
-            readJson(message)
-        } catch (e: Exception) {
-            log.error("Failed to parse Kafka message: {}", e.message, e)
-            throw e
-        }
-
-        log.debug("Converted to json: {}", job.toString())
-
-        val jobId = try {
-            jobStatusService.createJobIfNotExists(job)
-        } catch (e: Exception) {
-            log.error("Failed to create/check job for file {}: {}", job.fileId, e.message, e)
-            throw e
-        }
-
-        if (jobId == null) {
-            log.info("Skipping job for file {} - already processed or in progress", job.fileId)
+            // Job created successfully - acknowledge the message to commit the offset
+            // This ensures the message is removed from files_outbox_events after job creation
+            log.info("Job {} created successfully - acknowledging Kafka message", jobId)
             acknowledgment.acknowledge()
-            return
+
+            // Process the job
+            try {
+                val enhancedMeta = processJob(job, jobId)
+
+                // Publish event on file-analyzed with FileAnalyzedEvent DTO
+                if (enhancedMeta != null) {
+                    publishFileAnalyzedEvent(job, jobId, enhancedMeta)
+                } else {
+                    log.info("Skipping file-analyzed event for job {} - file analysis not supported", jobId)
+                }
+
+            } catch (e: Exception) {
+                log.error("Failed to process job {}: {}", jobId, e.message, e)
+
+                // Check if this is a retry by looking at the job status
+                val jobEntity = jobRepository.findById(jobId)
+                val isRetry = jobEntity.isPresent && jobEntity.get().status == jobStatus.FAILED
+
+                if (isRetry) {
+                    // This is a retry and it failed again - mark as FAILED (will go to DLT)
+                    log.error("Job {} RETRY FAILED - will be sent to DLT", jobId)
+                    jobStatusService.markJobAsFailed(jobId, job, "Retry failed: ${e.message}")
+                    // Rethrow to send to DLT
+                    throw e
+                } else {
+                    // First failure - mark as FAILED and trigger retry
+                    log.warn("Job {} FIRST FAILURE - marking as FAILED and will retry after 5 minutes", jobId)
+                    jobStatusService.markJobAsFailed(jobId, job, e.message ?: "Unknown error")
+                    // Rethrow to trigger Kafka retry mechanism (will retry after 5 minutes)
+                    throw e
+                }
+            }
+        } finally {
+            scope.close()
+            span.end()
+        }
+    }
+
+    /**
+     * Extracts the W3C traceparent from the Debezium outbox message body.
+     * Debezium wraps the DB payload as an escaped JSON string in the "payload" field.
+     */
+    private fun extractTraceparentFromPayload(message: String): String? = try {
+        val root = objectMapper.readTree(message)
+        root["payload"]?.asText()?.let { payloadStr ->
+            objectMapper.readTree(payloadStr)["traceparent"]?.asText()?.takeIf { it.isNotBlank() }
+        } ?: root["traceparent"]?.asText()?.takeIf { it.isNotBlank() }
+    } catch (_: Exception) { null }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun createJobIfNotExists(job: JobDTO): UUID? {
+        // Use the event ID from Kafka as the job ID
+        val jobId = job.id
+
+        // Check if job exists
+        log.debug("Checking if the job already exists for file: {}, version: {}", job.fileId, job.version)
+        val existingJob = jobRepository.findById(jobId)
+        log.debug(existingJob.toString())
+
+        if (existingJob.isPresent) {
+            log.debug("Job already exists")
+            val jobEntity = existingJob.get()
+            return if (jobEntity.status == jobStatus.PENDING) {
+                log.warn("Resuming stuck job: {}", jobEntity.jobid)
+                jobId
+            } else {
+                log.info("Job {} already existing and {}. Skipping creation.", jobEntity.jobid, jobEntity.status)
+                null
+            }
         }
 
-        log.info("Job {} created successfully - acknowledging Kafka message", jobId)
-        acknowledgment.acknowledge()
+        log.debug("Creating a new job")
+        // Create payload map from JobDTO fields
+        val payloadMap: MutableMap<String, Any> = mutableMapOf(
+            "filename" to job.filename,
+            "contentType" to job.contentType,
+            "ownerUserId" to job.ownerUserId.toString(),
+            "fileVersionId" to job.fileVersionId
+        )
 
-        try {
-            val enhancedMeta = processJob(job, jobId)
-            if (enhancedMeta != null) {
-                publishFileAnalyzedEvent(job, jobId, enhancedMeta)
-            } else {
-                log.info("Skipping file-analyzed event for job {} - file analysis not supported", jobId)
-            }
-        } catch (e: Exception) {
-            log.error("Failed to process job {}: {}", jobId, e.message, e)
-            val isRetry = jobRepository.findById(jobId).orElse(null)?.status == jobStatus.FAILED
-            if (isRetry) {
-                log.error("Job {} RETRY FAILED - will be sent to DLT", jobId)
-                jobStatusService.markJobAsFailed(jobId, job, "Retry failed: ${e.message}")
-            } else {
-                log.warn("Job {} FIRST FAILURE - will retry after 5 minutes", jobId)
-                jobStatusService.markJobAsFailed(jobId, job, e.message ?: "Unknown error")
-            }
-            throw e
+        // Add metadata if present
+        job.metadata?.let {
+            payloadMap["metadata"] = it as Any
         }
+
+        val newJob = Job(
+            jobid = jobId,
+            fileid = job.fileId,
+            version = job.version,
+            type = "FILE_ANALYSIS",  // Default job type for AI processing
+            payload = payloadMap,
+            status = jobStatus.PENDING,
+        )
+        jobRepository.save(newJob)
+        return jobId
     }
 
     fun processJob(job: JobDTO, jobId: UUID): MetadataDTO? {
@@ -204,7 +309,11 @@ class MetadataProcessor(
             )
 
             val eventJson = objectMapper.writeValueAsString(event)
-            kafkaTemplate.send("file-analyzed", job.fileId.toString(), eventJson)
+            val headers = RecordHeaders()
+            tracer.currentSpan()?.context()?.let {
+                headers.add("traceparent", "00-${it.traceId()}-${it.spanId()}-01".toByteArray(Charsets.UTF_8))
+            }
+            kafkaTemplate.send(ProducerRecord("file-analyzed", null, job.fileId.toString(), eventJson, headers))
 
             log.info("Published file-analyzed event for file {} (job {}) to Kafka", job.fileId, jobId)
         } catch (e: Exception) {
@@ -238,16 +347,25 @@ class MetadataProcessor(
         }
     }
 
-    fun readJson(json: String): JobDTO {
-        val kafkaEvent = objectMapper.readTree(json)
+    fun readJson (json: String) : JobDTO{
+        // Parse the Kafka event wrapper
+        val mapper = jacksonObjectMapper()
+        val kafkaEvent = mapper.readTree(json)
+
+        // Extract the id from the Kafka event
         val eventId = kafkaEvent.get("id").asText()
+
+        // Extract the payload field (which contains the actual job data as a JSON string)
         val payloadString = kafkaEvent.get("payload").asText()
 
-        @Suppress("UNCHECKED_CAST")
-        val payloadData = objectMapper.readValue(payloadString, Map::class.java) as MutableMap<String, Any>
+        // Parse the payload into a mutable map
+        val payloadData = mapper.readValue(payloadString, Map::class.java) as MutableMap<String, Any>
+
+        // Add the event ID to the payload data
         payloadData["id"] = eventId
 
-        return objectMapper.convertValue(payloadData, JobDTO::class.java)
+        // Convert back to JSON and parse as JobDTO
+        return mapper.convertValue(payloadData, JobDTO::class.java)
     }
 
     fun analyzeUpload(inputStream: InputStream, client: ChatClient, contentType: String): MetadataDTO {
@@ -364,7 +482,7 @@ class MetadataProcessor(
         val ending = content.takeLast(endChars)
 
         val truncatedBytes = content.length - maxChars
-        val truncationMarker = "\n\n[... CONTENT TRUNCATED - $truncatedBytes characters omitted ...]\n\n"
+        val truncationMarker = "\n\n[... CONTENT TRUNCATED - ${truncatedBytes} characters omitted ...]\n\n"
 
         log.info("Content truncated: original {} chars -> {} chars (removed {} chars)", content.length, maxChars, truncatedBytes)
 

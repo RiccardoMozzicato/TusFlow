@@ -2,7 +2,6 @@ package g11.tusuploaderservice.integration.services
 
 import com.ninjasquad.springmockk.MockkBean
 import g11.tusuploaderservice.services.FileService
-import g11.tusuploaderservice.services.StorageService
 import io.mockk.every
 import io.mockk.verify
 import io.mockk.clearMocks
@@ -11,10 +10,8 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.kafka.test.context.EmbeddedKafka
-
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.TestPropertySource
 import java.util.UUID
@@ -26,12 +23,16 @@ import kotlin.test.Test
 @EmbeddedKafka(
     partitions = 1,
     topics = ["job-outbox"],
-    bootstrapServersProperty = "kafka.bootstrap-servers"
+    brokerProperties = ["listeners=PLAINTEXT://localhost:9094", "port=9094"]
 )
 @TestPropertySource(properties = [
+    "spring.kafka.bootstrap-servers=\${spring.embedded.kafka.brokers}",
+    "spring.kafka.consumer.bootstrap-servers=\${spring.embedded.kafka.brokers}",
     "spring.kafka.consumer.group-id=test-group-tus",
     "spring.kafka.consumer.auto-offset-reset=earliest",
     "spring.kafka.consumer.enable-auto-commit=true",
+    "spring.kafka.producer.bootstrap-servers=\${spring.embedded.kafka.brokers}",
+    "kafka.bootstrap-servers=\${spring.embedded.kafka.brokers}",
     "spring.datasource.url=jdbc:h2:mem:testdb",
     "spring.datasource.driver-class-name=org.h2.Driver",
     "spring.datasource.username=sa",
@@ -49,12 +50,6 @@ class KafkaConsumerIntegrationTest {
     @MockkBean
     private lateinit var fileService: FileService
 
-    @MockkBean
-    private lateinit var storageService: StorageService
-
-    @Value("\${spring.embedded.kafka.brokers}")
-    private lateinit var embeddedKafkaBrokers: String
-
     private lateinit var producer: KafkaProducer<String, String>
 
     @BeforeEach
@@ -65,14 +60,14 @@ class KafkaConsumerIntegrationTest {
 
     fun setupKafka() {
         val producerProps = mapOf(
-            "bootstrap.servers" to embeddedKafkaBrokers,
+            "bootstrap.servers" to "localhost:9094",
             "key.serializer" to StringSerializer::class.java.name,
             "value.serializer" to StringSerializer::class.java.name,
             "acks" to "all",
             "retries" to "3"
         )
         producer = KafkaProducer(producerProps)
-        println("✓ Kafka producer configured for $embeddedKafkaBrokers")
+        println("✓ Kafka producer configured for localhost:9094")
     }
 
     fun setupMocks() {
