@@ -1,0 +1,2 @@
+# Keycloak JWT and datasource properties are injected dynamically by IntegrationTest.Initializer
+# via TestPropertyValues pointing to the Testcontainers instances.

@@ -70,8 +70,6 @@ keycloak:
 
 kafka:
   bootstrap-servers: localhost:9094
-  topic:
-    file-upload:  file-outbox
 
 management:
   tracing:

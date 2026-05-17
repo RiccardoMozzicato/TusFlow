@@ -57,7 +57,9 @@ class KafkaConfig (
      */
     @Bean
     fun kafkaTemplate(): KafkaTemplate<String, String> {
-        return KafkaTemplate(producerFactory())
+        val template = KafkaTemplate(producerFactory())
+        template.setObservationEnabled(true)
+        return template
     }
 
     /**
@@ -150,19 +152,4 @@ class KafkaConfig (
         return factory
     }
 
-    // Factory for Debezium-sourced topics (file-outbox).
-    // Debezium never sets Kafka headers, so isObservationEnabled would create orphan root spans.
-    // Trace propagation is handled manually inside the listener via Propagator.extract().
-    @Bean
-    fun debeziumKafkaListenerContainerFactory(
-        errorHandler: DefaultErrorHandler
-    ): ConcurrentKafkaListenerContainerFactory<String, String> {
-        val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
-        factory.consumerFactory = consumerFactory()
-        factory.containerProperties.ackMode = ContainerProperties.AckMode.MANUAL
-        // Must be explicitly false — Spring Boot auto-config sets it to true on all factories
-        factory.containerProperties.isObservationEnabled = false
-        factory.setCommonErrorHandler(errorHandler)
-        return factory
-    }
 }

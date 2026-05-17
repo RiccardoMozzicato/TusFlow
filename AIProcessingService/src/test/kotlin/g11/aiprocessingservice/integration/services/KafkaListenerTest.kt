@@ -16,6 +16,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import g11.aiprocessingservice.services.EmbeddingGenerator
+import g11.aiprocessingservice.services.EmbeddingProcessor
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -32,16 +34,9 @@ import java.util.concurrent.TimeUnit
 @ActiveProfiles("test")
 @EmbeddedKafka(
     partitions = 1,
-    topics = ["file-outbox", "file-outbox-dlt"],
-    brokerProperties = ["listeners=PLAINTEXT://localhost:9094", "port=9094"]
+    topics = ["file-outbox", "file-outbox-dlt", "file-analyzed", "embeddings-batch"],
+    bootstrapServersProperty = "kafka.bootstrap-servers"
 )
-@TestPropertySource(properties = [
-    "kafka.bootstrap-servers=localhost:9094",
-    "kafka.consumer.bootstrap-servers=localhost:9094",
-    "kafka.consumer.group-id=test-group",
-    "kafka.consumer.auto-offset-reset=earliest",
-    "kafka.producer.bootstrap-servers=localhost:9094"
-])
 class KafkaListenerTest : IntegrationTest() {
 
     @Autowired
@@ -60,19 +55,29 @@ class KafkaListenerTest : IntegrationTest() {
     @MockkBean(name = "pdfAnalysisChatClient")
     private lateinit var pdfAnalysisChatClient: ChatClient
 
+    @MockkBean(name = "imageChatClient")
+    private lateinit var imageChatClient: ChatClient
+
     @MockkBean
     private lateinit var jobStatusService: JobStatusServiceInterface
+
+    @MockkBean
+    private lateinit var embeddingProcessor: EmbeddingProcessor
+
+    @MockkBean
+    private lateinit var embeddingGenerator: EmbeddingGenerator
+
+    @Autowired
+    private lateinit var embeddedKafka: org.springframework.kafka.test.EmbeddedKafkaBroker
 
     private lateinit var producer: KafkaProducer<String, String>
 
     @BeforeEach
     fun setup() {
-        // Pulisco il database prima di ogni test
         jobRepository.deleteAll()
 
-        // Setup Kafka producer
         val producerProps = mapOf(
-            "bootstrap.servers" to "localhost:9094",
+            "bootstrap.servers" to embeddedKafka.brokersAsString,
             "key.serializer" to StringSerializer::class.java.name,
             "value.serializer" to StringSerializer::class.java.name,
             "acks" to "all",
@@ -80,7 +85,7 @@ class KafkaListenerTest : IntegrationTest() {
         )
         producer = KafkaProducer(producerProps)
 
-        println("✓ Kafka producer configured for localhost:9094")
+        println("✓ Kafka producer configured for ${embeddedKafka.brokersAsString}")
 
         // Setup mocks per le dipendenze esterne
         setupMocks()
@@ -106,6 +111,7 @@ class KafkaListenerTest : IntegrationTest() {
         every { fileServiceClient.get() } returns mockRequestHeadersSpec
 
         // Mock per jobStatusService (evita chiamate reali durante i test)
+        every { jobStatusService.createJobIfNotExists(any()) } returns null
         justRun { jobStatusService.markJobAsFailed(any(), any(), any()) }
         justRun { jobStatusService.markJobAsCompleted(any(), any(), any()) }
         justRun { jobStatusService.markJobAsUnsupported(any(), any(), any()) }

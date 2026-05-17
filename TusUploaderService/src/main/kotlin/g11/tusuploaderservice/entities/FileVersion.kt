@@ -57,7 +57,7 @@ open class FileVersion(
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    open var aiMetadata: Map<String, String>?,
+    open var aiMetadata: Map<String, String>? = null,
 
     @Column
     open var checksum: String?,

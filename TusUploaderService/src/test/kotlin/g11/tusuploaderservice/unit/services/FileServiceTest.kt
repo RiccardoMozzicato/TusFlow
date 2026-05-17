@@ -7,7 +7,6 @@ import g11.tusuploaderservice.exceptions.ResourceNotFoundException
 import g11.tusuploaderservice.repositories.FileRepository
 import g11.tusuploaderservice.repositories.FileShareRepository
 import g11.tusuploaderservice.repositories.FileVersionRepository
-import g11.tusuploaderservice.repositories.FilesOutboxEventsRepository
 import g11.tusuploaderservice.repositories.TusRepository
 import g11.tusuploaderservice.services.AuthService
 import g11.tusuploaderservice.services.FileService
@@ -54,7 +53,7 @@ class FileServiceTest {
     lateinit var fileVersionRepository: FileVersionRepository
 
     @MockK(relaxed = true)
-    lateinit var outboxRepository: FilesOutboxEventsRepository
+    lateinit var tracer: io.micrometer.tracing.Tracer
 
     @MockK(relaxed = true)
     lateinit var authService: AuthService

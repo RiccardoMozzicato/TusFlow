@@ -13,11 +13,11 @@ import g11.tusuploaderservice.entities.Upload
 import g11.tusuploaderservice.entities.UploadStatus
 import g11.tusuploaderservice.exceptions.*
 import g11.tusuploaderservice.repositories.FileRepository
-import g11.tusuploaderservice.repositories.FilesOutboxEventsRepository
 import g11.tusuploaderservice.repositories.TusRepository
 import g11.tusuploaderservice.services.FileServiceInterface
 import g11.tusuploaderservice.services.StorageServiceInterface
 import g11.tusuploaderservice.services.TusService
+import io.micrometer.tracing.Tracer
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import io.mockk.junit5.MockKExtension
@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
+import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.test.util.ReflectionTestUtils
 import java.security.MessageDigest
 import java.util.*
@@ -49,7 +50,7 @@ class TusServiceTest {
     lateinit var authService: AuthService
 
     @MockK(relaxed = true)
-    lateinit var outboxRepository: FilesOutboxEventsRepository
+    lateinit var kafkaTemplate: KafkaTemplate<String, String>
 
     lateinit var tusService: TusService
 
@@ -62,7 +63,7 @@ class TusServiceTest {
             storageService = storageService,
             fileService = fileService,
             authService = authService,
-            outboxRepository = outboxRepository,
+            kafkaTemplate = kafkaTemplate,
             fileRepo = fileRepository,
             repo = tusRepository
         )
@@ -398,7 +399,6 @@ class TusServiceTest {
         every { fileRepository.findById(upload.fileId) } returns Optional.empty()
         every { fileService.createFile(any(), any()) } returns file
         every { fileService.createFileVersion(any(), any()) } returns fileVersion
-        every { outboxRepository.save(any()) } returns mockk()
 
         // act
         val result = tusService.appendChunk(uploadDTO, chunk)
@@ -407,7 +407,7 @@ class TusServiceTest {
         assertEquals(100L, result.uploadOffset)
         verify { fileService.createFile(upload.fileId, upload) }
         verify { fileService.createFileVersion(upload, file) }
-        verify { outboxRepository.save(any()) }
+        verify { kafkaTemplate.send(any<String>(), any(), any()) }
     }
 
     @Test
@@ -430,7 +430,6 @@ class TusServiceTest {
         every { storageService.putObject(any()) } returns ""
         every { fileRepository.findById(upload.fileId) } returns Optional.of(file)
         every { fileService.createFileVersion(any(), any()) } returns fileVersion
-        every { outboxRepository.save(any()) } returns mockk()
 
         // act
         val result = tusService.appendChunk(uploadDTO, chunk)
@@ -439,7 +438,7 @@ class TusServiceTest {
         assertEquals(100L, result.uploadOffset)
         verify(exactly = 0) { fileService.createFile(any(), any()) }
         verify { fileService.createFileVersion(upload, file) }
-        verify { outboxRepository.save(any()) }
+        verify { kafkaTemplate.send(any<String>(), any(), any()) }
     }
 
     @Test
