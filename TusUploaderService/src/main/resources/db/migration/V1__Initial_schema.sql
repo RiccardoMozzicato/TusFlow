@@ -62,3 +62,13 @@ CREATE TABLE file_shares
 
 ALTER TABLE file_shares
     ADD CONSTRAINT FK_FILE_SHARES_ON_FILE_UUID FOREIGN KEY (file_uuid) REFERENCES files (uuid);
+
+CREATE TABLE files_outbox_events (
+    id UUID NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    CONSTRAINT pk_files_outbox_events PRIMARY KEY (id)
+    );
+
+CREATE INDEX idx_outbox_created_at ON files_outbox_events(created_at);

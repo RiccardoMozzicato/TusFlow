@@ -1,10 +1,10 @@
 package g11.aiprocessingservice
 
 import org.junit.jupiter.api.Test
-import org.springframework.test.context.ActiveProfiles
+import org.springframework.boot.test.context.SpringBootTest
 
-@ActiveProfiles("test")
-class AiProcessingServiceApplicationTests : IntegrationTest() {
+@SpringBootTest
+class AiProcessingServiceApplicationTests {
 
     @Test
     fun contextLoads() {

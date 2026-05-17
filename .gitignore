@@ -42,6 +42,3 @@ logs/
 *.swo
 *~
 
-test-results/
-.claude
-.ClaudeMD
