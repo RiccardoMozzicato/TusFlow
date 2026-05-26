@@ -119,16 +119,13 @@ class KafkaConsumer(
         }
     }
 
-    /**
-     * Extracts the W3C traceparent from the Debezium outbox message body.
-     * Debezium wraps the DB payload as an escaped JSON string in the "payload" field.
-     */
     private fun extractTraceparentFromPayload(message: String): String? = try {
         val root = objectMapper.readTree(message)
         root["payload"]?.asText()?.let { payloadStr ->
             objectMapper.readTree(payloadStr)["traceparent"]?.asText()?.takeIf { it.isNotBlank() }
         } ?: root["traceparent"]?.asText()?.takeIf { it.isNotBlank() }
     } catch (_: Exception) { null }
+
 
     private fun Map<String, String>.toMetadataAIDTO(): MetadataAIDTO {
         return MetadataAIDTO(

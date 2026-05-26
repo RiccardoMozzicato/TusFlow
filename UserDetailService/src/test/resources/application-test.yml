@@ -1,0 +1,16 @@
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            # Provide endpoints explicitly to skip OIDC discovery (avoids connecting to Keycloak at startup)
+            authorization-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/auth
+            token-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/token
+            jwk-set-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/certs
+            user-info-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/userinfo
+            user-name-attribute: preferred_username
+      resourceserver:
+        jwt:
+          # Provide JWK URI directly to skip issuer discovery
+          jwk-set-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/certs

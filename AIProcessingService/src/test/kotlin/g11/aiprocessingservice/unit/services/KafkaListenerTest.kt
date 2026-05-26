@@ -26,6 +26,7 @@ class KafkaListenerTest {
     private lateinit var fileServiceClient: RestClient
     private lateinit var chatClient: ChatClient
     private lateinit var pdfAnalysisChatClient: ChatClient
+    private lateinit var imageChatClient: ChatClient
     private lateinit var jobStatusService: JobStatusServiceInterface
     private lateinit var promptTemplate: Resource
     private lateinit var acknowledgment: Acknowledgment
@@ -42,6 +43,7 @@ class KafkaListenerTest {
         fileServiceClient = mockk()
         chatClient = mockk()
         pdfAnalysisChatClient = mockk()
+        imageChatClient = mockk()
         jobStatusService = mockk()
         promptTemplate = mockk()
         acknowledgment = mockk(relaxed = true)
@@ -53,8 +55,11 @@ class KafkaListenerTest {
             fileServiceClient = fileServiceClient,
             chatClient = chatClient,
             pdfAnalysisChatClient = pdfAnalysisChatClient,
+            imageChatClient = imageChatClient,
             jobStatusService = jobStatusService,
             kafkaTemplate = kafkaTemplate,
+            tracer = mockk(relaxed = true),
+            propagator = mockk(relaxed = true),
             promptTemplate = promptTemplate,
             maxContentChars = 15000,
             beginningPercentage = 70,

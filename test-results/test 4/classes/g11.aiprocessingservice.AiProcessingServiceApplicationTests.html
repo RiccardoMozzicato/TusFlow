@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - AiProcessingServiceApplicationTests</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>AiProcessingServiceApplicationTests</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/g11.aiprocessingservice.html">g11.aiprocessingservice</a> &gt; AiProcessingServiceApplicationTests</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">1</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">0.657s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a href="#">Tests</a>
+</li>
+<li>
+<a href="#">Standard output</a>
+</li>
+<li>
+<a href="#">Standard error</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">contextLoads()</td>
+<td class="success">0.657s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>08:51:02.268 [Test worker] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [g11.aiprocessingservice.IntegrationTest]: IntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+08:51:02.752 [Test worker] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration g11.aiprocessingservice.AiProcessingServiceApplication for test class g11.aiprocessingservice.AiProcessingServiceApplicationTests
+08:51:02.904 [Test worker] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+08:51:02.907 [Test worker] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.5.9)
+
+08:51:03.734 [Test worker] ?[34mINFO ?[0;39m o.t.DockerClientFactory [ ]
+                --&gt; Testcontainers version: 1.21.4
+08:51:04.599 [Test worker] ?[34mINFO ?[0;39m o.t.d.DockerClientProviderStrategy [ ]
+                --&gt; Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+08:51:04.603 [Test worker] ?[34mINFO ?[0;39m o.t.DockerClientFactory [ ]
+                --&gt; Docker host IP address is localhost
+08:51:04.626 [Test worker] ?[34mINFO ?[0;39m o.t.DockerClientFactory [ ]
+                --&gt; Connected to docker: 
+  Server Version: 28.0.4
+  API Version: 1.48
+  Operating System: Ubuntu 24.04.4 LTS
+  Total Memory: 7937 MB
+08:51:04.661 [Test worker] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Pulling docker image: testcontainers/ryuk:0.12.0. Please be patient; this may take some time but only needs to be done once.
+08:51:05.482 [docker-java-stream--1900126211] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Starting to pull image
+08:51:05.505 [docker-java-stream--1900126211] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Pulling image layers:  0 pending,  0 downloaded,  0 extracted, (0 bytes/0 bytes)
+08:51:05.998 [docker-java-stream--1900126211] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Pulling image layers:  2 pending,  1 downloaded,  0 extracted, (886 KB/? MB)
+08:51:06.092 [docker-java-stream--1900126211] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Pulling image layers:  1 pending,  2 downloaded,  0 extracted, (3 MB/? MB)
+08:51:06.104 [docker-java-stream--1900126211] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Pulling image layers:  0 pending,  3 downloaded,  0 extracted, (3 MB/11 MB)
+08:51:06.197 [docker-java-stream--1900126211] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Pulling image layers:  0 pending,  3 downloaded,  1 extracted, (6 MB/11 MB)
+08:51:06.332 [docker-java-stream--1900126211] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Pulling image layers:  0 pending,  3 downloaded,  2 extracted, (6 MB/11 MB)
+08:51:06.375 [docker-java-stream--1900126211] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Pulling image layers:  0 pending,  3 downloaded,  3 extracted, (11 MB/11 MB)
+08:51:06.380 [Test worker] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Image testcontainers/ryuk:0.12.0 pull took PT1.717638253S
+08:51:06.406 [Test worker] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Creating container for image: testcontainers/ryuk:0.12.0
+08:51:06.485 [Test worker] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Container testcontainers/ryuk:0.12.0 is starting: 23c34743c10f9db8366628de80954ea824895510c7c4f6ddd4766623b559ded8
+08:51:06.747 [Test worker] ?[34mINFO ?[0;39m tc.testcontainers/ryuk:0.12.0 [ ]
+                --&gt; Container testcontainers/ryuk:0.12.0 started in PT0.341191842S
+08:51:06.752 [Test worker] ?[34mINFO ?[0;39m o.t.utility.RyukResourceReaper [ ]
+                --&gt; Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+08:51:06.752 [Test worker] ?[34mINFO ?[0;39m o.t.DockerClientFactory [ ]
+                --&gt; Checking the system...
+08:51:06.753 [Test worker] ?[34mINFO ?[0;39m o.t.DockerClientFactory [ ]
+                --&gt; ✔︎ Docker server version should be at least 1.6.0
+08:51:06.755 [Test worker] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling docker image: pgvector/pgvector:pg15. Please be patient; this may take some time but only needs to be done once.
+08:51:07.499 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Starting to pull image
+08:51:07.500 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending,  0 downloaded,  0 extracted, (0 bytes/0 bytes)
+08:51:07.936 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers: 15 pending,  1 downloaded,  0 extracted, (1 KB/? MB)
+08:51:08.130 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers: 14 pending,  2 downloaded,  0 extracted, (7 MB/? MB)
+08:51:08.228 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers: 13 pending,  3 downloaded,  0 extracted, (23 MB/? MB)
+08:51:08.301 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers: 12 pending,  4 downloaded,  0 extracted, (24 MB/? MB)
+08:51:08.558 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers: 11 pending,  5 downloaded,  0 extracted, (26 MB/? MB)
+08:51:08.593 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers: 10 pending,  6 downloaded,  0 extracted, (26 MB/? MB)
+08:51:08.632 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  9 pending,  7 downloaded,  0 extracted, (27 MB/? MB)
+08:51:08.814 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  8 pending,  8 downloaded,  0 extracted, (27 MB/? MB)
+08:51:08.895 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  7 pending,  9 downloaded,  0 extracted, (30 MB/? MB)
+08:51:09.060 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  6 pending, 10 downloaded,  0 extracted, (38 MB/? MB)
+08:51:09.215 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  5 pending, 11 downloaded,  0 extracted, (57 MB/? MB)
+08:51:09.320 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  4 pending, 12 downloaded,  0 extracted, (66 MB/? MB)
+08:51:09.347 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  4 pending, 12 downloaded,  1 extracted, (75 MB/? MB)
+08:51:09.482 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  3 pending, 13 downloaded,  1 extracted, (84 MB/? MB)
+08:51:09.604 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  2 pending, 14 downloaded,  1 extracted, (93 MB/? MB)
+08:51:09.831 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  1 pending, 15 downloaded,  1 extracted, (111 MB/? MB)
+08:51:09.838 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  1 pending, 15 downloaded,  2 extracted, (119 MB/? MB)
+08:51:10.102 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded,  2 extracted, (135 MB/146 MB)
+08:51:10.178 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded,  3 extracted, (135 MB/146 MB)
+08:51:10.222 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded,  4 extracted, (135 MB/146 MB)
+08:51:10.488 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded,  5 extracted, (142 MB/146 MB)
+08:51:10.558 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded,  6 extracted, (142 MB/146 MB)
+08:51:10.567 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded,  7 extracted, (142 MB/146 MB)
+08:51:10.576 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded,  8 extracted, (142 MB/146 MB)
+08:51:14.180 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded,  9 extracted, (146 MB/146 MB)
+08:51:14.196 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded, 10 extracted, (146 MB/146 MB)
+08:51:14.212 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded, 11 extracted, (146 MB/146 MB)
+08:51:14.222 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded, 12 extracted, (146 MB/146 MB)
+08:51:14.232 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded, 13 extracted, (146 MB/146 MB)
+08:51:14.241 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded, 14 extracted, (146 MB/146 MB)
+08:51:14.282 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded, 15 extracted, (146 MB/146 MB)
+08:51:14.341 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pulling image layers:  0 pending, 16 downloaded, 16 extracted, (146 MB/146 MB)
+08:51:14.348 [Test worker] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Image pgvector/pgvector:pg15 pull took PT7.591904443S
+08:51:14.348 [docker-java-stream--1777694320] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Pull complete. 16 layers, pulled in 6s (downloaded 146 MB at 24 MB/s)
+08:51:14.352 [Test worker] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Creating container for image: pgvector/pgvector:pg15
+08:51:14.370 [Test worker] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Container pgvector/pgvector:pg15 is starting: f297aae625aeaf9f37c5100b2061aa8f37875c55d12b18b280cd48255d8e6787
+08:51:15.355 [Test worker] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Container pgvector/pgvector:pg15 started in PT1.002983086S
+08:51:15.356 [Test worker] ?[34mINFO ?[0;39m tc.pgvector/pgvector:pg15 [ ]
+                --&gt; Container is started (JDBC URL: jdbc:postgresql://localhost:32769/test?loggerLevel=OFF)
+08:51:15.361 [Test worker] ?[34mINFO ?[0;39m g.a.AiProcessingServiceApplicationTests [ ]
+                --&gt; Starting AiProcessingServiceApplicationTests using Java 21.0.10 with PID 2452 (started by runner in /home/runner/work/final-project-g11/final-project-g11/AIProcessingService)
+08:51:15.362 [Test worker] ?[34mINFO ?[0;39m g.a.AiProcessingServiceApplicationTests [ ]
+                --&gt; The following 1 profile is active: &quot;test&quot;
+08:51:17.075 [Test worker] ?[34mINFO ?[0;39m o.s.d.r.c.RepositoryConfigurationDelegate [ ]
+                --&gt; Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+08:51:17.279 [Test worker] ?[34mINFO ?[0;39m o.s.d.r.c.RepositoryConfigurationDelegate [ ]
+                --&gt; Finished Spring Data repository scanning in 190 ms. Found 2 JPA repository interfaces.
+08:51:18.184 [Test worker] ?[34mINFO ?[0;39m c.z.hikari.HikariDataSource [ ]
+                --&gt; HikariPool-1 - Starting...
+08:51:18.408 [Test worker] ?[34mINFO ?[0;39m c.z.hikari.pool.HikariPool [ ]
+                --&gt; HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@116fe252
+08:51:18.411 [Test worker] ?[34mINFO ?[0;39m c.z.hikari.HikariDataSource [ ]
+                --&gt; HikariPool-1 - Start completed.
+08:51:18.448 [Test worker] ?[34mINFO ?[0;39m o.flywaydb.core.FlywayExecutor [ ]
+                --&gt; Database: jdbc:postgresql://localhost:32769/test?loggerLevel=OFF (PostgreSQL 15.17)
+08:51:18.492 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.s.JdbcTableSchemaHistory [ ]
+                --&gt; Schema history table &quot;public&quot;.&quot;flyway_schema_history&quot; does not exist yet
+08:51:18.497 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.command.DbValidate [ ]
+                --&gt; Successfully validated 4 migrations (execution time 00:00.022s)
+08:51:18.508 [Test worker] ?[34mINFO ?[0;39m org.flywaydb.core.Flyway [ ]
+                --&gt; All configured schemas are empty; baseline operation skipped. A baseline or migration script with a lower version than the baseline version may execute if available. Check the Schemas parameter if this is not intended.
+08:51:18.513 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.s.JdbcTableSchemaHistory [ ]
+                --&gt; Creating Schema History table &quot;public&quot;.&quot;flyway_schema_history&quot; ...
+08:51:18.613 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.command.DbMigrate [ ]
+                --&gt; Current version of schema &quot;public&quot;: &lt;&lt; Empty Schema &gt;&gt;
+08:51:18.633 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.command.DbMigrate [ ]
+                --&gt; Migrating schema &quot;public&quot; to version &quot;1 - Initial schema&quot;
+08:51:18.668 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.command.DbMigrate [ ]
+                --&gt; Migrating schema &quot;public&quot; to version &quot;2 - Enable pgvector extension&quot;
+08:51:18.715 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.command.DbMigrate [ ]
+                --&gt; Migrating schema &quot;public&quot; to version &quot;3 - Create vector store table&quot;
+08:51:18.754 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.command.DbMigrate [ ]
+                --&gt; Migrating schema &quot;public&quot; to version &quot;4 - Create file version embeddings table&quot;
+08:51:18.779 [Test worker] ?[34mINFO ?[0;39m o.f.c.i.command.DbMigrate [ ]
+                --&gt; Successfully applied 4 migrations to schema &quot;public&quot;, now at version v4 (execution time 00:00.066s)
+08:51:18.928 [Test worker] ?[34mINFO ?[0;39m o.h.j.internal.util.LogHelper [ ]
+                --&gt; HHH000204: Processing PersistenceUnitInfo [name: default]
+08:51:19.012 [Test worker] ?[34mINFO ?[0;39m org.hibernate.Version [ ]
+                --&gt; HHH000412: Hibernate ORM core version 6.6.39.Final
+08:51:19.054 [Test worker] ?[34mINFO ?[0;39m o.h.c.i.RegionFactoryInitiator [ ]
+                --&gt; HHH000026: Second-level cache disabled
+08:51:19.387 [Test worker] ?[34mINFO ?[0;39m o.s.o.j.p.SpringPersistenceUnitInfo [ ]
+                --&gt; No LoadTimeWeaver setup: ignoring JPA class transformer
+08:51:19.471 [Test worker] ?[34mINFO ?[0;39m o.h.orm.connections.pooling [ ]
+                --&gt; HHH10001005: Database info:
+	Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
+	Database driver: undefined/unknown
+	Database version: 15.17
+	Autocommit mode: undefined/unknown
+	Isolation level: undefined/unknown
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+08:51:20.563 [Test worker] ?[34mINFO ?[0;39m o.h.e.t.j.p.i.JtaPlatformInitiator [ ]
+                --&gt; HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+08:51:20.567 [Test worker] ?[34mINFO ?[0;39m o.s.o.j.LocalContainerEntityManagerFactoryBean [ ]
+                --&gt; Initialized JPA EntityManagerFactory for persistence unit 'default'
+08:51:22.478 [Test worker] ?[34mINFO ?[0;39m o.s.a.v.pgvector.PgVectorStore [ ]
+                --&gt; Using the vector table name: vector_store. Is empty: false
+08:51:22.486 [Test worker] ?[34mINFO ?[0;39m o.s.a.v.pgvector.PgVectorStore [ ]
+                --&gt; Initializing PGVectorStore schema for table: vector_store in schema: public
+08:51:22.488 [Test worker] ?[34mINFO ?[0;39m o.s.a.v.pgvector.PgVectorStore [ ]
+                --&gt; vectorTableValidationsEnabled false
+08:51:22.690 [Test worker] ?[34mINFO ?[0;39m g.a.conf.KafkaConfig [ ]
+                --&gt; Configuring Kafka Producer with bootstrap-servers: localhost:9094
+08:51:22.843 [Test worker] ?[31mWARN ?[0;39m o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration [ ]
+                --&gt; spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+08:51:23.152 [Test worker] ?[34mINFO ?[0;39m o.s.b.a.e.w.EndpointLinksResolver [ ]
+                --&gt; Exposing 1 endpoint beneath base path '/actuator'
+08:51:23.977 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.a.AdminClientConfig [ ]
+                --&gt; AdminClientConfig values: 
+	auto.include.jmx.reporter = true
+	bootstrap.controllers = []
+	bootstrap.servers = [localhost:9094]
+	client.dns.lookup = use_all_dns_ips
+	client.id = AIProcessingService-admin-0
+	connections.max.idle.ms = 300000
+	default.api.timeout.ms = 60000
+	enable.metrics.push = true
+	metadata.max.age.ms = 300000
+	metadata.recovery.strategy = none
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 30000
+	retries = 2147483647
+	retry.backoff.max.ms = 1000
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.connect.timeout.ms = null
+	sasl.login.read.timeout.ms = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.login.retry.backoff.max.ms = 10000
+	sasl.login.retry.backoff.ms = 100
+	sasl.mechanism = GSSAPI
+	sasl.oauthbearer.clock.skew.seconds = 30
+	sasl.oauthbearer.expected.audience = null
+	sasl.oauthbearer.expected.issuer = null
+	sasl.oauthbearer.header.urlencode = false
+	sasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100
+	sasl.oauthbearer.jwks.endpoint.url = null
+	sasl.oauthbearer.scope.claim.name = scope
+	sasl.oauthbearer.sub.claim.name = sub
+	sasl.oauthbearer.token.endpoint.url = null
+	security.protocol = PLAINTEXT
+	security.providers = null
+	send.buffer.bytes = 131072
+	socket.connection.setup.timeout.max.ms = 30000
+	socket.connection.setup.timeout.ms = 10000
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.3]
+	ssl.endpoint.identification.algorithm = https
+	ssl.engine.factory.class = null
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.certificate.chain = null
+	ssl.keystore.key = null
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLSv1.3
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.certificates = null
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+
+08:51:24.166 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka version: 3.9.1
+08:51:24.167 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka commitId: f745dfdcee2b9851
+08:51:24.168 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka startTimeMs: 1778575884165
+08:51:24.181 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:24.184 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:24.287 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:24.287 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:24.489 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:24.489 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:24.690 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:24.691 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:25.193 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:25.193 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:25.896 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:25.896 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:26.799 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:26.799 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:27.803 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:27.803 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:28.807 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:28.807 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:29.811 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:29.811 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:30.814 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:30.814 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:31.817 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:31.818 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:32.821 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:32.821 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:33.825 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:33.825 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:34.628 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:34.628 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:35.632 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:35.632 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:36.635 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:36.636 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:37.538 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:37.539 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:38.442 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:38.442 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:39.345 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:39.345 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:40.348 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:40.348 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:41.352 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:41.352 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:42.355 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:42.355 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:43.359 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:43.359 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:44.362 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:44.363 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:45.266 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:45.266 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:46.269 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:46.269 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:47.172 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:47.173 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:48.176 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:48.176 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:49.079 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:49.079 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:50.082 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:50.082 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:50.984 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:50.985 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:51.987 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:51.988 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:52.990 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:52.991 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:53.993 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:53.994 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:54.174 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.c.a.i.AdminMetadataManager [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Metadata update failed
+org.apache.kafka.common.errors.TimeoutException: Timed out waiting for a node assignment. Call: fetchMetadata
+08:51:54.172 [Test worker] ?[1;31mERROR?[0;39m o.s.kafka.core.KafkaAdmin [ ]
+                --&gt; Could not configure topics
+java.util.concurrent.TimeoutException
+	at java.base/java.util.concurrent.CompletableFuture.timedGet(CompletableFuture.java:1960)
+	at java.base/java.util.concurrent.CompletableFuture.get(CompletableFuture.java:2095)
+	at org.apache.kafka.common.internals.KafkaFutureImpl.get(KafkaFutureImpl.java:183)
+	at org.springframework.kafka.core.KafkaAdmin.updateClusterId(KafkaAdmin.java:305)
+	at org.springframework.kafka.core.KafkaAdmin.initialize(KafkaAdmin.java:276)
+	at org.springframework.kafka.core.KafkaAdmin.afterSingletonsInstantiated(KafkaAdmin.java:246)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1156)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:990)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:152)
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
+	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
+	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:595)
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:152)
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:111)
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
+	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
+	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
+	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
+	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
+	at org.springframework.test.context.junit.jupiter.SpringExtension.postProcessTestInstance(SpringExtension.java:159)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$invokeTestInstancePostProcessors$10(ClassBasedTestDescriptor.java:383)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.executeAndMaskThrowable(ClassBasedTestDescriptor.java:388)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$invokeTestInstancePostProcessors$11(ClassBasedTestDescriptor.java:382)
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:184)
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:179)
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1708)
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
+	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(ForEachOps.java:151)
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(ForEachOps.java:174)
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
+	at java.base/java.util.stream.ReferencePipeline.forEach(ReferencePipeline.java:596)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.invokeTestInstancePostProcessors(ClassBasedTestDescriptor.java:382)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$instantiateAndPostProcessTestInstance$6(ClassBasedTestDescriptor.java:293)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.instantiateAndPostProcessTestInstance(ClassBasedTestDescriptor.java:292)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$testInstancesProvider$4(ClassBasedTestDescriptor.java:281)
+	at java.base/java.util.Optional.orElseGet(Optional.java:364)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$testInstancesProvider$5(ClassBasedTestDescriptor.java:280)
+	at org.junit.jupiter.engine.execution.TestInstancesProvider.getTestInstances(TestInstancesProvider.java:27)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$prepare$0(TestMethodTestDescriptor.java:112)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.prepare(TestMethodTestDescriptor.java:111)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.prepare(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$prepare$2(NodeTestTask.java:128)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.prepare(NodeTestTask.java:128)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:95)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+08:51:55.079 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:55.080 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:56.083 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:56.083 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:57.086 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:57.086 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:58.089 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:58.089 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:58.991 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:58.992 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:51:59.994 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:51:59.995 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:00.997 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:52:00.998 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:02.000 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:52:02.000 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:03.003 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:52:03.004 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:03.806 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Node -1 disconnected.
+08:52:03.807 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.180 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.c.admin.KafkaAdminClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Forcing a hard I/O thread shutdown. Requests in progress will be aborted.
+08:52:04.180 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; App info kafka.admin.client for AIProcessingService-admin-0 unregistered
+08:52:04.180 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.c.a.i.AdminMetadataManager [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Metadata update failed
+org.apache.kafka.common.errors.TimeoutException: The AdminClient thread has exited. Call: fetchMetadata
+08:52:04.181 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.c.admin.KafkaAdminClient [ ]
+                --&gt; [AdminClient clientId=AIProcessingService-admin-0] Timed out 2 remaining operation(s) during close.
+08:52:04.190 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.common.metrics.Metrics [ ]
+                --&gt; Metrics scheduler closed
+08:52:04.190 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.common.metrics.Metrics [ ]
+                --&gt; Closing reporter org.apache.kafka.common.metrics.JmxReporter
+08:52:04.190 [kafka-admin-client-thread | AIProcessingService-admin-0] ?[34mINFO ?[0;39m o.a.k.common.metrics.Metrics [ ]
+                --&gt; Metrics reporters closed
+08:52:04.271 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.ConsumerConfig [ ]
+                --&gt; ConsumerConfig values: 
+	allow.auto.create.topics = true
+	auto.commit.interval.ms = 5000
+	auto.include.jmx.reporter = true
+	auto.offset.reset = earliest
+	bootstrap.servers = [localhost:9094]
+	check.crcs = true
+	client.dns.lookup = use_all_dns_ips
+	client.id = consumer-dlt-consumer-1
+	client.rack = 
+	connections.max.idle.ms = 540000
+	default.api.timeout.ms = 60000
+	enable.auto.commit = false
+	enable.metrics.push = true
+	exclude.internal.topics = true
+	fetch.max.bytes = 52428800
+	fetch.max.wait.ms = 500
+	fetch.min.bytes = 1
+	group.id = dlt-consumer
+	group.instance.id = null
+	group.protocol = classic
+	group.remote.assignor = null
+	heartbeat.interval.ms = 3000
+	interceptor.classes = []
+	internal.leave.group.on.close = true
+	internal.throw.on.fetch.stable.offset.unsupported = false
+	isolation.level = read_uncommitted
+	key.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+	max.partition.fetch.bytes = 1048576
+	max.poll.interval.ms = 300000
+	max.poll.records = 500
+	metadata.max.age.ms = 300000
+	metadata.recovery.strategy = none
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	partition.assignment.strategy = [class org.apache.kafka.clients.consumer.RangeAssignor, class org.apache.kafka.clients.consumer.CooperativeStickyAssignor]
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 30000
+	retry.backoff.max.ms = 1000
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.connect.timeout.ms = null
+	sasl.login.read.timeout.ms = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.login.retry.backoff.max.ms = 10000
+	sasl.login.retry.backoff.ms = 100
+	sasl.mechanism = GSSAPI
+	sasl.oauthbearer.clock.skew.seconds = 30
+	sasl.oauthbearer.expected.audience = null
+	sasl.oauthbearer.expected.issuer = null
+	sasl.oauthbearer.header.urlencode = false
+	sasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100
+	sasl.oauthbearer.jwks.endpoint.url = null
+	sasl.oauthbearer.scope.claim.name = scope
+	sasl.oauthbearer.sub.claim.name = sub
+	sasl.oauthbearer.token.endpoint.url = null
+	security.protocol = PLAINTEXT
+	security.providers = null
+	send.buffer.bytes = 131072
+	session.timeout.ms = 45000
+	socket.connection.setup.timeout.max.ms = 30000
+	socket.connection.setup.timeout.ms = 10000
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.3]
+	ssl.endpoint.identification.algorithm = https
+	ssl.engine.factory.class = null
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.certificate.chain = null
+	ssl.keystore.key = null
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLSv1.3
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.certificates = null
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+	value.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+
+08:52:04.313 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.t.i.KafkaMetricsCollector [ ]
+                --&gt; initializing Kafka metrics collector
+08:52:04.378 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka version: 3.9.1
+08:52:04.379 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka commitId: f745dfdcee2b9851
+08:52:04.379 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka startTimeMs: 1778575924378
+08:52:04.383 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.i.ClassicKafkaConsumer [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Subscribed to topic(s): file-outbox-dlt
+08:52:04.391 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.ConsumerConfig [ ]
+                --&gt; ConsumerConfig values: 
+	allow.auto.create.topics = true
+	auto.commit.interval.ms = 5000
+	auto.include.jmx.reporter = true
+	auto.offset.reset = earliest
+	bootstrap.servers = [localhost:9094]
+	check.crcs = true
+	client.dns.lookup = use_all_dns_ips
+	client.id = consumer-embedding-generator-2
+	client.rack = 
+	connections.max.idle.ms = 540000
+	default.api.timeout.ms = 60000
+	enable.auto.commit = false
+	enable.metrics.push = true
+	exclude.internal.topics = true
+	fetch.max.bytes = 52428800
+	fetch.max.wait.ms = 500
+	fetch.min.bytes = 1
+	group.id = embedding-generator
+	group.instance.id = null
+	group.protocol = classic
+	group.remote.assignor = null
+	heartbeat.interval.ms = 3000
+	interceptor.classes = []
+	internal.leave.group.on.close = true
+	internal.throw.on.fetch.stable.offset.unsupported = false
+	isolation.level = read_uncommitted
+	key.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+	max.partition.fetch.bytes = 1048576
+	max.poll.interval.ms = 300000
+	max.poll.records = 500
+	metadata.max.age.ms = 300000
+	metadata.recovery.strategy = none
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	partition.assignment.strategy = [class org.apache.kafka.clients.consumer.RangeAssignor, class org.apache.kafka.clients.consumer.CooperativeStickyAssignor]
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 30000
+	retry.backoff.max.ms = 1000
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.connect.timeout.ms = null
+	sasl.login.read.timeout.ms = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.login.retry.backoff.max.ms = 10000
+	sasl.login.retry.backoff.ms = 100
+	sasl.mechanism = GSSAPI
+	sasl.oauthbearer.clock.skew.seconds = 30
+	sasl.oauthbearer.expected.audience = null
+	sasl.oauthbearer.expected.issuer = null
+	sasl.oauthbearer.header.urlencode = false
+	sasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100
+	sasl.oauthbearer.jwks.endpoint.url = null
+	sasl.oauthbearer.scope.claim.name = scope
+	sasl.oauthbearer.sub.claim.name = sub
+	sasl.oauthbearer.token.endpoint.url = null
+	security.protocol = PLAINTEXT
+	security.providers = null
+	send.buffer.bytes = 131072
+	session.timeout.ms = 45000
+	socket.connection.setup.timeout.max.ms = 30000
+	socket.connection.setup.timeout.ms = 10000
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.3]
+	ssl.endpoint.identification.algorithm = https
+	ssl.engine.factory.class = null
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.certificate.chain = null
+	ssl.keystore.key = null
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLSv1.3
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.certificates = null
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+	value.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+
+08:52:04.394 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.t.i.KafkaMetricsCollector [ ]
+                --&gt; initializing Kafka metrics collector
+08:52:04.408 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka version: 3.9.1
+08:52:04.408 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka commitId: f745dfdcee2b9851
+08:52:04.408 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka startTimeMs: 1778575924408
+08:52:04.411 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.i.ClassicKafkaConsumer [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Subscribed to topic(s): embeddings-batch
+08:52:04.416 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.ConsumerConfig [ ]
+                --&gt; ConsumerConfig values: 
+	allow.auto.create.topics = true
+	auto.commit.interval.ms = 5000
+	auto.include.jmx.reporter = true
+	auto.offset.reset = earliest
+	bootstrap.servers = [localhost:9094]
+	check.crcs = true
+	client.dns.lookup = use_all_dns_ips
+	client.id = consumer-embedding-generator-3
+	client.rack = 
+	connections.max.idle.ms = 540000
+	default.api.timeout.ms = 60000
+	enable.auto.commit = false
+	enable.metrics.push = true
+	exclude.internal.topics = true
+	fetch.max.bytes = 52428800
+	fetch.max.wait.ms = 500
+	fetch.min.bytes = 1
+	group.id = embedding-generator
+	group.instance.id = null
+	group.protocol = classic
+	group.remote.assignor = null
+	heartbeat.interval.ms = 3000
+	interceptor.classes = []
+	internal.leave.group.on.close = true
+	internal.throw.on.fetch.stable.offset.unsupported = false
+	isolation.level = read_uncommitted
+	key.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+	max.partition.fetch.bytes = 1048576
+	max.poll.interval.ms = 300000
+	max.poll.records = 500
+	metadata.max.age.ms = 300000
+	metadata.recovery.strategy = none
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	partition.assignment.strategy = [class org.apache.kafka.clients.consumer.RangeAssignor, class org.apache.kafka.clients.consumer.CooperativeStickyAssignor]
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 30000
+	retry.backoff.max.ms = 1000
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.connect.timeout.ms = null
+	sasl.login.read.timeout.ms = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.login.retry.backoff.max.ms = 10000
+	sasl.login.retry.backoff.ms = 100
+	sasl.mechanism = GSSAPI
+	sasl.oauthbearer.clock.skew.seconds = 30
+	sasl.oauthbearer.expected.audience = null
+	sasl.oauthbearer.expected.issuer = null
+	sasl.oauthbearer.header.urlencode = false
+	sasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100
+	sasl.oauthbearer.jwks.endpoint.url = null
+	sasl.oauthbearer.scope.claim.name = scope
+	sasl.oauthbearer.sub.claim.name = sub
+	sasl.oauthbearer.token.endpoint.url = null
+	security.protocol = PLAINTEXT
+	security.providers = null
+	send.buffer.bytes = 131072
+	session.timeout.ms = 45000
+	socket.connection.setup.timeout.max.ms = 30000
+	socket.connection.setup.timeout.ms = 10000
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.3]
+	ssl.endpoint.identification.algorithm = https
+	ssl.engine.factory.class = null
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.certificate.chain = null
+	ssl.keystore.key = null
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLSv1.3
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.certificates = null
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+	value.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+
+08:52:04.416 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.t.i.KafkaMetricsCollector [ ]
+                --&gt; initializing Kafka metrics collector
+08:52:04.428 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka version: 3.9.1
+08:52:04.431 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka commitId: f745dfdcee2b9851
+08:52:04.431 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka startTimeMs: 1778575924428
+08:52:04.431 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.i.ClassicKafkaConsumer [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Subscribed to topic(s): embeddings-batch
+08:52:04.434 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.ConsumerConfig [ ]
+                --&gt; ConsumerConfig values: 
+	allow.auto.create.topics = true
+	auto.commit.interval.ms = 5000
+	auto.include.jmx.reporter = true
+	auto.offset.reset = earliest
+	bootstrap.servers = [localhost:9094]
+	check.crcs = true
+	client.dns.lookup = use_all_dns_ips
+	client.id = consumer-embedding-generator-4
+	client.rack = 
+	connections.max.idle.ms = 540000
+	default.api.timeout.ms = 60000
+	enable.auto.commit = false
+	enable.metrics.push = true
+	exclude.internal.topics = true
+	fetch.max.bytes = 52428800
+	fetch.max.wait.ms = 500
+	fetch.min.bytes = 1
+	group.id = embedding-generator
+	group.instance.id = null
+	group.protocol = classic
+	group.remote.assignor = null
+	heartbeat.interval.ms = 3000
+	interceptor.classes = []
+	internal.leave.group.on.close = true
+	internal.throw.on.fetch.stable.offset.unsupported = false
+	isolation.level = read_uncommitted
+	key.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+	max.partition.fetch.bytes = 1048576
+	max.poll.interval.ms = 300000
+	max.poll.records = 500
+	metadata.max.age.ms = 300000
+	metadata.recovery.strategy = none
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	partition.assignment.strategy = [class org.apache.kafka.clients.consumer.RangeAssignor, class org.apache.kafka.clients.consumer.CooperativeStickyAssignor]
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 30000
+	retry.backoff.max.ms = 1000
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.connect.timeout.ms = null
+	sasl.login.read.timeout.ms = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.login.retry.backoff.max.ms = 10000
+	sasl.login.retry.backoff.ms = 100
+	sasl.mechanism = GSSAPI
+	sasl.oauthbearer.clock.skew.seconds = 30
+	sasl.oauthbearer.expected.audience = null
+	sasl.oauthbearer.expected.issuer = null
+	sasl.oauthbearer.header.urlencode = false
+	sasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100
+	sasl.oauthbearer.jwks.endpoint.url = null
+	sasl.oauthbearer.scope.claim.name = scope
+	sasl.oauthbearer.sub.claim.name = sub
+	sasl.oauthbearer.token.endpoint.url = null
+	security.protocol = PLAINTEXT
+	security.providers = null
+	send.buffer.bytes = 131072
+	session.timeout.ms = 45000
+	socket.connection.setup.timeout.max.ms = 30000
+	socket.connection.setup.timeout.ms = 10000
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.3]
+	ssl.endpoint.identification.algorithm = https
+	ssl.engine.factory.class = null
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.certificate.chain = null
+	ssl.keystore.key = null
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLSv1.3
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.certificates = null
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+	value.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+
+08:52:04.435 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.t.i.KafkaMetricsCollector [ ]
+                --&gt; initializing Kafka metrics collector
+08:52:04.446 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka version: 3.9.1
+08:52:04.446 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka commitId: f745dfdcee2b9851
+08:52:04.446 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka startTimeMs: 1778575924446
+08:52:04.449 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.i.ClassicKafkaConsumer [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Subscribed to topic(s): embeddings-batch
+08:52:04.452 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.ConsumerConfig [ ]
+                --&gt; ConsumerConfig values: 
+	allow.auto.create.topics = true
+	auto.commit.interval.ms = 5000
+	auto.include.jmx.reporter = true
+	auto.offset.reset = earliest
+	bootstrap.servers = [localhost:9094]
+	check.crcs = true
+	client.dns.lookup = use_all_dns_ips
+	client.id = consumer-embedding-processor-5
+	client.rack = 
+	connections.max.idle.ms = 540000
+	default.api.timeout.ms = 60000
+	enable.auto.commit = false
+	enable.metrics.push = true
+	exclude.internal.topics = true
+	fetch.max.bytes = 52428800
+	fetch.max.wait.ms = 500
+	fetch.min.bytes = 1
+	group.id = embedding-processor
+	group.instance.id = null
+	group.protocol = classic
+	group.remote.assignor = null
+	heartbeat.interval.ms = 3000
+	interceptor.classes = []
+	internal.leave.group.on.close = true
+	internal.throw.on.fetch.stable.offset.unsupported = false
+	isolation.level = read_uncommitted
+	key.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+	max.partition.fetch.bytes = 1048576
+	max.poll.interval.ms = 300000
+	max.poll.records = 500
+	metadata.max.age.ms = 300000
+	metadata.recovery.strategy = none
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	partition.assignment.strategy = [class org.apache.kafka.clients.consumer.RangeAssignor, class org.apache.kafka.clients.consumer.CooperativeStickyAssignor]
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 30000
+	retry.backoff.max.ms = 1000
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.connect.timeout.ms = null
+	sasl.login.read.timeout.ms = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.login.retry.backoff.max.ms = 10000
+	sasl.login.retry.backoff.ms = 100
+	sasl.mechanism = GSSAPI
+	sasl.oauthbearer.clock.skew.seconds = 30
+	sasl.oauthbearer.expected.audience = null
+	sasl.oauthbearer.expected.issuer = null
+	sasl.oauthbearer.header.urlencode = false
+	sasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100
+	sasl.oauthbearer.jwks.endpoint.url = null
+	sasl.oauthbearer.scope.claim.name = scope
+	sasl.oauthbearer.sub.claim.name = sub
+	sasl.oauthbearer.token.endpoint.url = null
+	security.protocol = PLAINTEXT
+	security.providers = null
+	send.buffer.bytes = 131072
+	session.timeout.ms = 45000
+	socket.connection.setup.timeout.max.ms = 30000
+	socket.connection.setup.timeout.ms = 10000
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.3]
+	ssl.endpoint.identification.algorithm = https
+	ssl.engine.factory.class = null
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.certificate.chain = null
+	ssl.keystore.key = null
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLSv1.3
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.certificates = null
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+	value.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+
+08:52:04.453 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.t.i.KafkaMetricsCollector [ ]
+                --&gt; initializing Kafka metrics collector
+08:52:04.464 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka version: 3.9.1
+08:52:04.464 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka commitId: f745dfdcee2b9851
+08:52:04.464 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka startTimeMs: 1778575924464
+08:52:04.465 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.i.ClassicKafkaConsumer [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Subscribed to topic(s): file-analyzed
+08:52:04.468 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.ConsumerConfig [ ]
+                --&gt; ConsumerConfig values: 
+	allow.auto.create.topics = true
+	auto.commit.interval.ms = 5000
+	auto.include.jmx.reporter = true
+	auto.offset.reset = earliest
+	bootstrap.servers = [localhost:9094]
+	check.crcs = true
+	client.dns.lookup = use_all_dns_ips
+	client.id = consumer-Ai-service-consumer-6
+	client.rack = 
+	connections.max.idle.ms = 540000
+	default.api.timeout.ms = 60000
+	enable.auto.commit = false
+	enable.metrics.push = true
+	exclude.internal.topics = true
+	fetch.max.bytes = 52428800
+	fetch.max.wait.ms = 500
+	fetch.min.bytes = 1
+	group.id = Ai-service-consumer
+	group.instance.id = null
+	group.protocol = classic
+	group.remote.assignor = null
+	heartbeat.interval.ms = 3000
+	interceptor.classes = []
+	internal.leave.group.on.close = true
+	internal.throw.on.fetch.stable.offset.unsupported = false
+	isolation.level = read_uncommitted
+	key.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+	max.partition.fetch.bytes = 1048576
+	max.poll.interval.ms = 300000
+	max.poll.records = 500
+	metadata.max.age.ms = 300000
+	metadata.recovery.strategy = none
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	partition.assignment.strategy = [class org.apache.kafka.clients.consumer.RangeAssignor, class org.apache.kafka.clients.consumer.CooperativeStickyAssignor]
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 30000
+	retry.backoff.max.ms = 1000
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.connect.timeout.ms = null
+	sasl.login.read.timeout.ms = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.login.retry.backoff.max.ms = 10000
+	sasl.login.retry.backoff.ms = 100
+	sasl.mechanism = GSSAPI
+	sasl.oauthbearer.clock.skew.seconds = 30
+	sasl.oauthbearer.expected.audience = null
+	sasl.oauthbearer.expected.issuer = null
+	sasl.oauthbearer.header.urlencode = false
+	sasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000
+	sasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100
+	sasl.oauthbearer.jwks.endpoint.url = null
+	sasl.oauthbearer.scope.claim.name = scope
+	sasl.oauthbearer.sub.claim.name = sub
+	sasl.oauthbearer.token.endpoint.url = null
+	security.protocol = PLAINTEXT
+	security.providers = null
+	send.buffer.bytes = 131072
+	session.timeout.ms = 45000
+	socket.connection.setup.timeout.max.ms = 30000
+	socket.connection.setup.timeout.ms = 10000
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.3]
+	ssl.endpoint.identification.algorithm = https
+	ssl.engine.factory.class = null
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.certificate.chain = null
+	ssl.keystore.key = null
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLSv1.3
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.certificates = null
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+	value.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+
+08:52:04.469 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.t.i.KafkaMetricsCollector [ ]
+                --&gt; initializing Kafka metrics collector
+08:52:04.478 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka version: 3.9.1
+08:52:04.478 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka commitId: f745dfdcee2b9851
+08:52:04.478 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.utils.AppInfoParser [ ]
+                --&gt; Kafka startTimeMs: 1778575924478
+08:52:04.479 [Test worker] ?[34mINFO ?[0;39m o.a.k.c.c.i.ClassicKafkaConsumer [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Subscribed to topic(s): file-outbox
+08:52:04.528 [Test worker] ?[34mINFO ?[0;39m g.a.AiProcessingServiceApplicationTests [ ]
+                --&gt; Started AiProcessingServiceApplicationTests in 61.568 seconds (process running for 64.332)
+08:52:04.884 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Node -1 disconnected.
+08:52:04.884 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.884 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.886 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Node -1 disconnected.
+08:52:04.886 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.886 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.890 [Ai-service-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Node -1 disconnected.
+08:52:04.895 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.895 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.892 [dlt-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Node -1 disconnected.
+08:52:04.892 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Node -1 disconnected.
+08:52:04.897 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.897 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.893 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Node -1 disconnected.
+08:52:04.898 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.898 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.895 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.898 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.978 [Ai-service-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Node -1 disconnected.
+08:52:04.979 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.980 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.984 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Node -1 disconnected.
+08:52:04.984 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.985 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.985 [dlt-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Node -1 disconnected.
+08:52:04.985 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.985 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:04.996 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Node -1 disconnected.
+08:52:04.997 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:04.997 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:05.001 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Node -1 disconnected.
+08:52:05.002 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:05.002 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:05.017 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Node -1 disconnected.
+08:52:05.018 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:05.018 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:05.094 [Ai-service-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Node -1 disconnected.
+08:52:05.094 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:05.094 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:05.120 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Node -1 disconnected.
+08:52:05.121 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:05.121 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:05.138 [dlt-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Node -1 disconnected.
+08:52:05.140 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:05.140 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:05.140 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Node -1 disconnected.
+08:52:05.140 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:05.141 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:05.149 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Node -1 disconnected.
+08:52:05.149 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:05.149 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:05.154 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Node -1 disconnected.
+08:52:05.154 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:05.154 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+</pre>
+</span>
+</div>
+<div class="tab">
+<h2>Standard error</h2>
+<span class="code">
+<pre>08:52:03,594 |-ERROR in com.github.loki4j.client.pipeline.AsyncBufferPipeline@4946db22 - Error while sending Batch #3beddd1a0c (61,092 bytes) to Loki (http://localhost:3100/loki/api/v1/push) java.net.ConnectException
+	at java.net.ConnectException
+	at 	at java.net.http/jdk.internal.net.http.HttpClientImpl.send(HttpClientImpl.java:955)
+	at 	at java.net.http/jdk.internal.net.http.HttpClientFacade.send(HttpClientFacade.java:133)
+	at 	at com.github.loki4j.client.http.JavaHttpClient.send(JavaHttpClient.java:68)
+	at 	at com.github.loki4j.client.pipeline.AsyncBufferPipeline.sendBatch(AsyncBufferPipeline.java:322)
+	at 	at com.github.loki4j.client.pipeline.AsyncBufferPipeline.sendStep(AsyncBufferPipeline.java:293)
+	at 	at com.github.loki4j.client.pipeline.AsyncBufferPipeline.runSendLoop(AsyncBufferPipeline.java:224)
+	at 	at com.github.loki4j.client.pipeline.AsyncBufferPipeline.lambda$start$3(AsyncBufferPipeline.java:131)
+	at 	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at 	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at 	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: java.net.ConnectException
+	at 	at java.net.http/jdk.internal.net.http.common.Utils.toConnectException(Utils.java:1065)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.connectAsync(PlainHttpConnection.java:227)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.checkRetryConnect(PlainHttpConnection.java:280)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.lambda$connectAsync$2(PlainHttpConnection.java:238)
+	at 	at java.base/java.util.concurrent.CompletableFuture.uniHandle(CompletableFuture.java:934)
+	at 	at java.base/java.util.concurrent.CompletableFuture$UniHandle.tryFire(CompletableFuture.java:911)
+	at 	at java.base/java.util.concurrent.CompletableFuture.postComplete(CompletableFuture.java:510)
+	at 	at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(CompletableFuture.java:1773)
+	at 	... 3 common frames omitted
+Caused by: java.nio.channels.ClosedChannelException
+	at 	at java.base/sun.nio.ch.SocketChannelImpl.ensureOpen(SocketChannelImpl.java:202)
+	at 	at java.base/sun.nio.ch.SocketChannelImpl.beginConnect(SocketChannelImpl.java:786)
+	at 	at java.base/sun.nio.ch.SocketChannelImpl.connect(SocketChannelImpl.java:874)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.lambda$connectAsync$1(PlainHttpConnection.java:210)
+	at 	at java.base/java.security.AccessController.doPrivileged(AccessController.java:571)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.connectAsync(PlainHttpConnection.java:212)
+	at 	... 9 common frames omitted
+08:52:04,321 |-ERROR in com.github.loki4j.client.pipeline.AsyncBufferPipeline@4946db22 - Retry #1. Error while sending Batch #3beddd1a0c (61,092 bytes) to Loki (http://localhost:3100/loki/api/v1/push) java.net.ConnectException
+	at java.net.ConnectException
+	at 	at java.net.http/jdk.internal.net.http.HttpClientImpl.send(HttpClientImpl.java:955)
+	at 	at java.net.http/jdk.internal.net.http.HttpClientFacade.send(HttpClientFacade.java:133)
+	at 	at com.github.loki4j.client.http.JavaHttpClient.send(JavaHttpClient.java:68)
+	at 	at com.github.loki4j.client.pipeline.AsyncBufferPipeline.sendBatch(AsyncBufferPipeline.java:322)
+	at 	at com.github.loki4j.client.pipeline.AsyncBufferPipeline.sendStep(AsyncBufferPipeline.java:293)
+	at 	at com.github.loki4j.client.pipeline.AsyncBufferPipeline.runSendLoop(AsyncBufferPipeline.java:224)
+	at 	at com.github.loki4j.client.pipeline.AsyncBufferPipeline.lambda$start$3(AsyncBufferPipeline.java:131)
+	at 	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at 	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at 	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: java.net.ConnectException
+	at 	at java.net.http/jdk.internal.net.http.common.Utils.toConnectException(Utils.java:1065)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.connectAsync(PlainHttpConnection.java:227)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.checkRetryConnect(PlainHttpConnection.java:280)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.lambda$connectAsync$2(PlainHttpConnection.java:238)
+	at 	at java.base/java.util.concurrent.CompletableFuture.uniHandle(CompletableFuture.java:934)
+	at 	at java.base/java.util.concurrent.CompletableFuture$UniHandle.tryFire(CompletableFuture.java:911)
+	at 	at java.base/java.util.concurrent.CompletableFuture.postComplete(CompletableFuture.java:510)
+	at 	at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(CompletableFuture.java:1773)
+	at 	... 3 common frames omitted
+Caused by: java.nio.channels.ClosedChannelException
+	at 	at java.base/sun.nio.ch.SocketChannelImpl.ensureOpen(SocketChannelImpl.java:202)
+	at 	at java.base/sun.nio.ch.SocketChannelImpl.beginConnect(SocketChannelImpl.java:786)
+	at 	at java.base/sun.nio.ch.SocketChannelImpl.connect(SocketChannelImpl.java:874)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.lambda$connectAsync$1(PlainHttpConnection.java:210)
+	at 	at java.base/java.security.AccessController.doPrivileged(AccessController.java:571)
+	at 	at java.net.http/jdk.internal.net.http.PlainHttpConnection.connectAsync(PlainHttpConnection.java:212)
+	at 	... 9 common frames omitted
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/home/runner/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy-agent/1.17.8/f09415827a71be7ed621c7bd02550678f28bc81c/byte-buddy-agent-1.17.8.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 8.14.3</a> at May 12, 2026, 8:52:58 AM</p>
+</div>
+</div>
+</body>
+</html>

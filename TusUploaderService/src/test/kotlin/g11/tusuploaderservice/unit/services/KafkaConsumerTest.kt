@@ -3,6 +3,9 @@ package g11.tusuploaderservice.unit.services
 import com.fasterxml.jackson.databind.ObjectMapper
 import g11.tusuploaderservice.services.FileServiceInterface
 import g11.tusuploaderservice.services.KafkaConsumer
+import g11.tusuploaderservice.services.MetadataSSEService
+import io.micrometer.tracing.Tracer
+import io.micrometer.tracing.propagation.Propagator
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -16,14 +19,16 @@ import java.util.UUID
 class KafkaConsumerTest {
 
     private lateinit var fileService: FileServiceInterface
+    private lateinit var metadataSSEService: MetadataSSEService
     private lateinit var objectMapper: ObjectMapper
     private lateinit var kafkaConsumer: KafkaConsumer
 
     @BeforeEach
     fun setUp() {
         fileService = mockk()
+        metadataSSEService = mockk(relaxed = true)
         objectMapper = ObjectMapper()
-        kafkaConsumer = KafkaConsumer(fileService, objectMapper)
+        kafkaConsumer = KafkaConsumer(fileService, metadataSSEService, objectMapper, mockk(relaxed = true), mockk(relaxed = true))
     }
 
     @Test

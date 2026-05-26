@@ -56,6 +56,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
+    testImplementation("com.github.dasniko:testcontainers-keycloak:3.6.0")
     testImplementation("io.jsonwebtoken:jjwt-api:0.12.3")
     testRuntimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")
     testRuntimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.3")

@@ -1,20 +1,25 @@
 package g11.aiprocessingservice.integration.services
 
+import com.ninjasquad.springmockk.MockkBean
 import g11.aiprocessingservice.IntegrationTest
+import g11.aiprocessingservice.services.AuthServiceInterface
+import g11.aiprocessingservice.services.JobStatusServiceInterface
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.springframework.ai.chat.client.ChatClient
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.kafka.test.context.EmbeddedKafka
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.TestPropertySource
-import org.junit.jupiter.api.extension.ExtendWith
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.web.client.RestClient
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -32,26 +37,41 @@ import java.util.concurrent.TimeUnit
 @ActiveProfiles("test")
 @EmbeddedKafka(
     partitions = 1,
-    topics = ["file-outbox", "file-outbox-dlt"],
-    brokerProperties = ["listeners=PLAINTEXT://localhost:9094", "port=9094"]
+    topics = ["file-outbox", "file-outbox-dlt", "file-analyzed", "embeddings-batch"],
+    bootstrapServersProperty = "kafka.bootstrap-servers"
 )
-@TestPropertySource(properties = [
-    "kafka.bootstrap-servers=localhost:9094",
-    "kafka.consumer.bootstrap-servers=localhost:9094",
-    "kafka.consumer.group-id=test-group",
-    "kafka.consumer.auto-offset-reset=earliest",
-    "kafka.producer.bootstrap-servers=localhost:9094"
-])
 @ExtendWith(OutputCaptureExtension::class)
 class DeadLetterTopicListenerTest : IntegrationTest() {
+
+
+    @MockkBean
+    private lateinit var authService: AuthServiceInterface
+
+    @MockkBean(name = "TusUploaderService")
+    private lateinit var fileServiceClient: RestClient
+
+    @MockkBean(name = "chatClient")
+    private lateinit var chatClient: ChatClient
+
+    @MockkBean(name = "pdfAnalysisChatClient")
+    private lateinit var pdfAnalysisChatClient: ChatClient
+
+    @MockkBean(name = "imageChatClient")
+    private lateinit var imageChatClient: ChatClient
+
+    @MockkBean
+    private lateinit var jobStatusService: JobStatusServiceInterface
+
+    @Autowired
+    private lateinit var embeddedKafka: org.springframework.kafka.test.EmbeddedKafkaBroker
+
 
     private lateinit var producer: KafkaProducer<String, String>
 
     @BeforeEach
     fun setup() {
-        // Setup Kafka producer per inviare messaggi al DLT
         val producerProps = mapOf(
-            "bootstrap.servers" to "localhost:9094",
+            "bootstrap.servers" to embeddedKafka.brokersAsString,
             "key.serializer" to StringSerializer::class.java.name,
             "value.serializer" to StringSerializer::class.java.name,
             "acks" to "all",
@@ -59,7 +79,7 @@ class DeadLetterTopicListenerTest : IntegrationTest() {
         )
         producer = KafkaProducer(producerProps)
 
-        println("✓ DLT Test: Kafka producer configured for localhost:9094")
+        println("✓ DLT Test: Kafka producer configured for ${embeddedKafka.brokersAsString}")
     }
 
     @AfterEach

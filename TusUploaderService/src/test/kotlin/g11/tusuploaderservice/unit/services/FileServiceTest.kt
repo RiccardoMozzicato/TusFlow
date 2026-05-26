@@ -59,6 +59,9 @@ class FileServiceTest {
     @MockK(relaxed = true)
     lateinit var authService: AuthService
 
+    @MockK(relaxed = true)
+    lateinit var tracer: io.micrometer.tracing.Tracer
+
     @InjectMockKs
     lateinit var fileService: FileService
 

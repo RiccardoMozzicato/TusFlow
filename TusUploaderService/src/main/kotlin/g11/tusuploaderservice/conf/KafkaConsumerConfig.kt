@@ -13,7 +13,8 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory
 @EnableKafka
 @Configuration
 class KafkaConsumerConfig(
-    @Value("\${kafka.bootstrap-servers}") private val bootstrapAddress: String
+    @Value("\${kafka.bootstrap-servers}") private val bootstrapAddress: String,
+    @Value("\${spring.kafka.listener.auto-startup:true}") private val autoStartup: Boolean
 ) {
 
     @Bean
@@ -31,10 +32,8 @@ class KafkaConsumerConfig(
     fun kafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
         factory.consumerFactory = consumerFactory()
-        // Must be explicitly false — Spring Boot auto-config sets it to true on all factories.
-        // job-outbox comes from Debezium (no Kafka headers); trace propagation is handled
-        // manually inside the listener via Propagator.extract() on the message body.
         factory.containerProperties.isObservationEnabled = false
+        factory.setAutoStartup(autoStartup)
         return factory
     }
 }

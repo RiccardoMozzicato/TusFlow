@@ -19,52 +19,38 @@ import g11.tusuploaderservice.services.FileServiceInterface
 import g11.tusuploaderservice.services.StorageServiceInterface
 import g11.tusuploaderservice.services.TusService
 import io.mockk.*
-import io.mockk.impl.annotations.MockK
-import io.mockk.junit5.MockKExtension
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import org.junit.jupiter.api.extension.ExtendWith
 import org.springframework.test.util.ReflectionTestUtils
 import java.security.MessageDigest
 import java.util.*
 
-@ExtendWith(MockKExtension::class)
 class TusServiceTest {
 
-    @MockK(relaxed = true)
-    lateinit var tusRepository: TusRepository
+    private val tusRepository = mockk<TusRepository>(relaxed = true)
+    private val fileRepository = mockk<FileRepository>(relaxed = true)
+    private val storageService = mockk<StorageServiceInterface>(relaxed = true)
+    private val fileService = mockk<FileServiceInterface>(relaxed = true)
+    private val authService = mockk<AuthService>(relaxed = true)
+    private val outboxRepository = mockk<FilesOutboxEventsRepository>(relaxed = true)
 
-    @MockK(relaxed = true)
-    lateinit var fileRepository: FileRepository
-
-    @MockK(relaxed = true)
-    lateinit var storageService: StorageServiceInterface
-
-    @MockK(relaxed = true)
-    lateinit var fileService: FileServiceInterface
-
-    @MockK(relaxed = true)
-    lateinit var authService: AuthService
-
-    @MockK(relaxed = true)
-    lateinit var outboxRepository: FilesOutboxEventsRepository
-
-    lateinit var tusService: TusService
+    private lateinit var tusService: TusService
 
     private val userId = UUID.randomUUID()
 
     @BeforeEach
     fun setup() {
-        // Manually create TusService with mocks
+        clearAllMocks()
         tusService = TusService(
             storageService = storageService,
             fileService = fileService,
             authService = authService,
             outboxRepository = outboxRepository,
             fileRepo = fileRepository,
-            repo = tusRepository
+            repo = tusRepository,
+            tracer = mockk(relaxed = true)
         )
 
         // Set private fields using reflection

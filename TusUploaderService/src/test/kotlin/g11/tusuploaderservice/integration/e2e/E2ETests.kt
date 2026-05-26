@@ -32,6 +32,7 @@ import org.springframework.context.ApplicationContextInitializer
 import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.*
+import org.springframework.kafka.test.context.EmbeddedKafka
 import org.springframework.test.context.ContextConfiguration
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
@@ -57,6 +58,11 @@ import kotlin.test.assertFalse
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ContextConfiguration(initializers = [E2ETests.KeycloakInitializer::class])
+@EmbeddedKafka(
+    partitions = 1,
+    topics = ["file-outbox", "job-outbox"],
+    bootstrapServersProperty = "kafka.bootstrap-servers"
+)
 class E2ETests : IntegrationTest() {
 
     @Autowired
@@ -79,6 +85,9 @@ class E2ETests : IntegrationTest() {
     @MockkBean
     @Qualifier("userServiceClient")
     lateinit var userServiceClient: RestClient
+
+    @MockkBean
+    private lateinit var kafkaConsumer: g11.tusuploaderservice.services.KafkaConsumer
 
     private val testUserId = UUID.fromString("a0727703-0653-449e-a4f3-039bf14ae73a") // test_admin UUID
     private lateinit var testFileId: UUID
