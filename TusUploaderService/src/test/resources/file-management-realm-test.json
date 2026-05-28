@@ -34,7 +34,10 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["admin"]
+      "realmRoles": [
+        "admin"
+      ],
+      "id": "a0727703-0653-449e-a4f3-039bf14ae73a"
     },
     {
       "username": "testmanager",
@@ -50,7 +53,11 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["manager", "staff"]
+      "realmRoles": [
+        "manager",
+        "staff"
+      ],
+      "id": "b0727703-0653-449e-a4f3-039bf14ae73b"
     },
     {
       "username": "teststaff",
@@ -66,7 +73,10 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["staff"]
+      "realmRoles": [
+        "staff"
+      ],
+      "id": "c0727703-0653-449e-a4f3-039bf14ae73c"
     }
   ],
   "clients": [
@@ -74,8 +84,12 @@
       "clientId": "test-user-client",
       "enabled": true,
       "publicClient": true,
-      "redirectUris": ["*"],
-      "webOrigins": ["*"],
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
       "directAccessGrantsEnabled": true,
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
@@ -89,8 +103,12 @@
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "test-tus-secret",
-      "redirectUris": ["*"],
-      "webOrigins": ["*"],
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
       "publicClient": false,
@@ -113,4 +131,3 @@
     }
   ]
 }
-

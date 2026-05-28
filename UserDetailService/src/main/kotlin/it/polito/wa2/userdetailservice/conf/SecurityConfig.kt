@@ -8,6 +8,7 @@
     import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
     import org.springframework.security.core.GrantedAuthority
     import org.springframework.security.core.authority.SimpleGrantedAuthority
+    import org.springframework.http.HttpMethod
     import org.springframework.security.oauth2.jwt.Jwt
     import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter
     import org.springframework.security.web.SecurityFilterChain
@@ -44,6 +45,7 @@
                 .authorizeHttpRequests {
                     it.requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/api/v1/users/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users", "/api/v1/users/").hasAnyRole("admin", "manager", "staff", "serviceaccount-fileservice")
                         .requestMatchers("/api/v1/users/**").hasAnyRole("admin", "serviceaccount-fileservice")
                         .anyRequest().authenticated()
                 }.oauth2ResourceServer {

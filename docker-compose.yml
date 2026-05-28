@@ -13,6 +13,11 @@ services:
       - pg_data:/var/lib/postgresql/data
     labels:
       org.springframework.boot.ignore: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d filedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - kfk-net
 
@@ -30,6 +35,11 @@ services:
       - pg_ai:/var/lib/postgresql/ai
     labels:
       org.springframework.boot.ignore: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d aireqdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - kfk-net
 
@@ -46,6 +56,11 @@ services:
       - pg_user:/var/lib/postgresql/user
     labels:
       org.springframework.boot.ignore: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d userdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: quay.io/minio/minio:latest
@@ -59,6 +74,11 @@ services:
       - "9001:9001" # Web console
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.4
@@ -81,7 +101,8 @@ services:
     volumes:
       - ./keycloak/:/opt/keycloak/data/import
     depends_on:
-      - postgres_keycloak
+      postgres_keycloak:
+        condition: service_healthy
 
   postgres_keycloak:
     image: postgres:15
@@ -96,6 +117,11 @@ services:
       - pg_key:/var/lib/postgresql/data
     labels:
       org.springframework.boot.ignore: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   kafka:
     image: apache/kafka:4.1.0
@@ -134,7 +160,8 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui2
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     ports:
       - "8084:8080"
     environment:
@@ -232,11 +259,12 @@ services:
   setup-connector:
     image: curlimages/curl:latest
     container_name: setup-connector
+    profiles: ["setup"]
     depends_on:
       kafka-connect:
         condition: service_healthy
       postgres:
-        condition: service_started
+        condition: service_healthy
     restart: no
     networks:
       - kfk-net
@@ -298,11 +326,12 @@ services:
   setup-job-outbox-connector:
     image: curlimages/curl:latest
     container_name: setup-job-outbox-connector
+    profiles: ["setup"]
     depends_on:
       kafka-connect:
         condition: service_healthy
       postgres_aireq:
-        condition: service_started
+        condition: service_healthy
     restart: no
     networks:
       - kfk-net

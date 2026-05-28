@@ -23,6 +23,7 @@ class OAuth2Service(
      * Get M2M (Machine-to-Machine) access token using OAuth2 Client Credentials flow.
      * Caches the token until expiration to minimize token requests.
      */
+    @Synchronized
     fun getM2MAccessToken(): String {
         // Return cached token if still valid
         if (cachedToken != null && tokenExpiresAt != null && Instant.now().isBefore(tokenExpiresAt)) {
@@ -65,6 +66,7 @@ class OAuth2Service(
      * Force refresh the cached token on next request.
      * Useful if a token is invalidated before expiration.
      */
+    @Synchronized
     fun invalidateCache() {
         log.debug("Invalidating M2M token cache")
         cachedToken = null

@@ -84,10 +84,22 @@ class UserServiceTest {
     @Test
     fun `getUsers() - successful`() {
         // arrange
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
         val filtersDTO: FiltersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
-        val page: Page<User> =
-            PageImpl(users, PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize), users.size.toLong())
-        every { userRepo.findAll(PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize)) } returns page
+        val pageable = PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize)
+        val page: Page<User> = PageImpl(users, pageable, users.size.toLong())
+
+        val jwt = mockk<Jwt>()
+        val authentication = mockk<Authentication>()
+        val securityContext = mockk<SecurityContext>()
+        every { securityContext.authentication } returns authentication
+        every { authentication.principal } returns jwt
+        every { authentication.authorities } returns emptyList()
+        every { jwt.subject } returns authenticatedUserId.toString()
+        SecurityContextHolder.setContext(securityContext)
+
+        every { userRepo.findById(authenticatedUserId) } returns Optional.of(users[0])
+        every { userRepo.findByOrganization("CloudFlare", pageable) } returns page
 
         // act
         val result = userService.getUsers(filtersDTO)
@@ -97,7 +109,8 @@ class UserServiceTest {
         TestCase.assertTrue(result.content.all { it is UserDTO })
         assertEquals("John Doe", result.content[0].fullName)
         assertEquals("Mary Smith", result.content[1].fullName)
-        verify { userRepo.findAll(PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize)) }
+        verify { userRepo.findById(authenticatedUserId) }
+        verify { userRepo.findByOrganization("CloudFlare", pageable) }
     }
 
     @Test

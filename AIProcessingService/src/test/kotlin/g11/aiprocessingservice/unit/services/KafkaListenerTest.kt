@@ -28,6 +28,7 @@ class KafkaListenerTest {
     private lateinit var pdfAnalysisChatClient: ChatClient
     private lateinit var imageChatClient: ChatClient
     private lateinit var jobStatusService: JobStatusServiceInterface
+    private lateinit var retryJobService: RetryJobService
     private lateinit var promptTemplate: Resource
     private lateinit var acknowledgment: Acknowledgment
     private lateinit var kafkaTemplate: org.springframework.kafka.core.KafkaTemplate<String, String>
@@ -47,6 +48,7 @@ class KafkaListenerTest {
         pdfAnalysisChatClient = mockk()
         imageChatClient = mockk()
         jobStatusService = mockk()
+        retryJobService = mockk(relaxed = true)
         promptTemplate = mockk()
         acknowledgment = mockk(relaxed = true)
         kafkaTemplate = mockk(relaxed = true)
@@ -69,7 +71,8 @@ class KafkaListenerTest {
             beginningPercentage = 70,
             maxAutomaticRetries = 5,
             maxUserRetries = 4,
-            simulateLlmOffline = false
+            simulateLlmOffline = false,
+            retryJobService = retryJobService
         ), recordPrivateCalls = true)
     }
 

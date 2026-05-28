@@ -36,11 +36,30 @@ class UserService(
 
     val log = LoggerFactory.getLogger(UserService::class.java)
 
+    private fun getAuthenticatedUserId(): UUID {
+        val authentication = SecurityContextHolder.getContext().authentication
+        val jwt = authentication.principal as Jwt
+        return UUID.fromString(jwt.subject)
+    }
+
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_admin','ROLE_manager','ROLE_staff', 'ROLE_serviceaccount-fileservice')")
     override fun getUsers(filtersDTO: FiltersDTO): Page<UserDTO> {
         val pageable = PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize)
-        val users = userRepo.findAll(pageable)
+
+        // Service accounts have no row in userRepo, so skip the org-scoped lookup
+        val isServiceAccount = SecurityContextHolder.getContext().authentication.authorities
+            .any { it.authority == "ROLE_serviceaccount-fileservice" }
+
+        if (isServiceAccount) {
+            return userRepo.findAll(pageable).map { it.toDTO() }
+        }
+
+        val authenticatedUserId = getAuthenticatedUserId()
+        val authenticatedUser = userRepo.findById(authenticatedUserId).orElseThrow {
+            UserNotFoundException("The user with id $authenticatedUserId not found")
+        }
+        val users = userRepo.findByOrganization(authenticatedUser.organization, pageable)
 
         return users.map { it.toDTO() }
     }
@@ -166,9 +185,7 @@ class UserService(
     @PreAuthorize("hasRole('ROLE_admin')")
     override fun deleteUser(id: UUID) {
         // Get the authenticated user's ID from the security context
-        val authentication = SecurityContextHolder.getContext().authentication
-        val jwt = authentication.principal as Jwt
-        val authenticatedUserId = UUID.fromString(jwt.subject)
+        val authenticatedUserId = getAuthenticatedUserId()
 
         // Check if the user is trying to delete themselves
         if (authenticatedUserId == id) {

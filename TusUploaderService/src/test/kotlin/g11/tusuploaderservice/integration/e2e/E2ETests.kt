@@ -89,7 +89,9 @@ class E2ETests : IntegrationTest() {
     @MockkBean
     private lateinit var kafkaConsumer: g11.tusuploaderservice.services.KafkaConsumer
 
-    private val testUserId = UUID.fromString("a0727703-0653-449e-a4f3-039bf14ae73a") // test_admin UUID
+    private val testUserId = UUID.fromString("a0727703-0653-449e-a4f3-039bf14ae73a")   // testadmin UUID
+    private val testManagerId = UUID.fromString("b0727703-0653-449e-a4f3-039bf14ae73b") // testmanager UUID
+    private val testStaffId = UUID.fromString("c0727703-0653-449e-a4f3-039bf14ae73c")   // teststaff UUID
     private lateinit var testFileId: UUID
 
     @BeforeEach
@@ -2514,21 +2516,20 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `downloadFile allows user with READ_ONLY share to download file`() {
-        val sharedUserId = UUID.fromString("11111111-1111-1111-1111-111111111111")
-        val userToken = getKeycloakAccessToken("testadmin", "test")
+        // Use teststaff's real token so getUserIdFromJwt() returns testStaffId,
+        // then mock the UserDetailService to return teststaff's DTO and create a share for testStaffId.
+        val userToken = getKeycloakAccessToken("teststaff", "test")
 
-        // Create a READ_ONLY share for sharedUserId
         val fileEntity = fileRepository.findById(testFileId).orElseThrow()
         val share = g11.tusuploaderservice.entities.FileShare(
             id = null,
             file = fileEntity,
-            userID = sharedUserId,
+            userID = testStaffId,
             permission = g11.tusuploaderservice.entities.PERMISSION_LEVEL.READ_ONLY,
             timestamp = Date.from(Instant.now())
         )
         fileShareRepository.save(share)
 
-        // Mock the userServiceClient to return the shared user info
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -2538,19 +2539,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = sharedUserId,
-            fullName = "Shared User",
-            email = "shareduser@example.com",
+            id = testStaffId,
+            fullName = "Test Staff",
+            email = "teststaff@example.com",
             organization = "Test Organization",
             department = "Test Department",
             role = UserRole.ROLE_staff
         )
 
-        // Simulate request from the shared user
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken) // Still using testadmin token for simplicity
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$testFileId/download",
@@ -2599,10 +2596,11 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `downloadFile allows manager to download DEPARTMENT file from same department`() {
-        val managerId = UUID.randomUUID()
-        val userToken = getKeycloakAccessToken("testadmin", "test")
+        // Use testmanager's real token so getUserIdFromJwt() returns testManagerId.
+        // File is owned by testStaffId (not testmanager) so the owner shortcut is not taken,
+        // and the DEPARTMENT scope + role check is exercised.
+        val userToken = getKeycloakAccessToken("testmanager", "test")
 
-        // Create a DEPARTMENT file
         val deptFileId = UUID.randomUUID()
         val file = File(
             uuid = deptFileId,
@@ -2610,7 +2608,7 @@ class E2ETests : IntegrationTest() {
             lastUpdateAt = Date.from(Instant.now()),
             lastFilename = "department-file.pdf",
             currentVersion = 1L,
-            ownerId = testUserId,
+            ownerId = testStaffId,
             organization = "Test Organization",
             department = "Test Department",
             sharingScope = SharingScope.DEPARTMENT
@@ -2634,7 +2632,6 @@ class E2ETests : IntegrationTest() {
         file.versions.add(fileVersion)
         fileRepository.save(file)
 
-        // Upload test content to MinIO for the department file
         val testContent = "Department file content".toByteArray()
         minioClient.putObject(
             PutObjectArgs.builder()
@@ -2645,7 +2642,6 @@ class E2ETests : IntegrationTest() {
                 .build()
         )
 
-        // Mock manager user
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -2655,18 +2651,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = managerId,
+            id = testManagerId,
             fullName = "Test Manager",
-            email = "manager@example.com",
+            email = "testmanager@example.com",
             organization = "Test Organization",
             department = "Test Department",
             role = UserRole.ROLE_manager
         )
 
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken)
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$deptFileId/download",
@@ -2687,10 +2680,11 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `downloadFile allows staff to download ORGANIZATION file from same organization`() {
-        val staffUserId = UUID.randomUUID()
-        val userToken = getKeycloakAccessToken("testadmin", "test")
+        // Use teststaff's real token so getUserIdFromJwt() returns testStaffId.
+        // File is owned by testUserId (testadmin) so the owner shortcut is not taken,
+        // and the ORGANIZATION scope + role check is exercised.
+        val userToken = getKeycloakAccessToken("teststaff", "test")
 
-        // Create an ORGANIZATION file
         val orgFileId = UUID.randomUUID()
         val file = File(
             uuid = orgFileId,
@@ -2722,7 +2716,6 @@ class E2ETests : IntegrationTest() {
         file.versions.add(fileVersion)
         fileRepository.save(file)
 
-        // Upload test content to MinIO
         val testContent = "Organization file content".toByteArray()
         minioClient.putObject(
             PutObjectArgs.builder()
@@ -2733,7 +2726,6 @@ class E2ETests : IntegrationTest() {
                 .build()
         )
 
-        // Mock staff user
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -2743,18 +2735,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = staffUserId,
+            id = testStaffId,
             fullName = "Test Staff",
-            email = "staff@example.com",
+            email = "teststaff@example.com",
             organization = "Test Organization",
             department = "Different Department",
             role = UserRole.ROLE_staff
         )
 
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken)
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$orgFileId/download",
@@ -2834,10 +2823,11 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `downloadFile denies access to DEPARTMENT file from different organization`() {
-        val userFromDifferentOrgId = UUID.randomUUID()
-        val userToken = getKeycloakAccessToken("testadmin", "test")
+        // Use teststaff's real token so getUserIdFromJwt() returns testStaffId.
+        // Mock UserDetailService to return testStaffId with a different organization,
+        // simulating a user whose org doesn't match the file's org.
+        val userToken = getKeycloakAccessToken("teststaff", "test")
 
-        // Create a DEPARTMENT file in "Test Organization"
         val deptFileId = UUID.randomUUID()
         val file = File(
             uuid = deptFileId,
@@ -2846,7 +2836,7 @@ class E2ETests : IntegrationTest() {
             lastFilename = "org-a-file.pdf",
             currentVersion = 1L,
             ownerId = testUserId,
-            organization = "Test Organization",  // Organization A
+            organization = "Test Organization",
             department = "Test Department",
             sharingScope = SharingScope.DEPARTMENT
         )
@@ -2869,7 +2859,6 @@ class E2ETests : IntegrationTest() {
         file.versions.add(fileVersion)
         fileRepository.save(file)
 
-        // Upload test content to MinIO
         val testContent = "Organization A file".toByteArray()
         minioClient.putObject(
             PutObjectArgs.builder()
@@ -2880,7 +2869,6 @@ class E2ETests : IntegrationTest() {
                 .build()
         )
 
-        // Mock user from different organization (Organization B)
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -2890,18 +2878,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = userFromDifferentOrgId,
-            fullName = "User From Org B",
-            email = "user-org-b@example.com",
-            organization = "Different Organization",  // Organization B
+            id = testStaffId,
+            fullName = "Test Staff",
+            email = "teststaff@example.com",
+            organization = "Different Organization",
             department = "Test Department",
             role = UserRole.ROLE_manager
         )
 
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken)
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$deptFileId/download",
@@ -2921,10 +2906,11 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `downloadFile denies access to ORGANIZATION file from different organization`() {
-        val userFromDifferentOrgId = UUID.randomUUID()
-        val userToken = getKeycloakAccessToken("testadmin", "test")
+        // Use teststaff's real token so getUserIdFromJwt() returns testStaffId.
+        // Mock UserDetailService to return testStaffId claiming a different organization,
+        // even with ROLE_admin the org boundary must be enforced.
+        val userToken = getKeycloakAccessToken("teststaff", "test")
 
-        // Create an ORGANIZATION scope file in "Test Organization"
         val orgFileId = UUID.randomUUID()
         val file = File(
             uuid = orgFileId,
@@ -2933,7 +2919,7 @@ class E2ETests : IntegrationTest() {
             lastFilename = "org-scope-file.pdf",
             currentVersion = 1L,
             ownerId = testUserId,
-            organization = "Test Organization",  // Organization A
+            organization = "Test Organization",
             department = "Test Department",
             sharingScope = SharingScope.ORGANIZATION
         )
@@ -2956,7 +2942,6 @@ class E2ETests : IntegrationTest() {
         file.versions.add(fileVersion)
         fileRepository.save(file)
 
-        // Upload test content to MinIO
         val testContent = "Organization scope file".toByteArray()
         minioClient.putObject(
             PutObjectArgs.builder()
@@ -2967,7 +2952,6 @@ class E2ETests : IntegrationTest() {
                 .build()
         )
 
-        // Mock user from different organization
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -2977,18 +2961,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = userFromDifferentOrgId,
-            fullName = "Admin From Org B",
-            email = "admin-org-b@example.com",
-            organization = "Different Organization",  // Organization B
+            id = testStaffId,
+            fullName = "Test Staff",
+            email = "teststaff@example.com",
+            organization = "Different Organization",
             department = "Different Department",
-            role = UserRole.ROLE_admin  // Even ROLE_admin from different org should be denied
+            role = UserRole.ROLE_admin
         )
 
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken)
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$orgFileId/download",
@@ -3008,10 +2989,10 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `getFileById denies access to file metadata from different organization`() {
-        val userFromDifferentOrgId = UUID.randomUUID()
-        val userToken = getKeycloakAccessToken("testadmin", "test")
+        // Use teststaff's real token so getUserIdFromJwt() returns testStaffId.
+        // Mock UserDetailService to return testStaffId with a different organization.
+        val userToken = getKeycloakAccessToken("teststaff", "test")
 
-        // Create a file in "Test Organization"
         val fileId = UUID.randomUUID()
         val file = File(
             uuid = fileId,
@@ -3043,7 +3024,6 @@ class E2ETests : IntegrationTest() {
         file.versions.add(fileVersion)
         fileRepository.save(file)
 
-        // Mock user from different organization
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -3053,18 +3033,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = userFromDifferentOrgId,
-            fullName = "User From Other Org",
-            email = "other-org@example.com",
+            id = testStaffId,
+            fullName = "Test Staff",
+            email = "teststaff@example.com",
             organization = "Other Organization",
             department = "Other Department",
             role = UserRole.ROLE_staff
         )
 
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken)
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$fileId",
@@ -3087,10 +3064,10 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `deleteFile denies access to file from different organization`() {
-        val userFromDifferentOrgId = UUID.randomUUID()
-        val userToken = getKeycloakAccessToken("testadmin", "test")
+        // Use teststaff's real token so getUserIdFromJwt() returns testStaffId.
+        // Mock UserDetailService to return testStaffId with a different organization.
+        val userToken = getKeycloakAccessToken("teststaff", "test")
 
-        // Create a file in "Test Organization"
         val fileId = UUID.randomUUID()
         val file = File(
             uuid = fileId,
@@ -3122,7 +3099,6 @@ class E2ETests : IntegrationTest() {
         file.versions.add(fileVersion)
         fileRepository.save(file)
 
-        // Mock user from different organization
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -3132,18 +3108,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = userFromDifferentOrgId,
-            fullName = "Admin Other Org",
-            email = "admin-other@example.com",
+            id = testStaffId,
+            fullName = "Test Staff",
+            email = "teststaff@example.com",
             organization = "Other Organization",
             department = "Other Department",
-            role = UserRole.ROLE_admin  // Even admin from different org should not delete
+            role = UserRole.ROLE_admin
         )
 
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken)
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$fileId",
@@ -3166,10 +3139,10 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `downloadFile denies access to DEPARTMENT file from different department in same organization`() {
-        val userFromDifferentDeptId = UUID.randomUUID()
-        val userToken = getKeycloakAccessToken("testadmin", "test")
+        // Use teststaff's real token so getUserIdFromJwt() returns testStaffId.
+        // Mock UserDetailService to return testStaffId in the same org but a different department.
+        val userToken = getKeycloakAccessToken("teststaff", "test")
 
-        // Create a DEPARTMENT file in "Test Organization" - "Test Department"
         val deptFileId = UUID.randomUUID()
         val file = File(
             uuid = deptFileId,
@@ -3179,7 +3152,7 @@ class E2ETests : IntegrationTest() {
             currentVersion = 1L,
             ownerId = testUserId,
             organization = "Test Organization",
-            department = "Test Department",  // Department A
+            department = "Test Department",
             sharingScope = SharingScope.DEPARTMENT
         )
 
@@ -3201,7 +3174,6 @@ class E2ETests : IntegrationTest() {
         file.versions.add(fileVersion)
         fileRepository.save(file)
 
-        // Upload test content to MinIO
         val testContent = "Department restricted file".toByteArray()
         minioClient.putObject(
             PutObjectArgs.builder()
@@ -3212,7 +3184,6 @@ class E2ETests : IntegrationTest() {
                 .build()
         )
 
-        // Mock user from same organization but different department
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -3222,18 +3193,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = userFromDifferentDeptId,
-            fullName = "Staff Different Dept",
-            email = "staff-other-dept@example.com",
-            organization = "Test Organization",  // Same organization
-            department = "Different Department",  // Different department
+            id = testStaffId,
+            fullName = "Test Staff",
+            email = "teststaff@example.com",
+            organization = "Test Organization",
+            department = "Different Department",
             role = UserRole.ROLE_staff
         )
 
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken)
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$deptFileId/download",
@@ -3253,10 +3221,11 @@ class E2ETests : IntegrationTest() {
      */
     @Test
     fun `downloadFile allows admin to download DEPARTMENT file from different department in same organization`() {
-        val adminFromDifferentDeptId = UUID.randomUUID()
+        // Use testadmin's real token so getUserIdFromJwt() returns testUserId.
+        // File is owned by testStaffId (not testadmin) so the owner shortcut is not taken,
+        // and the admin cross-department access rule is exercised.
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
-        // Create a DEPARTMENT file in "Test Organization" - "Test Department"
         val deptFileId = UUID.randomUUID()
         val file = File(
             uuid = deptFileId,
@@ -3264,7 +3233,7 @@ class E2ETests : IntegrationTest() {
             lastUpdateAt = Date.from(Instant.now()),
             lastFilename = "admin-cross-dept.pdf",
             currentVersion = 1L,
-            ownerId = testUserId,
+            ownerId = testStaffId,
             organization = "Test Organization",
             department = "Test Department",
             sharingScope = SharingScope.DEPARTMENT
@@ -3288,7 +3257,6 @@ class E2ETests : IntegrationTest() {
         file.versions.add(fileVersion)
         fileRepository.save(file)
 
-        // Upload test content to MinIO
         val testContent = "Admin cross department file".toByteArray()
         minioClient.putObject(
             PutObjectArgs.builder()
@@ -3299,7 +3267,7 @@ class E2ETests : IntegrationTest() {
                 .build()
         )
 
-        // Mock admin from same organization but different department
+        // Mock testadmin as an admin in the same org but a different department than the file.
         val requestHeadersUriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
         val requestHeadersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
         val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
@@ -3309,18 +3277,15 @@ class E2ETests : IntegrationTest() {
         every { requestHeadersSpec.headers(any()) } returns requestHeadersSpec
         every { requestHeadersSpec.retrieve() } returns responseSpec
         every { responseSpec.body(UserDTO::class.java) } returns UserDTO(
-            id = adminFromDifferentDeptId,
-            fullName = "Admin Different Dept",
-            email = "admin-diff-dept@example.com",
-            organization = "Test Organization",  // Same organization
-            department = "Different Department",  // Different department
-            role = UserRole.ROLE_admin  // Admins can access files from any department in their organization
+            id = testUserId,
+            fullName = "Test Admin",
+            email = "testadmin@example.com",
+            organization = "Test Organization",
+            department = "Different Department",
+            role = UserRole.ROLE_admin
         )
 
-        val headers = HttpHeaders().apply {
-            setBearerAuth(userToken)
-        }
-
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
         val request = HttpEntity<String>(null, headers)
         val response = restTemplate.exchange(
             "/api/v1/files/$deptFileId/download",

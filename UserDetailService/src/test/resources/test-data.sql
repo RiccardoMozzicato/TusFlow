@@ -10,4 +10,10 @@ INSERT INTO users (id, full_name, email, organization, role, department, storage
 ('8e8dfe33-bff3-4d70-aa40-ae1eb43c57d0', 'Alice Johnson','alice.johnson@gmail.com', 'Tech Solutions Inc.',
  1,'Marketing',21474836480, '2023-02-15 11:30:00','2023-02-16 12:00:00'),
 ('d4f5e6a7-b8c9-4d0e-b1f2-3c4d5e6f7a8b', 'Bob Smith','bob.smit@gmail.com', 'Innovatech Corp.',
- 1,'Research',5368709120, '2023-03-20 09:15:00','2023-03-21 10:45:00');
+ 1,'Research',5368709120, '2023-03-20 09:15:00','2023-03-21 10:45:00'),
+('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'Riccardo Test','riccardo@test.local', 'Polytechnic University of Turin',
+ 0,'IT',10737418240, '2023-01-01 00:00:00','2023-01-01 00:00:00'),
+('b2c3d4e5-f6a7-8901-bcde-f12345678901', 'Samuele Test','samuele@test.local', 'Polytechnic University of Turin',
+ 1,'IT',10737418240, '2023-01-01 00:00:00','2023-01-01 00:00:00'),
+('c3d4e5f6-a7b8-9012-cdef-123456789012', 'Test Staff','test_staff@test.local', 'Tech Solutions Inc.',
+ 2,'IT',10737418240, '2023-01-01 00:00:00','2023-01-01 00:00:00');

@@ -85,6 +85,7 @@ class UserServiceTest: IntegrationTest() {
     @WithMockUser(roles = ["staff"])
     fun `getUsers() - successful for staff`() {
         // arrange
+        setupJwtAuthentication("c3d4e5f6-a7b8-9012-cdef-123456789012", listOf("staff"))
         val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
 
         // act
@@ -99,6 +100,7 @@ class UserServiceTest: IntegrationTest() {
     @WithMockUser(roles = ["manager"])
     fun `getUsers() - successful for manager`() {
         // arrange
+        setupJwtAuthentication("b2c3d4e5-f6a7-8901-bcde-f12345678901", listOf("manager"))
         val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
 
         // act
@@ -113,6 +115,7 @@ class UserServiceTest: IntegrationTest() {
     @WithMockUser(roles = ["admin"])
     fun `getUsers() - successful (page=0, pageSize=2)`() {
         // arrange
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
         val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 2)
 
         // act
@@ -126,6 +129,7 @@ class UserServiceTest: IntegrationTest() {
     @WithMockUser(roles = ["admin"])
     fun `getUsers() - successful (page=1, pageSize=2)`() {
         // arrange
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
         val filtersDTO = FiltersDTO(pageNumber = 1, pageSize = 2)
 
         // act
