@@ -1,6 +1,7 @@
 import { getCsrfToken } from '../utils';
 
 const FILES_BASE_URL = '/api/v1/files';
+const JOBS_BASE_URL = '/api/v1/jobs';
 
 // Sharing scope const object (instead of enum for TypeScript compatibility)
 export const SharingScope = {
@@ -556,40 +557,62 @@ export const streamFileGeneratedMetadata = (
   try {
     const eventSource = new EventSource(url);
 
+    // Track whether the close was intentional (modal closed / retry) and whether we already got a terminal event
+    let intentionallyClosed = false;
+    let terminalEventReceived = false;
+
+    const safeClose = () => {
+      intentionallyClosed = true;
+      try {
+        eventSource.close();
+      } catch {
+        // ignore
+      }
+    };
+
+    // If the caller aborts, that's not an error from the user's POV.
+    signal.addEventListener('abort', () => {
+      console.log('Aborting SSE connection');
+      safeClose();
+    });
+
     // Listen for custom events
     eventSource.addEventListener('completed', (event: MessageEvent) => {
       console.log('SSE: Metadata completed', event.data);
+      terminalEventReceived = true;
       try {
         const metadata = JSON.parse(event.data);
         onUpdate({ status: 'completed', data: metadata });
-        eventSource.close();
       } catch (err) {
         console.error('Failed to parse completed metadata:', err);
         onError('Failed to parse metadata response');
-        eventSource.close();
+      } finally {
+        safeClose();
       }
     });
 
     eventSource.addEventListener('failed', (event: MessageEvent) => {
       console.log('SSE: Job failed', event.data);
+      terminalEventReceived = true;
       try {
         const errorData = JSON.parse(event.data);
         onUpdate({ status: 'failed', error: errorData.error || 'AI analysis failed' });
+
       } catch (err) {
         onUpdate({ status: 'failed', error: 'AI analysis failed' });
       }
-      eventSource.close();
+      safeClose();
     });
 
     eventSource.addEventListener('unsupported', (event: MessageEvent) => {
       console.log('SSE: File type unsupported', event.data);
+      terminalEventReceived = true;
       try {
         const errorData = JSON.parse(event.data);
         onUpdate({ status: 'unsupported', error: errorData.error || 'File type not supported' });
       } catch (err) {
         onUpdate({ status: 'unsupported', error: 'File type not supported' });
       }
-      eventSource.close();
     });
 
     eventSource.addEventListener('processing', (event: MessageEvent) => {
@@ -652,9 +675,9 @@ export const streamFileGeneratedMetadata = (
     });
 
     return eventSource;
-  } catch (err) {
-    console.error('Error opening SSE connection:', err);
-    onError(err instanceof Error ? err.message : 'Failed to open connection');
+  } catch (e) {
+    console.error('Error opening SSE connection:', e);
+    onError(e instanceof Error ? e.message : 'Failed to open connection');
     return null;
   }
 };
@@ -690,3 +713,26 @@ export const updateGeneratedMetadata = async (
     throw new Error(`Failed to update AI-generated metadata: ${response.statusText}`);
   }
 };
+
+
+export const retryFailedMetadataGeneration = async (fileId: string, version: number): Promise<void> => {
+    const csrfToken = getCsrfToken();
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+
+    if (csrfToken) {
+        headers['X-XSRF-TOKEN'] = csrfToken;
+        headers['X-CSRF-TOKEN'] = csrfToken;
+    }
+
+    const queryParams = new URLSearchParams({ fileId, version: String(version) });
+    const url = `${JOBS_BASE_URL}?${queryParams.toString()}`;
+    const response = await fetch(url, { method: 'POST', credentials: 'include', headers });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Retry AI metadata error:', errorText);
+        throw new Error(`Failed to retry AI metadata generation: ${response.statusText}`);
+    }
+}
+
+

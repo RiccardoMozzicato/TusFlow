@@ -31,6 +31,8 @@ class KafkaListenerTest {
     private lateinit var promptTemplate: Resource
     private lateinit var acknowledgment: Acknowledgment
     private lateinit var kafkaTemplate: org.springframework.kafka.core.KafkaTemplate<String, String>
+    private lateinit var tracer: io.micrometer.tracing.Tracer
+    private lateinit var propagator: io.micrometer.tracing.propagation.Propagator
 
     private val testJobId = UUID.randomUUID()
     private val testFileId = UUID.randomUUID()
@@ -48,6 +50,8 @@ class KafkaListenerTest {
         promptTemplate = mockk()
         acknowledgment = mockk(relaxed = true)
         kafkaTemplate = mockk(relaxed = true)
+        tracer = mockk(relaxed = true)
+        propagator = mockk(relaxed = true)
 
         kafkaListener = spyk(MetadataProcessor(
             jobRepository = jobRepository,
@@ -63,6 +67,9 @@ class KafkaListenerTest {
             promptTemplate = promptTemplate,
             maxContentChars = 15000,
             beginningPercentage = 70,
+            maxAutomaticRetries = 5,
+            maxUserRetries = 4,
+            simulateLlmOffline = false
         ), recordPrivateCalls = true)
     }
 
@@ -111,6 +118,7 @@ class KafkaListenerTest {
             fileid = testFileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 0u,
             payload = mapOf(),
             status = jobStatus.COMPLETED
         )
@@ -142,6 +150,7 @@ class KafkaListenerTest {
             fileid = testFileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 0u,
             payload = mapOf(),
             status = jobStatus.PENDING
         )
@@ -210,6 +219,7 @@ class KafkaListenerTest {
             fileid = testFileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 0u,
             payload = mapOf(),
             status = jobStatus.PENDING
         )
@@ -248,6 +258,7 @@ class KafkaListenerTest {
             fileid = testFileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 1u,
             payload = mapOf(),
             status = jobStatus.FAILED // Already failed once
         )
@@ -268,6 +279,7 @@ class KafkaListenerTest {
             fileid = testFileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 1u,
             payload = mapOf(),
             status = jobStatus.PENDING // Stuck in PENDING from previous attempt
         )
@@ -302,6 +314,7 @@ class KafkaListenerTest {
             fileid = testFileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 0u,
             payload = mapOf(),
             status = jobStatus.PROCESSING
         )
@@ -332,6 +345,7 @@ class KafkaListenerTest {
             fileid = testFileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 0u,
             payload = mapOf(),
             status = jobStatus.PENDING
         )
@@ -370,6 +384,7 @@ class KafkaListenerTest {
             fileid = testFileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 0u,
             payload = mapOf(),
             status = jobStatus.PENDING
         )

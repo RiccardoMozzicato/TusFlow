@@ -54,6 +54,11 @@ spring:
 
 # AI Document Processing Configuration
 ai:
+  retry:
+    max-automatic-retries: 5
+    max-user-retries: 4
+    simulate-llm-offline: false
+
   # Model for general chat (default AI interactions)
   chat:
     model: ${CHAT_MODEL:llama-3.1-8b-instant}

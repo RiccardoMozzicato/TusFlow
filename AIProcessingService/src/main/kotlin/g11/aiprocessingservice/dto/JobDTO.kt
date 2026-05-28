@@ -36,5 +36,8 @@ data class JobDTO(
     val ownerUserId: UUID,
 
     @JsonProperty("fileVersionId")
-    val fileVersionId: Long  // ID numerico della versione (non UUID)
+    val fileVersionId: Long, // ID numerico della versione (non UUID)
+
+    @JsonProperty("aiAttempts")
+    val aiAttempts: UInt = 0u
 )

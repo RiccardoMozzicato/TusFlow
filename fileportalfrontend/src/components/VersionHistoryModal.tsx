@@ -7,15 +7,16 @@ interface VersionHistoryModalProps {
   show: boolean;
   onHide: () => void;
   file: FileMetadata | null;
-  // callback opzionale verso il padre per chiedere la preview di una certa versione
-  onPreviewRequested?: (args: { fileId: string; version: number; contentType: string; filename: string }) => void;
+  onPreviewRequested?: (args: { fileId: string; version: number; contentType: string; filename: string }) => void,
+  onGenerateMetadata: (file: FileMetadata) => void
 }
 
 export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   show,
   onHide,
   file,
-  onPreviewRequested
+  onPreviewRequested,
+  onGenerateMetadata
 }) => {
   const [versions, setVersions] = useState<FileVersion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -202,6 +203,20 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                       onClick={() => handlePreviewVersion(version.version, version.contentType, version.filename)}
                     >
                       👁️ Preview
+                    </Button>
+
+                    <Button
+                      variant="outline-warning"
+                      size="sm"
+                      className="me-2"
+                      onClick={() => {
+                        if (!file) return;
+                        // onHide()
+                        onGenerateMetadata({...file, version: version.version});
+                      }}
+                      disabled={version.status !== 'AVAILABLE' && version.status !== 'MERGE_PENDING'}
+                    >
+                      🤖 Get Metadata
                     </Button>
                   </td>
                 </tr>

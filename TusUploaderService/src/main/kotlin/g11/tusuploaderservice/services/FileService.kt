@@ -24,7 +24,6 @@ import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.client.RestClient
@@ -235,16 +234,23 @@ class FileService(
         return files.map { it.toDTO() }
     }
 
-    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff', 'ROLE_ai_worker')")
     override fun getFileMetadata(id: UUID): FileDTO {
         log.debug("Retrieving metadata for {}", id)
 
-        val token = authService.getAccessToken()
-        val userDetails = getUserDetails(token)
-        log.debug("Current user details: {}", userDetails)
+        // AI service accounts (ROLE_ai_worker) are not registered in UserDetailService,
+        // so skip the user lookup and permission check. The ROLE_ai_worker JWT authority
+        // already guarantees the caller is a trusted internal service.
+        val isAiWorker = SecurityContextHolder.getContext().authentication.authorities
+            .any { it.authority == "ROLE_ai_worker" }
 
-        // Check permissions - if no exception is thrown, user has at least READ_ONLY access
-        getCurrentUserPermission(id, userDetails)
+        if (!isAiWorker) {
+            val token = authService.getAccessToken()
+            val userDetails = getUserDetails(token)
+            log.debug("Current user details: {}", userDetails)
+            // Check permissions - if no exception is thrown, user has at least READ_ONLY access
+            getCurrentUserPermission(id, userDetails)
+        }
 
         return fileRepository.findById(id)
             .orElseThrow {

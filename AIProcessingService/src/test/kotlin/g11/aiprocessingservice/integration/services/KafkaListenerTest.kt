@@ -235,6 +235,7 @@ class KafkaListenerTest : IntegrationTest() {
             fileid = fileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 0u,
             payload = mapOf(
                 "filename" to "already-completed.pdf",
                 "contentType" to "application/pdf"
@@ -289,6 +290,7 @@ class KafkaListenerTest : IntegrationTest() {
             fileid = fileId,
             version = 1,
             type = "FILE_ANALYSIS",
+            attempts = 0u,
             payload = mapOf(
                 "filename" to "stuck-pending.pdf",
                 "contentType" to "application/pdf"

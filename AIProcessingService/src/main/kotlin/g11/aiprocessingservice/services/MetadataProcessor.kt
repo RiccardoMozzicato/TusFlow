@@ -18,6 +18,7 @@ import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.retry.NonTransientAiException
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.ParameterizedTypeReference
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.core.io.Resource
 import org.springframework.util.MimeType
@@ -33,7 +34,10 @@ import org.springframework.web.client.RestClientResponseException
 import org.springframework.web.server.ResponseStatusException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 import java.util.UUID
+import org.springframework.scheduling.annotation.Async
+import java.util.concurrent.CompletableFuture
 
 @Service
 class MetadataProcessor(
@@ -49,7 +53,11 @@ class MetadataProcessor(
     private val propagator: Propagator,
     @Value("classpath:prompts/file-analysis-prompt.st") private val promptTemplate: Resource,
     @Value("\${ai.document.max-content-chars:15000}") private val maxContentChars: Int,
-    @Value("\${ai.document.beginning-percentage:70}") private val beginningPercentage: Int
+    @Value("\${ai.document.beginning-percentage:70}") private val beginningPercentage: Int,
+    @Value("\${ai.retry.max-automatic-retries:5}") private val maxAutomaticRetries: Int,
+    @Value("\${ai.retry.max-user-retries:4}") private val maxUserRetries: Int,
+    @Value("\${ai.retry.simulate-llm-offline:false}") private val simulateLlmOffline: Boolean,
+    private val retryJobService: RetryJobService,
 ) : KafkaInterface {
     private val log = LoggerFactory.getLogger(g11.aiprocessingservice.services.MetadataProcessor::class.java)
     private val objectMapper = jacksonObjectMapper()
@@ -116,43 +124,63 @@ class MetadataProcessor(
             log.info("Job {} created successfully - acknowledging Kafka message", jobId)
             acknowledgment.acknowledge()
 
+            println("Process the job")
             // Process the job
-            try {
-                val enhancedMeta = processJob(job, jobId)
+            getMetadata(job)
 
-                // Publish event on file-analyzed with FileAnalyzedEvent DTO
-                if (enhancedMeta != null) {
-                    publishFileAnalyzedEvent(job, jobId, enhancedMeta)
-                } else {
-                    log.info("Skipping file-analyzed event for job {} - file analysis not supported", jobId)
-                }
-
-            } catch (e: Exception) {
-                log.error("Failed to process job {}: {}", jobId, e.message, e)
-
-                // Check if this is a retry by looking at the job status
-                val jobEntity = jobRepository.findById(jobId)
-                val isRetry = jobEntity.isPresent && jobEntity.get().status == jobStatus.FAILED
-
-                if (isRetry) {
-                    // This is a retry and it failed again - mark as FAILED (will go to DLT)
-                    log.error("Job {} RETRY FAILED - will be sent to DLT", jobId)
-                    jobStatusService.markJobAsFailed(jobId, job, "Retry failed: ${e.message}")
-                    // Rethrow to send to DLT
-                    throw e
-                } else {
-                    // First failure - mark as FAILED and trigger retry
-                    log.warn("Job {} FIRST FAILURE - marking as FAILED and will retry after 5 minutes", jobId)
-                    jobStatusService.markJobAsFailed(jobId, job, e.message ?: "Unknown error")
-                    // Rethrow to trigger Kafka retry mechanism (will retry after 5 minutes)
-                    throw e
-                }
-            }
         } finally {
             scope.close()
             span.end()
         }
     }
+
+    fun getMetadata(job: JobDTO) {
+        log.info("Calling AI for $job")
+
+        val jobId = job.id
+
+        try {
+            val enhancedMeta = processJob(job, jobId)
+
+            // Publish event on file-analyzed with FileAnalyzedEvent DTO
+            if (enhancedMeta != null) {
+                publishFileAnalyzedEvent(job, jobId, enhancedMeta)
+            } else {
+                log.info("Skipping file-analyzed event for job {} - file analysis not supported", jobId)
+            }
+
+        } catch (e: Exception) {
+            log.error("Failed to process job {}: {}", jobId, e.message, e)
+
+            // Check if this is a retry by looking at the job status
+            val jobEntity = jobRepository.findById(jobId)
+            val isRetry = jobEntity.isPresent && jobEntity.get().status == jobStatus.FAILED
+
+            if (isRetry) {
+                // This is a retry and it failed again - mark as FAILED (will go to DLT)
+                log.error("Job {} RETRY FAILED - will be sent to DLT", jobId)
+                jobStatusService.markJobAsFailed(jobId, job, "Retry failed: ${e.message}")
+                // Rethrow to send to DLT
+                throw e
+            } else {
+                // First failure - mark as FAILED and trigger retry
+                log.warn("Job {} FIRST FAILURE - marking as FAILED and will retry after 5 minutes", jobId)
+                jobStatusService.markJobAsFailed(jobId, job, e.message ?: "Unknown error")
+                // Rethrow to trigger Kafka retry mechanism (will retry after 5 minutes)
+                throw e
+            }
+        }
+    }
+
+
+    @Async
+    fun retryFailedJobAsync(jobId: UUID): CompletableFuture<Void> {
+        val jobDto = retryJobService.prepareRetry(jobId)
+        log.info("Calling getMetadata() for $jobDto")
+        getMetadata(jobDto)
+        return CompletableFuture.completedFuture(null)
+    }
+
 
     /**
      * Extracts the W3C traceparent from the Debezium outbox message body.
@@ -208,6 +236,7 @@ class MetadataProcessor(
             type = "FILE_ANALYSIS",  // Default job type for AI processing
             payload = payloadMap,
             status = jobStatus.PENDING,
+            attempts = 0u
         )
         jobRepository.save(newJob)
         return jobId
@@ -229,7 +258,7 @@ class MetadataProcessor(
 
         try {
             // Attempt AI analysis with retry logic using the appropriate client
-            val enhancedMeta = analyzeUploadWithRetry(fileToAnalyze!!, jobId, clientToUse, job.contentType)
+            val enhancedMeta = analyzeUploadWithRetry(fileToAnalyze!!, job, clientToUse, job.contentType)
 
             log.debug(enhancedMeta.toString())
 
@@ -498,13 +527,17 @@ class MetadataProcessor(
      * @param client The ChatClient to use (chatClient, pdfAnalysisChatClient, or imageChatClient)
      * @param contentType The MIME type of the file
      */
-    private fun analyzeUploadWithRetry(inputStream: InputStream, jobId: UUID, client: ChatClient, contentType: String): MetadataDTO {
-        val maxRetries = 5
+    private fun analyzeUploadWithRetry(inputStream: InputStream, job: JobDTO, client: ChatClient, contentType: String, ): MetadataDTO {
         var lastException: Exception? = null
+        var result: MetadataDTO? = null
+        var attempt = 1;
+        val jobEntity: Job = jobRepository.findById(job.id).orElseThrow()
 
-        for (attempt in 1..maxRetries) {
+        jobEntity.attempts += 1u
+        jobRepository.save(jobEntity)
+        while (attempt <= maxAutomaticRetries) {
             try {
-                log.info("AI analysis attempt {}/{} for job {}", attempt, maxRetries, jobId)
+                log.info("AI analysis attempt {}/{} for job {}", attempt, maxAutomaticRetries, job.id)
 
                 // Reset stream if possible (for retries after the first attempt)
                 if (attempt > 1) {
@@ -515,36 +548,39 @@ class MetadataProcessor(
                     }
                 }
 
-                val result = analyzeUpload(inputStream, client, contentType)
+                if (simulateLlmOffline) throw RuntimeException("LLM offline simulation enabled")
+
+                result = analyzeUpload(inputStream, client, contentType)
 
                 // Success
-                log.info("AI analysis succeeded on attempt {} for job {}", attempt, jobId)
+                log.info("AI analysis succeeded on attempt {} for job {}", attempt, job.id)
                 return result
-
             } catch (e: AIAnalysisUnsupportedException) {
                 // Do not retry for permanently unsupported content types (e.g. video)
                 throw e
             } catch (e: NonTransientAiException) {
                 // 4xx status response, do not retry
-                log.error("Non transient exception occurred for job {} : {}", jobId, e.message)
+                log.error("Non transient exception occurred for job {} : {}", job.id, e.message)
                 throw NonTransientAiException(e.message?: "Bad Request")
             } catch (e: Exception) {
                 lastException = e
-                log.warn("AI analysis attempt {} failed for job {}: {}", attempt, jobId, e.message)
+                log.warn("AI analysis attempt {} failed for job {}: {}", attempt, job.id, e.message)
 
-                if (attempt < maxRetries) {
+                if (attempt < maxAutomaticRetries) {
                     // Wait before retry with exponential backoff (1s, 2s, 3s, 4s, 5s max)
                     val delayMs = (1000L * attempt).coerceAtMost(5000L)
                     log.info("Retrying in {}ms...", delayMs)
                     Thread.sleep(delayMs)
                 }
+
+                attempt++
             }
         }
 
         // All 5 attempts failed - rethrow the original exception so the job is marked as FAILED,
         // not UNSUPPORTED. UNSUPPORTED is reserved for truly unsupported content types (e.g. video).
         // LLM unavailability or an expired API key are transient/infrastructure failures.
-        log.error("AI analysis failed after {} attempts for job {} - marking as FAILED", maxRetries, jobId, lastException)
+        log.error("AI analysis failed after {} attempts for job {} - marking as FAILED", maxAutomaticRetries, job.id, lastException)
         throw lastException!!
     }
 

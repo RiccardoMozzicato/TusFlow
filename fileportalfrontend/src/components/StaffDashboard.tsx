@@ -1107,10 +1107,11 @@ export const StaffDashboard: React.FC = () => {
 
       {/* Version History Modal */}
       <VersionHistoryModal
-        show={showVersionHistoryModal}
-        onHide={() => setShowVersionHistoryModal(false)}
-        file={fileToViewHistory}
-        onPreviewRequested={handlePreviewVersionFromHistory}
+          show={showVersionHistoryModal}
+          onHide={() => setShowVersionHistoryModal(false)}
+          file={fileToViewHistory}
+          onPreviewRequested={handlePreviewVersionFromHistory}
+          onGenerateMetadata={handleGenerateMetadataClick}
       />
 
       {/* AI Metadata Modal */}

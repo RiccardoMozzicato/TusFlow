@@ -27,6 +27,9 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
+import org.springframework.security.authentication.TestingAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 import org.springframework.web.server.ResponseStatusException
@@ -77,11 +80,15 @@ class FileServiceTest {
         every { g11.tusuploaderservice.utils.getUserIdFromJwt() } returns userId
         every { authService.getAccessToken() } returns token
         every { userServiceClient.get() } returns uriSpec
+
+        val auth = TestingAuthenticationToken("user", null, listOf(SimpleGrantedAuthority("ROLE_staff")))
+        SecurityContextHolder.getContext().authentication = auth
     }
 
     @AfterEach
     fun tearDown() {
         unmockkStatic("g11.tusuploaderservice.utils.UtilsKt")
+        SecurityContextHolder.clearContext()
     }
 
     private fun makeUpload(
@@ -135,6 +142,15 @@ class FileServiceTest {
     }
 
     private fun mockUserServiceOk(userId: UUID) {
+        mockUserAs(userId, "TestOrg", "TestDept", UserRole.ROLE_staff)
+    }
+
+    private fun mockUserAs(
+        userId: UUID,
+        organization: String,
+        department: String,
+        role: UserRole,
+    ) {
         val headersSpec = mockk<RestClient.RequestHeadersSpec<*>>()
         val responseSpec = mockk<RestClient.ResponseSpec>()
 
@@ -145,9 +161,9 @@ class FileServiceTest {
             id = userId,
             fullName = "Test User",
             email = "test@example.com",
-            organization = "TestOrg",
-            department = "TestDept",
-            role = UserRole.ROLE_staff
+            organization = organization,
+            department = department,
+            role = role,
         )
     }
 
@@ -211,6 +227,71 @@ class FileServiceTest {
             fileService.getFileMetadata(id)
         }
         assertTrue(ex.message!!.contains(id.toString()))
+    }
+
+    @Test
+    fun `getFileMetadata denies access to organization file for user from different organization`() {
+        val otherUserId = UUID.randomUUID()
+        every { g11.tusuploaderservice.utils.getUserIdFromJwt() } returns otherUserId
+        val file = makeFile(sharingScope = SharingScope.ORGANIZATION)
+        mockUserAs(otherUserId, "OtherOrg", "TestDept", UserRole.ROLE_staff)
+        every { fileRepository.findById(file.uuid) } returns Optional.of(file)
+        every { fileShareRepository.findByFile_UuidAndUserID(file.uuid, otherUserId) } returns null
+
+        assertThrows<ForbiddenException> {
+            fileService.getFileMetadata(file.uuid)
+        }
+    }
+
+    @Test
+    fun `getFileMetadata denies access to department file for user from different organization`() {
+        val otherUserId = UUID.randomUUID()
+        every { g11.tusuploaderservice.utils.getUserIdFromJwt() } returns otherUserId
+        val file = makeFile(sharingScope = SharingScope.DEPARTMENT)
+        mockUserAs(otherUserId, "OtherOrg", "TestDept", UserRole.ROLE_staff)
+        every { fileRepository.findById(file.uuid) } returns Optional.of(file)
+        every { fileShareRepository.findByFile_UuidAndUserID(file.uuid, otherUserId) } returns null
+
+        assertThrows<ForbiddenException> {
+            fileService.getFileMetadata(file.uuid)
+        }
+    }
+
+    @Test
+    fun `getFileMetadata allows owner to access their own personal file`() {
+        val file = makeFile(sharingScope = SharingScope.PERSONAL)
+        mockUserServiceOk(userId)
+        every { fileRepository.findById(file.uuid) } returns Optional.of(file)
+        every { fileShareRepository.findByFile_UuidAndUserID(file.uuid, userId) } returns null
+
+        val dto = fileService.getFileMetadata(file.uuid)
+
+        assertEquals(file.uuid, dto.id)
+    }
+
+    @Test
+    fun `getFileMetadata throws when security context has no JWT (unauthenticated)`() {
+        every { g11.tusuploaderservice.utils.getUserIdFromJwt() } throws
+            IllegalStateException("No JWT authentication found in security context")
+
+        assertThrows<IllegalStateException> {
+            fileService.getFileMetadata(UUID.randomUUID())
+        }
+
+        verify(exactly = 0) { fileRepository.findById(any()) }
+    }
+
+    @Test
+    fun `getFileMetadata fails for AI client because service accounts are not registered in user service`() {
+        val aiClientId = UUID.randomUUID()
+        every { g11.tusuploaderservice.utils.getUserIdFromJwt() } returns aiClientId
+        mockUserServiceError(aiClientId, 404)
+
+        assertThrows<ResourceNotFoundException> {
+            fileService.getFileMetadata(UUID.randomUUID())
+        }
+
+        verify(exactly = 0) { fileRepository.findById(any()) }
     }
 
     @Test

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Modal, Button, Spinner, Alert, Badge, Form } from 'react-bootstrap';
-import { updateGeneratedMetadata, streamFileGeneratedMetadata } from '../services/fileApi';
+import { updateGeneratedMetadata, streamFileGeneratedMetadata, retryFailedMetadataGeneration } from '../services/fileApi';
 import type { MetadataAIDTO, SensitivityLevel } from '../services/fileApi';
 
 interface MetadataAIModalProps {
@@ -18,6 +18,7 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
   fileName,
   version
 }) => {
+  const streamSessionRef = useRef(0);
   const [metadata, setMetadata] = useState<MetadataAIDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,13 +33,35 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
   const [editSensitivity, setEditSensitivity] = useState<SensitivityLevel | ''>('');
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
+    const startMetadataStream = useCallback((signal: AbortSignal) => {
+        streamSessionRef.current += 1;
+        const sessionId = streamSessionRef.current;
+        console.log(`Starting metadata stream via SSE for file ${fileName} v${version}`);
+        setLoading(true);
+        setError(null);
+        setProcessingStatus('connecting');
+
+        // Try SSE first
+        const eventSource = streamFileGeneratedMetadata(
+            fileId,
+            version,
+            (data) => handleSSEUpdate(data, sessionId),
+            (msg) => handleSSEError(msg, sessionId),
+            signal
+        );
+
+        if (eventSource) {
+            eventSourceRef.current = eventSource;
+        }
+    }, [fileId, version]);
+
   useEffect(() => {
     if (show) {
       // Create new AbortController for this modal session
       abortControllerRef.current = new AbortController();
       startMetadataStream(abortControllerRef.current.signal);
     }
-    
+
     // Cleanup: close SSE connection when modal closes
     return () => {
       if (eventSourceRef.current) {
@@ -51,7 +74,7 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
         abortControllerRef.current = null;
       }
     };
-  }, [show, fileId, version]);
+  }, [show, fileId, version, startMetadataStream]);
 
   useEffect(() => {
     if (metadata && !formDirty) {
@@ -64,27 +87,9 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
     }
   }, [metadata, formDirty]);
 
-  const startMetadataStream = (signal: AbortSignal) => {
-    console.log('Starting metadata stream via SSE');
-    setLoading(true);
-    setError(null);
-    setProcessingStatus('connecting');
 
-    // Try SSE first
-    const eventSource = streamFileGeneratedMetadata(
-      fileId,
-      version,
-      handleSSEUpdate,
-      handleSSEError,
-      signal
-    );
-
-    if (eventSource) {
-      eventSourceRef.current = eventSource;
-    }
-  };
-
-  const handleSSEUpdate = (data: any) => {
+  const handleSSEUpdate = (data: any, sessionId: number) => {
+    if (sessionId !== streamSessionRef.current) return;
     console.log('SSE Update received:', data);
 
     switch (data.status) {
@@ -129,11 +134,62 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
     }
   };
 
-  const handleSSEError = (errorMessage: string) => {
+  const handleSSEError = (errorMessage: string, sessionId: number) => {
+    if (sessionId !== streamSessionRef.current) return;
     console.error('SSE Error:', errorMessage);
     setError(errorMessage);
     setProcessingStatus('error');
     setLoading(false);
+    abortControllerRef.current?.abort()
+  };
+
+  const retryMetadataGeneration = async () => {
+    if (!fileId) return;
+
+    if (version === undefined) {
+      setError('Cannot retry metadata generation: missing file version');
+      setProcessingStatus('error');
+      return;
+    }
+
+    // Close any existing SSE and abort ongoing requests
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Reset UI state
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
+    setMetadata(null);
+    setSaveError(null);
+    setSaveSuccess(null);
+    setSaving(false);
+    setFormDirty(false);
+    setEditSummary('');
+    setEditTags('');
+    setEditSensitivity('');
+    setError(null);
+    setProcessingStatus('retrying');
+    setLoading(true);
+
+    try {
+        await updateGeneratedMetadata(fileId, {"summary": ""} ,version)
+      await retryFailedMetadataGeneration(fileId, version);
+
+      // After successfully triggering retry, reopen SSE to listen for updates
+      startMetadataStream(signal);
+    } catch (err) {
+      console.error('Retry failed:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to trigger retry';
+      setError(msg);
+      setProcessingStatus('error');
+      setLoading(false);
+    }
   };
 
   const handleClose = () => {
@@ -387,9 +443,8 @@ export const MetadataAIModal: React.FC<MetadataAIModalProps> = ({
         ) : null}
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={handleClose}>
-          Close
-        </Button>
+          {error && <Button variant="primary" onClick={retryMetadataGeneration}>Retry</Button>}
+          <Button variant="secondary" onClick={handleClose}>Close</Button>
       </Modal.Footer>
     </Modal>
   );
