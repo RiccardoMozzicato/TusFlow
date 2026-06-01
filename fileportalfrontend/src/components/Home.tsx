@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Container, Row, Col, Card, Button, Badge } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Badge, ProgressBar } from 'react-bootstrap';
 import { Layout } from './Layout';
 import { UploadFileModal } from './UploadFileModal';
 import { ChatBox } from './ChatBox';
@@ -13,7 +13,7 @@ export const Home: React.FC = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
 
   const formatBytes = (bytes?: number) => {
-    if (!bytes) return 'N/A';
+    if (bytes == null) return 'N/A';
     const size = ["B", "KB", "MB", "GB", "TB"];
     let index = 0;
     while(bytes >= 1024 && index < size.length-1) {
@@ -79,11 +79,26 @@ export const Home: React.FC = () => {
                   </div>
                 </div>
                 <div className="mb-3">
-                  <strong>Storage Quota:</strong>
+                  <strong>Storage:</strong>
                   {user?.storageQuota ? (
-                    <p className="mb-2">{formatBytes(user.storageQuota)}</p>
+                    <>
+                      <ProgressBar
+                        now={Math.min(Math.round(((user.storageUsed ?? 0) / user.storageQuota) * 100), 100)}
+                        variant={
+                          (user.storageUsed ?? 0) / user.storageQuota > 0.9 ? 'danger' :
+                          (user.storageUsed ?? 0) / user.storageQuota > 0.7 ? 'warning' : 'success'
+                        }
+                        className="mt-2 mb-1"
+                      />
+                      <small className="text-muted">
+                        {formatBytes(user.storageUsed ?? 0)} used of {formatBytes(user.storageQuota)}
+                      </small>
+                    </>
                   ) : (
-                    <p className="mb-2">N/A</p>
+                    <>
+                      <p className="mb-0">No quota set</p>
+                      <small className="text-muted">Used: {formatBytes(user?.storageUsed ?? 0)}</small>
+                    </>
                   )}
                 </div>
               </Card.Body>

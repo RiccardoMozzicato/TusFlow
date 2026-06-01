@@ -9,6 +9,7 @@ import g11.tusuploaderservice.services.AuthService
 import g11.tusuploaderservice.entities.File
 import g11.tusuploaderservice.entities.FileVersion
 import g11.tusuploaderservice.entities.MergeMode
+import g11.tusuploaderservice.entities.FilesOutboxEvent
 import g11.tusuploaderservice.entities.Upload
 import g11.tusuploaderservice.entities.UploadStatus
 import g11.tusuploaderservice.exceptions.*
@@ -18,6 +19,7 @@ import g11.tusuploaderservice.repositories.TusRepository
 import g11.tusuploaderservice.services.FileServiceInterface
 import g11.tusuploaderservice.services.StorageServiceInterface
 import g11.tusuploaderservice.services.TusService
+import g11.tusuploaderservice.services.TusServiceInterface
 import io.mockk.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -35,6 +37,7 @@ class TusServiceTest {
     private val fileService = mockk<FileServiceInterface>(relaxed = true)
     private val authService = mockk<AuthService>(relaxed = true)
     private val outboxRepository = mockk<FilesOutboxEventsRepository>(relaxed = true)
+    private val self = mockk<TusServiceInterface>(relaxed = true)
 
     private lateinit var tusService: TusService
 
@@ -50,7 +53,8 @@ class TusServiceTest {
             outboxRepository = outboxRepository,
             fileRepo = fileRepository,
             repo = tusRepository,
-            tracer = mockk(relaxed = true)
+            tracer = mockk(relaxed = true),
+            self = self
         )
 
         // Set private fields using reflection
@@ -68,6 +72,9 @@ class TusServiceTest {
         )
         every { fileService.getCurrentUserPermission(any(), any()) } returns PERMISSION_LEVEL.READ_WRITE
         every { fileRepository.findById(any()) } returns Optional.empty()
+        // Generic save<S>(): S returns Object under a relaxed mock, which fails the
+        // call-site cast to FilesOutboxEvent. Return the saved entity instead.
+        every { outboxRepository.save(any()) } answers { firstArg() }
     }
 
     private fun makeUploadDTO(
@@ -145,6 +152,26 @@ class TusServiceTest {
             department = department,
             sharingScope = sharingScope
         )
+    }
+
+    private fun userDetailsWith(storageQuota: Long?, storageUsed: Long = 0L): UserDTO = UserDTO(
+        id = userId,
+        fullName = "Test User",
+        email = "test@example.com",
+        organization = "TestOrg",
+        department = "TestDept",
+        role = UserRole.ROLE_staff,
+        storageQuota = storageQuota,
+        storageUsed = storageUsed
+    )
+
+    private fun stubNewFileSave() {
+        every { fileRepository.findById(any()) } returns Optional.empty()
+        every { tusRepository.save(any()) } answers {
+            val upload = firstArg<Upload>()
+            upload.id = UUID.randomUUID()
+            upload
+        }
     }
 
     @Test
@@ -680,4 +707,183 @@ class TusServiceTest {
         // assert
         assertTrue(upload.expiresAt.after(oldExpiration))
     }
+
+    // region Storage quota
+
+    @Test
+    fun `createUpload throws UploadTooLargeException when upload exceeds remaining quota`() {
+        // arrange - quota 1000, already used 500, so only 500 remains
+        every { fileService.getUserDetails(any()) } returns userDetailsWith(storageQuota = 1000L, storageUsed = 500L)
+        stubNewFileSave()
+        val uploadDTO = makeUploadDTO(uploadLength = 600L)
+
+        // act / assert
+        val ex = assertThrows<UploadTooLargeException> {
+            tusService.createUpload(uploadDTO)
+        }
+        assertTrue(ex.message.contains("storage quota"))
+        verify(exactly = 0) { tusRepository.save(any()) }
+    }
+
+    @Test
+    fun `createUpload emits STORAGE_RESERVED when within quota`() {
+        // arrange
+        every { fileService.getUserDetails(any()) } returns userDetailsWith(storageQuota = 10_000L, storageUsed = 0L)
+        stubNewFileSave()
+        val uploadDTO = makeUploadDTO(uploadLength = 1000L)
+
+        // act
+        tusService.createUpload(uploadDTO)
+
+        // assert
+        verify { outboxRepository.save(match<FilesOutboxEvent> { it.eventType == "STORAGE_RESERVED" }) }
+    }
+
+    @Test
+    fun `createUpload tracks usage and emits STORAGE_RESERVED even when quota is null`() {
+        // arrange - no quota set: usage must still be tracked, without enforcement
+        every { fileService.getUserDetails(any()) } returns userDetailsWith(storageQuota = null)
+        stubNewFileSave()
+        val uploadDTO = makeUploadDTO(uploadLength = 1000L)
+
+        // act
+        tusService.createUpload(uploadDTO)
+
+        // assert
+        verify { outboxRepository.save(match<FilesOutboxEvent> { it.eventType == "STORAGE_RESERVED" }) }
+    }
+
+    @Test
+    fun `createUpload does not enforce a limit when quota is null even for a large upload`() {
+        // arrange - large upload (still under tusMaxSize) and no quota: must succeed
+        every { fileService.getUserDetails(any()) } returns userDetailsWith(storageQuota = null)
+        stubNewFileSave()
+        val uploadDTO = makeUploadDTO(uploadLength = 9_000_000L)
+
+        // act
+        val result = tusService.createUpload(uploadDTO)
+
+        // assert
+        assertNotNull(result.id)
+        verify { outboxRepository.save(match<FilesOutboxEvent> { it.eventType == "STORAGE_RESERVED" }) }
+    }
+
+    @Test
+    fun `appendChunk throws UploadTooLargeException when deferred upload exceeds remaining quota`() {
+        // arrange - deferred upload (size not yet known), declares a length above the quota
+        every { fileService.getUserDetails(any()) } returns userDetailsWith(storageQuota = 1000L, storageUsed = 500L)
+        val upload = makeUpload(size = null, totalOffset = 0L, status = UploadStatus.PENDING)
+        val uploadDTO = makeUploadDTO(id = upload.id, uploadOffset = 0L, uploadLength = 600L)
+        every { tusRepository.findById(upload.id!!) } returns Optional.of(upload)
+        every { fileRepository.findById(upload.fileId) } returns Optional.empty()
+
+        // act / assert
+        val ex = assertThrows<UploadTooLargeException> {
+            tusService.appendChunk(uploadDTO, ByteArray(100))
+        }
+        assertTrue(ex.message.contains("storage quota"))
+        verify(exactly = 0) { outboxRepository.save(match<FilesOutboxEvent> { it.eventType == "STORAGE_RESERVED" }) }
+        // the upload and its already-uploaded chunks must be cleaned up on quota rejection
+        verify { self.softDeleteAndPurgeChunks(upload.id!!) }
+    }
+
+    @Test
+    fun `softDeleteAndPurgeChunks marks upload DELETED and purges chunks`() {
+        // arrange
+        val upload = makeUpload(status = UploadStatus.UPLOADING, totalOffset = 100L, chunkCount = 1)
+        every { tusRepository.findById(upload.id!!) } returns Optional.of(upload)
+
+        // act
+        tusService.softDeleteAndPurgeChunks(upload.id!!)
+
+        // assert
+        assertEquals(UploadStatus.DELETED, upload.status)
+        verify { storageService.deletePartialObjects(upload.id.toString()) }
+    }
+
+    @Test
+    fun `softDeleteAndPurgeChunks is a no-op when upload does not exist`() {
+        // arrange
+        val id = UUID.randomUUID()
+        every { tusRepository.findById(id) } returns Optional.empty()
+
+        // act
+        tusService.softDeleteAndPurgeChunks(id)
+
+        // assert
+        verify(exactly = 0) { storageService.deletePartialObjects(any()) }
+    }
+
+    @Test
+    fun `appendChunk tracks usage and emits STORAGE_RESERVED even when quota is null`() {
+        // arrange - deferred upload, no quota: usage must still be reserved
+        every { fileService.getUserDetails(any()) } returns userDetailsWith(storageQuota = null)
+        val upload = makeUpload(size = null, totalOffset = 0L, status = UploadStatus.PENDING)
+        val uploadDTO = makeUploadDTO(id = upload.id, uploadOffset = 0L, uploadLength = 1000L)
+        every { tusRepository.findById(upload.id!!) } returns Optional.of(upload)
+        every { fileRepository.findById(upload.fileId) } returns Optional.empty()
+        every { storageService.putObject(any()) } returns ""
+
+        // act - small chunk keeps the upload in UPLOADING (no completion / confirmation)
+        tusService.appendChunk(uploadDTO, ByteArray(100))
+
+        // assert
+        verify { outboxRepository.save(match<FilesOutboxEvent> { it.eventType == "STORAGE_RESERVED" }) }
+    }
+
+    @Test
+    fun `appendChunk emits STORAGE_CONFIRMED when the upload completes`() {
+        // arrange
+        val upload = makeUpload(size = 100L, totalOffset = 90L, status = UploadStatus.UPLOADING)
+        val uploadDTO = makeUploadDTO(id = upload.id, uploadOffset = 90L, uploadLength = null)
+        val file = makeFile(upload.fileId)
+        val fileVersion = mockk<FileVersion>(relaxed = true) {
+            every { id } returns 1L
+            every { version } returns 1L
+            every { filename } returns "test.txt"
+            every { contentType } returns "text/plain"
+            every { metadata } returns mapOf("key" to "value")
+        }
+        every { tusRepository.findById(upload.id!!) } returns Optional.of(upload)
+        every { storageService.putObject(any()) } returns ""
+        every { fileRepository.findById(upload.fileId) } returns Optional.empty()
+        every { fileService.createFile(any(), any()) } returns file
+        every { fileService.createFileVersion(any(), any()) } returns fileVersion
+
+        // act
+        tusService.appendChunk(uploadDTO, ByteArray(10))
+
+        // assert
+        verify { outboxRepository.save(match<FilesOutboxEvent> { it.eventType == "STORAGE_CONFIRMED" }) }
+    }
+
+    @Test
+    fun `terminateUpload emits STORAGE_RELEASED when the upload has a known size`() {
+        // arrange
+        val upload = makeUpload(size = 1000L, status = UploadStatus.UPLOADING)
+        every { tusRepository.findById(upload.id!!) } returns Optional.of(upload)
+        every { fileRepository.findById(upload.fileId) } returns Optional.empty()
+
+        // act
+        tusService.terminateUpload(upload.id.toString())
+
+        // assert
+        verify { outboxRepository.save(match<FilesOutboxEvent> { it.eventType == "STORAGE_RELEASED" }) }
+    }
+
+    @Test
+    fun `terminateUpload does not emit STORAGE_RELEASED when size is unknown`() {
+        // arrange - nothing was ever reserved for a size-less upload
+        val upload = makeUpload(size = null, status = UploadStatus.PENDING)
+        every { tusRepository.findById(upload.id!!) } returns Optional.of(upload)
+        every { fileRepository.findById(upload.fileId) } returns Optional.empty()
+
+        // act
+        tusService.terminateUpload(upload.id.toString())
+
+        // assert
+        verify(exactly = 0) { outboxRepository.save(match<FilesOutboxEvent> { it.eventType == "STORAGE_RELEASED" }) }
+    }
+
+    // endregion
 }

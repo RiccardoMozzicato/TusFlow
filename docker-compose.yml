@@ -259,7 +259,6 @@ services:
   setup-connector:
     image: curlimages/curl:latest
     container_name: setup-connector
-    profiles: ["setup"]
     depends_on:
       kafka-connect:
         condition: service_healthy
@@ -326,7 +325,6 @@ services:
   setup-job-outbox-connector:
     image: curlimages/curl:latest
     container_name: setup-job-outbox-connector
-    profiles: ["setup"]
     depends_on:
       kafka-connect:
         condition: service_healthy

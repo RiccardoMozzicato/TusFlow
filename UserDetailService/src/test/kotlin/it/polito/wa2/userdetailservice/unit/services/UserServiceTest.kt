@@ -11,6 +11,7 @@ import it.polito.wa2.userdetailservice.dto.UserDTO
 import it.polito.wa2.userdetailservice.entities.User
 import it.polito.wa2.userdetailservice.enums.UserRole
 import it.polito.wa2.userdetailservice.exceptions.SelfDeletionNotAllowedException
+import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import it.polito.wa2.userdetailservice.repositories.UserRepository
@@ -569,6 +570,117 @@ class UserServiceTest {
         assertEquals(UserRole.ROLE_manager, existingUser.role) // Changed
         assertEquals(10737418240, existingUser.storageQuota) // Changed
         verify { userRepo.findById(userId) }
+    }
+
+    @Test
+    fun `updateUser() - throws when storage quota is below current used`() {
+        // arrange
+        val userId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val existingUser = User(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            role = UserRole.ROLE_staff,
+            department = "IT",
+            storageQuota = 10000,
+            storageUsed = 5000,
+            createdAt = Date.from(Instant.now().minusSeconds(60 * 60 * 24)),
+            updatedAt = Date.from(Instant.now().minusSeconds(60 * 60))
+        )
+
+        val updatedUserDTO = UserDTO(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com", // same email to skip conflict lookup
+            organization = "CloudFlare",
+            department = "IT",
+            role = UserRole.ROLE_staff,
+            storageQuota = 1000 // below the 5000 already used
+        )
+
+        every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        // act & assert
+        val exception = Assertions.assertThrows(StorageQuotaBelowUsedException::class.java) {
+            userService.updateUser(updatedUserDTO)
+        }
+        TestCase.assertTrue(exception.message!!.contains("5000"))
+        // entity must be left untouched
+        assertEquals(10000, existingUser.storageQuota)
+    }
+
+    @Test
+    fun `updateUser() - allows storage quota equal to current used`() {
+        // arrange - boundary: quota == used is acceptable
+        val userId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val existingUser = User(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            role = UserRole.ROLE_staff,
+            department = "IT",
+            storageQuota = 10000,
+            storageUsed = 1000,
+            createdAt = Date.from(Instant.now().minusSeconds(60 * 60 * 24)),
+            updatedAt = Date.from(Instant.now().minusSeconds(60 * 60))
+        )
+
+        val updatedUserDTO = UserDTO(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            department = "IT",
+            role = UserRole.ROLE_staff,
+            storageQuota = 1000 // exactly the used amount
+        )
+
+        every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        // act
+        userService.updateUser(updatedUserDTO)
+
+        // assert
+        assertEquals(1000, existingUser.storageQuota)
+    }
+
+    @Test
+    fun `updateUser() - allows null storage quota even when storage used is positive`() {
+        // arrange - clearing the quota disables enforcement but usage keeps being tracked
+        val userId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val existingUser = User(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            role = UserRole.ROLE_staff,
+            department = "IT",
+            storageQuota = 10000,
+            storageUsed = 5000,
+            createdAt = Date.from(Instant.now().minusSeconds(60 * 60 * 24)),
+            updatedAt = Date.from(Instant.now().minusSeconds(60 * 60))
+        )
+
+        val updatedUserDTO = UserDTO(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            department = "IT",
+            role = UserRole.ROLE_staff,
+            storageQuota = null
+        )
+
+        every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        // act
+        userService.updateUser(updatedUserDTO)
+
+        // assert - quota cleared, used untouched
+        assertEquals(null, existingUser.storageQuota)
+        assertEquals(5000, existingUser.storageUsed)
     }
 
     @Test

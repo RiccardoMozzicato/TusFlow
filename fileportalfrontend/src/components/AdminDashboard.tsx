@@ -88,7 +88,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const formatBytes = (bytes?: number) => {
-    if (!bytes) return 'N/A';
+    if (bytes == null) return 'N/A';
     const size = ["B", "KB", "MB", "GB", "TB"];
     let index = 0;
     while(bytes >= 1024 && index < size.length-1) {

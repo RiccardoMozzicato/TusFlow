@@ -11,6 +11,7 @@ import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
 import it.polito.wa2.userdetailservice.enums.UserRole
 import it.polito.wa2.userdetailservice.exceptions.SelfDeletionNotAllowedException
+import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import it.polito.wa2.userdetailservice.services.UserService
@@ -447,6 +448,87 @@ class UserServiceTest: IntegrationTest() {
         Assertions.assertEquals(updatedUser.storageQuota, result.storageQuota)
     }
 
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `updateUser() - throws when storage quota below current used`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 5_000_000L, userId)
+
+        val updatedUser = UserDTO(
+            id = userId,
+            fullName = "Mario Rossi",
+            email = "mario.rossi@gmail.com",
+            organization = "Polytechnic University of Turin",
+            department = "Engineering",
+            role = UserRole.ROLE_manager,
+            storageQuota = 1_000L // below the 5_000_000 already used
+        )
+
+        // act & assert
+        assertThrows<StorageQuotaBelowUsedException> {
+            userService.updateUser(updatedUser)
+        }
+
+        // quota left unchanged in DB
+        val storedQuota = jdbcTemplate.queryForObject(
+            "SELECT storage_quota FROM users WHERE id = ?", Long::class.java, userId
+        )
+        Assertions.assertEquals(10737418240L, storedQuota)
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `updateUser() - succeeds when storage quota above current used and keeps used unchanged`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 1_000L, userId)
+
+        val updatedUser = UserDTO(
+            id = userId,
+            fullName = "Mario Rossi",
+            email = "mario.rossi@gmail.com",
+            organization = "Polytechnic University of Turin",
+            department = "Engineering",
+            role = UserRole.ROLE_manager,
+            storageQuota = 2_000L
+        )
+
+        // act
+        userService.updateUser(updatedUser)
+
+        // assert
+        val result = userService.getUser(userId)
+        Assertions.assertEquals(2_000L, result.storageQuota)
+        Assertions.assertEquals(1_000L, result.storageUsed) // update must not touch used
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `updateUser() - allows clearing the quota even with positive used`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 9_999L, userId)
+
+        val updatedUser = UserDTO(
+            id = userId,
+            fullName = "Mario Rossi",
+            email = "mario.rossi@gmail.com",
+            organization = "Polytechnic University of Turin",
+            department = "Engineering",
+            role = UserRole.ROLE_manager,
+            storageQuota = null
+        )
+
+        // act
+        userService.updateUser(updatedUser)
+
+        // assert
+        val result = userService.getUser(userId)
+        Assertions.assertNull(result.storageQuota)
+        Assertions.assertEquals(9_999L, result.storageUsed)
+    }
 
     @Test
     @WithMockUser(roles = ["staff", "manager", "serviceaccount-fileservice"])

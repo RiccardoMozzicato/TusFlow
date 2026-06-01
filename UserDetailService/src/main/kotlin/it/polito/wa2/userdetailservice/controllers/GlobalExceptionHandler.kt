@@ -1,6 +1,7 @@
 package it.polito.wa2.userdetailservice.controllers
 
 import it.polito.wa2.userdetailservice.exceptions.SelfDeletionNotAllowedException
+import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import org.springframework.http.HttpStatus
@@ -49,6 +50,14 @@ class GlobalExceptionHandler: ResponseEntityExceptionHandler() {
     fun handleSelfDeletionNotAllowed(exception: SelfDeletionNotAllowedException): ProblemDetail {
         val problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN)
         problem.title = "Forbidden"
+        problem.detail = exception.message
+        return problem
+    }
+
+    @ExceptionHandler(StorageQuotaBelowUsedException::class)
+    fun handleStorageQuotaBelowUsed(exception: StorageQuotaBelowUsedException): ProblemDetail {
+        val problem = ProblemDetail.forStatus(HttpStatus.CONFLICT)
+        problem.title = "Storage Quota Conflict"
         problem.detail = exception.message
         return problem
     }

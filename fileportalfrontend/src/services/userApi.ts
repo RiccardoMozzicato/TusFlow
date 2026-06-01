@@ -12,6 +12,7 @@ export interface User {
   department?: string;
   role?: 'admin' | 'manager' | 'staff';
   storageQuota?: number;
+  storageUsed?: number;
 }
 
 // User interface for creating new users

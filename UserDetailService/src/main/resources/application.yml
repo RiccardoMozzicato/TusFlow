@@ -42,6 +42,11 @@ keycloak-admin:
   client-id: user-admin
   secret: lgwvWQ7TnGvcRL1SYxsdzUu7j3hiXDNB
 
+kafka:
+  bootstrap-servers: localhost:9094
+  consumer:
+    group-id: userdetail-service
+
 management:
   tracing:
     sampling:

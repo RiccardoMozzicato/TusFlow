@@ -11,3 +11,7 @@ class UserConflictError(
 class SelfDeletionNotAllowedException(
     override val message: String = "Cannot delete your own user account"
 ) : RuntimeException()
+
+class StorageQuotaBelowUsedException(
+    override val message: String = "Storage quota cannot be set below current storage used"
+) : RuntimeException()

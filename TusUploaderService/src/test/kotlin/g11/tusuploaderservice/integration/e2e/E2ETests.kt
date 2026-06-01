@@ -10,10 +10,12 @@ import g11.tusuploaderservice.dto.UserRole
 import g11.tusuploaderservice.entities.File
 import g11.tusuploaderservice.entities.FileStatus
 import g11.tusuploaderservice.entities.FileVersion
+import g11.tusuploaderservice.entities.UploadStatus
 import g11.tusuploaderservice.integration.IntegrationTest
 import g11.tusuploaderservice.repositories.FileRepository
 import g11.tusuploaderservice.repositories.TusRepository
 import io.minio.BucketExistsArgs
+import io.minio.ListObjectsArgs
 import io.minio.MakeBucketArgs
 import io.minio.MinioClient
 import io.minio.PutObjectArgs
@@ -944,6 +946,106 @@ class E2ETests : IntegrationTest() {
 
         assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, patchResponse.statusCode)
         println("✅ Test passed! PATCH exceeding Upload-Length returns 413")
+    }
+
+    /**
+     * Re-stubs the (mocked) UserDetailService client so GET /api/v1/users/{id} returns the given
+     * user. Used to inject a storage quota into the real appendChunk flow.
+     */
+    private fun stubUserServiceUser(user: UserDTO) {
+        val uriSpec = mockk<RestClient.RequestHeadersUriSpec<*>>(relaxed = true)
+        val headersSpec = mockk<RestClient.RequestHeadersSpec<*>>(relaxed = true)
+        val responseSpec = mockk<RestClient.ResponseSpec>(relaxed = true)
+        every { userServiceClient.get() } returns uriSpec
+        every { uriSpec.uri(any<String>(), any<UUID>()) } returns headersSpec
+        every { headersSpec.headers(any()) } returns headersSpec
+        every { headersSpec.retrieve() } returns responseSpec
+        every { responseSpec.body(UserDTO::class.java) } returns user
+    }
+
+    @Test
+    fun `PATCH declaring length over storage quota returns 413 and purges the upload`() {
+        val fileId = UUID.randomUUID()
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+
+        // UserDetailService reports a small quota so the declared length will exceed it.
+        stubUserServiceUser(
+            UserDTO(
+                id = testUserId,
+                fullName = "Test Admin",
+                email = "testadmin@example.com",
+                organization = "Test Organization",
+                department = "Test Department",
+                role = UserRole.ROLE_admin,
+                storageQuota = 1_000L,
+                storageUsed = 0L
+            )
+        )
+
+        // 1. Create a deferred-length upload (Upload-Defer-Length, no Upload-Length yet).
+        val createHeaders = HttpHeaders().apply {
+            setBearerAuth(userToken)
+            set("Tus-Resumable", "1.0.0")
+            set("Upload-Defer-Length", "1")
+        }
+        val createResponse = restTemplate.exchange(
+            "/api/v1/uploads?fileId=$fileId",
+            HttpMethod.POST,
+            HttpEntity<String>(null, createHeaders),
+            String::class.java
+        )
+        assertEquals(HttpStatus.CREATED, createResponse.statusCode)
+        val uploadId = UUID.fromString(createResponse.headers.location!!.path.substringAfterLast("/"))
+
+        // 2. Upload a first chunk WITHOUT declaring the length (so a chunk lands in MinIO).
+        val firstChunk = ByteArray(100) { 'A'.code.toByte() }
+        val firstPatchHeaders = HttpHeaders().apply {
+            setBearerAuth(userToken)
+            set("Tus-Resumable", "1.0.0")
+            set("Content-Type", "application/offset+octet-stream")
+            set("Upload-Offset", "0")
+            set("Content-Length", firstChunk.size.toString())
+        }
+        val firstPatch = restTemplate.exchange(
+            "/api/v1/uploads/$uploadId",
+            HttpMethod.PATCH,
+            HttpEntity(firstChunk, firstPatchHeaders),
+            String::class.java
+        )
+        assertEquals(HttpStatus.NO_CONTENT, firstPatch.statusCode)
+
+        // 3. Second PATCH declares Upload-Length above the remaining quota.
+        //    This must return 413 immediately (not hang) and clean up.
+        val secondChunk = ByteArray(50) { 'B'.code.toByte() }
+        val secondPatchHeaders = HttpHeaders().apply {
+            setBearerAuth(userToken)
+            set("Tus-Resumable", "1.0.0")
+            set("Content-Type", "application/offset+octet-stream")
+            set("Upload-Offset", "100")
+            set("Upload-Length", "5000") // 5000 > quota of 1000
+            set("Content-Length", secondChunk.size.toString())
+        }
+        val secondPatch = restTemplate.exchange(
+            "/api/v1/uploads/$uploadId",
+            HttpMethod.PATCH,
+            HttpEntity(secondChunk, secondPatchHeaders),
+            String::class.java
+        )
+
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, secondPatch.statusCode)
+
+        // The upload is soft-deleted - the status change commits despite the 413.
+        val saved = uploadRepository.findById(uploadId)
+        assertTrue(saved.isPresent, "Upload row should still exist (soft delete)")
+        assertEquals(UploadStatus.DELETED, saved.get().status, "Upload should be soft-deleted")
+
+        // The already-uploaded chunks are purged from MinIO.
+        val remaining = minioClient.listObjects(
+            ListObjectsArgs.builder().bucket("uploads").prefix("$uploadId/").recursive(true).build()
+        ).toList()
+        assertTrue(remaining.isEmpty(), "Partial chunks should be purged after quota rejection")
+
+        println("✅ Test passed! Over-quota deferred PATCH returns 413, soft-deletes and purges chunks")
     }
 
     @Test

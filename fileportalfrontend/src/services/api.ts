@@ -18,6 +18,7 @@ export interface UserInfo {
   organization?: string;
   roles: string[];
   storageQuota?: number; // Storage quota in bytes
+  storageUsed?: number;  // Storage used in bytes
 }
 
 /**
@@ -73,6 +74,7 @@ export const getUserInfo = async (): Promise<UserInfo> => {
         organization: userDetails.organization,
         department: userDetails.department,
         storageQuota: userDetails.storageQuota,
+        storageUsed: userDetails.storageUsed,
       };
     }
   } catch (error) {

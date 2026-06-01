@@ -69,6 +69,8 @@ dependencies {
     // Observability - Distributed Tracing (Micrometer + OTel bridge + OTLP exporter)
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
+
+    implementation("org.springframework.kafka:spring-kafka")
 }
 
 kotlin {

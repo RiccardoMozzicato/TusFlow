@@ -1,15 +1,18 @@
 package g11.tusuploaderservice.utils
+import g11.tusuploaderservice.entities.FilesOutboxEvent
 import g11.tusuploaderservice.entities.MergeMode
 import g11.tusuploaderservice.entities.Upload
 import g11.tusuploaderservice.entities.UploadStatus
-import org.slf4j.LoggerFactory
-import org.springframework.scheduling.annotation.Scheduled
-import org.springframework.stereotype.Component
-import java.util.Collections.emptyList
+import g11.tusuploaderservice.repositories.FilesOutboxEventsRepository
 import g11.tusuploaderservice.repositories.TusRepository
 import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.StorageService
 import jakarta.transaction.Transactional
+import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.stereotype.Component
+import java.time.Instant
+import java.util.Collections.emptyList
 import java.util.Date
 import java.util.UUID
 
@@ -17,7 +20,8 @@ import java.util.UUID
 class ScheduledTasks (
     private val tusRepository: TusRepository,
     private val storageService: StorageService,
-    private val fileService: FileService
+    private val fileService: FileService,
+    private val outboxRepository: FilesOutboxEventsRepository
     ) {
 
 
@@ -35,6 +39,22 @@ class ScheduledTasks (
 
         result.forEach { it ->
             objects=objects.plus(it.id!!)
+        }
+
+        // Emit STORAGE_RELEASED for expired uploads that had a known size (STORAGE_RESERVED was sent for them)
+        result.filter { it.size != null }.forEach { upload ->
+            val ownerId = upload.ownerId
+            val event = FilesOutboxEvent(
+                eventType = "STORAGE_RELEASED",
+                payload = mapOf(
+                    "ownerUserId" to ownerId.toString(),
+                    "fileId" to upload.fileId.toString(),
+                    "uploadId" to upload.id.toString(),
+                    "size" to upload.size
+                ),
+                createdAt = Date.from(Instant.now())
+            )
+            outboxRepository.save(event)
         }
 
         tusRepository.deleteAllByIdInBatch(objects.asIterable())

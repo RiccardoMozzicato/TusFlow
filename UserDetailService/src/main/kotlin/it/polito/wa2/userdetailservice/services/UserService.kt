@@ -7,6 +7,7 @@ import it.polito.wa2.userdetailservice.dto.toDTO
 import it.polito.wa2.userdetailservice.entities.User
 import it.polito.wa2.userdetailservice.enums.UserRole
 import it.polito.wa2.userdetailservice.exceptions.SelfDeletionNotAllowedException
+import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import it.polito.wa2.userdetailservice.repositories.UserRepository
@@ -170,6 +171,15 @@ class UserService(
         if(userEntity.email != user.email){
             if(userRepo.getUserByEmail(user.email).isPresent)
                 throw UserConflictError("Another user with that email already exists")
+        }
+
+        if (user.storageQuota != null) {
+            val currentUsed = userEntity.storageUsed
+            if (user.storageQuota < currentUsed) {
+                throw StorageQuotaBelowUsedException(
+                    "Cannot set storage quota to ${user.storageQuota} bytes: user has already used $currentUsed bytes"
+                )
+            }
         }
 
         userEntity.fullName = user.fullName

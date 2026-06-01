@@ -443,6 +443,23 @@ class FileService(
         val fileVersionIds = file.versions.map { it.id!! }
         log.debug("File {} has {} versions to delete: {}", id, fileVersionIds.size, fileVersionIds)
 
+        val totalSize = file.versions.sumOf { it.size }
+        if (totalSize > 0) {
+            val storageEvent = FilesOutboxEvent(
+                eventType = "STORAGE_RELEASED",
+                payload = mapOf(
+                    "ownerUserId" to file.ownerId.toString(),
+                    "fileId" to id.toString(),
+                    "size" to totalSize,
+                    "traceparent" to tracer.currentSpan()?.context()
+                        ?.let { "00-${it.traceId()}-${it.spanId()}-01" }
+                ),
+                createdAt = Date.from(Instant.now())
+            )
+            outboxRepository.save(storageEvent)
+            log.debug("Saved storage released outbox event for deleted file {}", id)
+        }
+
         // Delete all file shares first to avoid foreign key constraint violation
         log.debug("Deleting all shares for file {}", id)
         fileShareRepository.deleteByFile_Uuid(id)
@@ -924,8 +941,7 @@ class FileService(
 
     }
 
-    private fun getUserFromUserService(token: String, userId: UUID): UserDTO {
-
+    override fun getUserFromUserService(token: String, userId: UUID): UserDTO {
         try {
             val userDTO = userServiceClient.get()
                 .uri("/api/v1/users/{id}", userId)
@@ -1017,6 +1033,10 @@ class FileService(
             file = bytes
         )
     }
+
+    override fun isOwner(fileId: UUID, userDTO: UserDTO): Boolean {
+        val file = fileRepository.findById(fileId)
+            .orElseThrow { ResourceNotFoundException("File not found: $fileId") }
+        return file.ownerId == userDTO.id
+    }
 }
-
-

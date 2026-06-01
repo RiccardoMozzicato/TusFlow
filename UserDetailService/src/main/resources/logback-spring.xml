@@ -31,6 +31,12 @@
     <!-- Spring Framework - generale -->
     <logger name="org.springframework" level="INFO"/>
 
+    <!-- Spring Web - generale -->
+    <logger name="org.springframework.web" level="INFO"/>
+
+    <!-- Spring Security - generale -->
+    <logger name="org.springframework.security" level="INFO"/>
+
     <!-- Spring Web - nasconde log di inizializzazione DispatcherServlet -->
     <logger name="org.springframework.web.servlet.DispatcherServlet" level="WARN"/>
 
@@ -40,7 +46,7 @@
     <logger name="org.apache.tomcat" level="WARN"/>
 
     <!-- Il tuo codice applicativo -->
-    <logger name="g11.tusuploaderservice" level="DEBUG"/>
+    <logger name="it.polito.wa2.userdetailservice" level="DEBUG"/>
 
     <!-- Loki appender (LGTM stack) -->
     <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="UserDetailService"/>

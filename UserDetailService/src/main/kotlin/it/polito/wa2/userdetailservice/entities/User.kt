@@ -1,16 +1,13 @@
 package it.polito.wa2.userdetailservice.entities
 
-import it.polito.wa2.userdetailservice.dto.UserDTO
 import it.polito.wa2.userdetailservice.enums.UserRole
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
-import jakarta.persistence.Enumerated
-import jakarta.persistence.EnumType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.Temporal
 import jakarta.persistence.TemporalType
-import java.time.Instant
+import jakarta.persistence.Version
 import java.util.Date
 import java.util.UUID
 
@@ -41,6 +38,9 @@ class User(
     @Column(updatable = true, nullable = true)
     open var storageQuota: Long? = null,
 
+    @Column(updatable = true, nullable = false)
+    open var storageUsed: Long = 0,
+
     @Column(updatable = true, nullable = true)
     @Temporal(TemporalType.TIMESTAMP)
     open var createdAt: Date? = null,
@@ -49,19 +49,12 @@ class User(
     @Temporal(TemporalType.TIMESTAMP)
     open var updatedAt: Date? = null,
 
+    // Optimistic-lock version: guards concurrent updates to the same user row (e.g. interleaved
+    // storage events) by failing the stale write instead of silently clobbering it. Managed by
+    // Hibernate; never set it manually.
+    @Version
+    @Column(nullable = false)
+    open var version: Long = 0,
+
     )
 
-fun UserDTO.toEntity(): User {
-    val date: Date = Date.from(Instant.now())
-    return User(
-        this.id,
-        this.fullName,
-        this.email,
-        this.organization,
-        this.role,
-        this.department,
-        this.storageQuota,
-        date,
-        date
-    )
-}

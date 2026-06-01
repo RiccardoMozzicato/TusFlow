@@ -11,7 +11,8 @@ data class  UserDTO(
     val organization: String,
     val department: String? = null,
     val role: UserRole,
-    val storageQuota: Long? = null
+    val storageQuota: Long? = null,
+    val storageUsed: Long = 0
 )
 
 fun User.toDTO(): UserDTO {
@@ -22,6 +23,7 @@ fun User.toDTO(): UserDTO {
         this.organization,
         this.department,
         this.role,
-        this.storageQuota
+        this.storageQuota,
+        this.storageUsed
     )
 }

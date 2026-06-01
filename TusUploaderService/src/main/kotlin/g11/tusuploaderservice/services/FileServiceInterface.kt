@@ -41,7 +41,9 @@ interface FileServiceInterface {
     fun mergeObject(upload: Upload)
     fun moveSingleChunkUpload(upload: Upload)
     fun getCurrentUserPermission(fileId: UUID, userDTO: UserDTO): PERMISSION_LEVEL
+    fun isOwner(fileId: UUID, userDTO: UserDTO): Boolean
     fun getUserDetails(token:String): UserDTO
+    fun getUserFromUserService(token: String, userId: UUID): UserDTO
 
     // Version management
     fun getFileVersions(fileId: UUID): List<FileVersionDTO>

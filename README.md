@@ -1558,6 +1558,17 @@ npm run dev
 - Automatic merge of pending files
 - Database maintenance
 
+✅ **Per-User Storage Quota**
+- Admins can optionally set a storage quota (in bytes) per user via UserDetailService
+- `storageUsed` tracks the total size of all file versions a user **owns** (by `File.ownerId`)
+- Quota is enforced in TusUploaderService as soon as the TUS `Upload-Length` becomes known (whether sent at creation or deferred to a later `PATCH`); uploads exceeding the remaining quota are rejected with `413 Payload Too Large`
+- `storageUsed` is kept consistent through the existing **Outbox + Debezium** pipeline on the `file-outbox` topic, using `STORAGE_RESERVED` / `STORAGE_CONFIRMED` / `STORAGE_RELEASED` events:
+  - **RESERVED** when length becomes known (reservation counted directly into `storageUsed`)
+  - **CONFIRMED** on merge completion (no double counting)
+  - **RELEASED** on terminate/expiration or file/version deletion
+- UserDetailService applies these events idempotently and rejects lowering a user's quota below their current `storageUsed`
+- The frontend shows used vs. total storage with a progress bar in the user profile
+
 ---
 
 ## ⚠️ Known Limitations
