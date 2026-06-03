@@ -15,5 +15,5 @@ data class FiltersDTO(
     val sortDirection: Sort.Direction,
     val pageNumber: UInt = 0u,
     val pageSize: UInt = 10u,
-    val sharingScope: SharingScope = SharingScope.PERSONAL,
+    val sharingScopes: Set<SharingScope> = setOf(SharingScope.PERSONAL),
 )

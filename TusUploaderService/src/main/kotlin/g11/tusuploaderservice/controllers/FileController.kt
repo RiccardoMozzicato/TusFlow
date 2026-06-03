@@ -66,6 +66,7 @@ class FileController(
 ) {
     private val log = LoggerFactory.getLogger(FileController::class.java)
 
+    @Deprecated("This endpoint is deprecated and will be removed in future versions. Use GET /api/v1/files with appropriate filters instead.")
     //region Swagger Documentation
     @Operation(
         tags = ["File Management"],
@@ -97,8 +98,9 @@ class FileController(
     @Operation(
         tags = ["File Management"],
         summary = "Get list of files metadata",
-        description = "Retrieves a paginated list of files with optional filtering by status, content type, and date range.",
+        description = "Retrieves a paginated list of files visible to the current user in the requested sharing scopes (combined with OR). Returns an empty page when no files match.",
         parameters = [
+            Parameter(name = "sharingScope", description = "Sharing scopes to include, comma-separated (PERSONAL, DEPARTMENT, ORGANIZATION)", schema = Schema(type = "string", example = "PERSONAL,DEPARTMENT")),
             Parameter(name = "contentType", description = "Filter by content type", schema = Schema(type = "string", example = "application/pdf")),
             Parameter(name = "dateFrom", description = "Filter files created from this date (ISO format)", schema = Schema(type = "string", example = "2024-01-01T00:00:00Z")),
             Parameter(name = "dateTo", description = "Filter files created until this date (ISO format)", schema = Schema(type = "string", example = "2024-12-31T23:59:59Z")),
@@ -155,25 +157,6 @@ class FileController(
         )]
     )
     @ApiResponse(
-        responseCode = "404",
-        description = "No files found matching the specified criteria",
-        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
-            examples = [ExampleObject(
-                name = "FilesNotFound",
-                summary = "No results for given filters",
-                value = """
-                {
-                  "type": "Not Found",
-                  "title": "No files found",
-                  "status": 404,
-                  "detail": "No files match the provided filters",
-                  "instance": "/api/v1/files"
-                }
-                """
-            )]
-        )]
-    )
-    @ApiResponse(
         responseCode = "500",
         description = "Internal Server Error",
         content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
@@ -201,7 +184,7 @@ class FileController(
         @RequestParam(defaultValue = "createdAt,desc") sort: String,
         @RequestParam(defaultValue = "0") page: UInt,
         @RequestParam(defaultValue = "10") size: UInt,
-        @RequestParam(defaultValue = "PERSONAL") sharingScope: SharingScope,
+        @RequestParam(defaultValue = "PERSONAL") sharingScope: Set<SharingScope>,
     ): ResponseEntity<Page<FileDTO>> {
 
         log.debug("getFilesMetadata")
@@ -212,14 +195,7 @@ class FileController(
 
         val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope)
 
-        log.debug(filtersDTO.sharingScope.toString())
-        val files = if(filtersDTO.sharingScope == SharingScope.PERSONAL) {
-            log.debug("Getting PERSONAL files")
-            fileService.getPersonalFiles(filtersDTO)
-        } else {
-            log.debug("Getting organization or department files")
-            fileService.getOrganizationDepartmentFiles(filtersDTO)
-        }
+        val files = fileService.getFiles(filtersDTO)
 
         return ResponseEntity.ok(files)
     }

@@ -20,8 +20,7 @@ interface FileServiceInterface {
     fun createFile(fileId: UUID, upload: Upload): File
     fun createFileVersion(upload: Upload,file: File): FileVersion
 
-    fun getOrganizationDepartmentFiles(filtersDTO: FiltersDTO): Page<FileDTO>
-    fun getPersonalFiles(filtersDTO: FiltersDTO): Page<FileDTO>
+    fun getFiles(filtersDTO: FiltersDTO): Page<FileDTO>
     fun getAllFiles(): List<FileDTO>
 
     fun getFileMetadata(id: UUID): FileDTO

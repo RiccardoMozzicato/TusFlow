@@ -1,0 +1,256 @@
+@import 'tailwindcss';
+
+/*
+ * "Corporate Precision" design system (Material 3 role set).
+ *
+ * Single source of truth = the --ds-* variables in :root (so raw
+ * `var(--ds-primary)` references from ported markup keep working). `@theme
+ * inline` maps them onto Tailwind's namespaces so the design's utilities resolve
+ * straight to the variables:
+ *   --color-ds-*  -> bg-ds-*, text-ds-*, border-ds-*, ring-ds-*
+ *   --radius-ds-* -> rounded-ds, rounded-ds-sm, rounded-ds-card, ...
+ *   --font-ds-*   -> font-ds-heading, font-ds-body, font-ds-label
+ * The typography scale (literal values) lives in the plain @theme block below:
+ *   --text-ds-*   -> text-ds-display-lg, text-ds-headline-md, ...
+ *
+ * A future dark theme only needs to override the :root values under a .dark
+ * selector — every utility follows automatically.
+ */
+@theme inline {
+  /* Primary */
+  --color-ds-primary: var(--ds-primary);
+  --color-ds-on-primary: var(--ds-on-primary);
+  --color-ds-primary-container: var(--ds-primary-container);
+  --color-ds-on-primary-container: var(--ds-on-primary-container);
+  --color-ds-primary-fixed: var(--ds-primary-fixed);
+  --color-ds-primary-fixed-dim: var(--ds-primary-fixed-dim);
+  --color-ds-on-primary-fixed: var(--ds-on-primary-fixed);
+  --color-ds-on-primary-fixed-variant: var(--ds-on-primary-fixed-variant);
+  --color-ds-inverse-primary: var(--ds-inverse-primary);
+
+  /* Secondary */
+  --color-ds-secondary: var(--ds-secondary);
+  --color-ds-on-secondary: var(--ds-on-secondary);
+  --color-ds-secondary-container: var(--ds-secondary-container);
+  --color-ds-on-secondary-container: var(--ds-on-secondary-container);
+  --color-ds-secondary-fixed: var(--ds-secondary-fixed);
+  --color-ds-secondary-fixed-dim: var(--ds-secondary-fixed-dim);
+  --color-ds-on-secondary-fixed: var(--ds-on-secondary-fixed);
+  --color-ds-on-secondary-fixed-variant: var(--ds-on-secondary-fixed-variant);
+
+  /* Tertiary */
+  --color-ds-tertiary: var(--ds-tertiary);
+  --color-ds-on-tertiary: var(--ds-on-tertiary);
+  --color-ds-tertiary-container: var(--ds-tertiary-container);
+  --color-ds-on-tertiary-container: var(--ds-on-tertiary-container);
+  --color-ds-tertiary-fixed: var(--ds-tertiary-fixed);
+  --color-ds-tertiary-fixed-dim: var(--ds-tertiary-fixed-dim);
+  --color-ds-on-tertiary-fixed: var(--ds-on-tertiary-fixed);
+  --color-ds-on-tertiary-fixed-variant: var(--ds-on-tertiary-fixed-variant);
+
+  /* Error */
+  --color-ds-error: var(--ds-error);
+  --color-ds-on-error: var(--ds-on-error);
+  --color-ds-error-container: var(--ds-error-container);
+  --color-ds-on-error-container: var(--ds-on-error-container);
+
+  /* Surfaces */
+  --color-ds-surface: var(--ds-surface);
+  --color-ds-surface-dim: var(--ds-surface-dim);
+  --color-ds-surface-bright: var(--ds-surface-bright);
+  --color-ds-surface-container-lowest: var(--ds-surface-container-lowest);
+  --color-ds-surface-container-low: var(--ds-surface-container-low);
+  --color-ds-surface-container: var(--ds-surface-container);
+  --color-ds-surface-container-high: var(--ds-surface-container-high);
+  --color-ds-surface-container-highest: var(--ds-surface-container-highest);
+  --color-ds-surface-variant: var(--ds-surface-variant);
+  --color-ds-on-surface: var(--ds-on-surface);
+  --color-ds-on-surface-variant: var(--ds-on-surface-variant);
+  --color-ds-surface-tint: var(--ds-surface-tint);
+
+  /* Outline / inverse / background */
+  --color-ds-outline: var(--ds-outline);
+  --color-ds-outline-variant: var(--ds-outline-variant);
+  --color-ds-inverse-surface: var(--ds-inverse-surface);
+  --color-ds-inverse-on-surface: var(--ds-inverse-on-surface);
+  --color-ds-background: var(--ds-background);
+  --color-ds-on-background: var(--ds-on-background);
+
+  /* Radii (rounded-ds, rounded-ds-sm, rounded-ds-card, ...) */
+  --radius-ds-none: var(--ds-radius-none);
+  --radius-ds-sm: var(--ds-radius-sm);
+  --radius-ds: var(--ds-radius);
+  --radius-ds-md: var(--ds-radius-md);
+  --radius-ds-lg: var(--ds-radius-lg);
+  --radius-ds-xl: var(--ds-radius-xl);
+  --radius-ds-card: var(--ds-radius-card);
+  --radius-ds-full: var(--ds-radius-full);
+
+  /* Type families */
+  --font-ds-heading: var(--ds-font-headline);
+  --font-ds-body: var(--ds-font-body);
+  --font-ds-label: var(--ds-font-label);
+}
+
+/* Typography scale -> text-ds-display-lg, text-ds-headline-md, ... */
+@theme {
+  --text-ds-display-lg: 40px;
+  --text-ds-display-lg--line-height: 48px;
+  --text-ds-display-lg--letter-spacing: -0.02em;
+  --text-ds-display-lg--font-weight: 700;
+
+  --text-ds-display-lg-mobile: 32px;
+  --text-ds-display-lg-mobile--line-height: 40px;
+  --text-ds-display-lg-mobile--letter-spacing: -0.02em;
+  --text-ds-display-lg-mobile--font-weight: 700;
+
+  --text-ds-headline-md: 24px;
+  --text-ds-headline-md--line-height: 32px;
+  --text-ds-headline-md--font-weight: 600;
+
+  --text-ds-headline-sm: 20px;
+  --text-ds-headline-sm--line-height: 28px;
+  --text-ds-headline-sm--font-weight: 600;
+
+  --text-ds-body-lg: 18px;
+  --text-ds-body-lg--line-height: 28px;
+  --text-ds-body-lg--font-weight: 400;
+
+  --text-ds-body-md: 16px;
+  --text-ds-body-md--line-height: 24px;
+  --text-ds-body-md--font-weight: 400;
+
+  --text-ds-body-sm: 14px;
+  --text-ds-body-sm--line-height: 20px;
+  --text-ds-body-sm--font-weight: 400;
+
+  --text-ds-label-md: 12px;
+  --text-ds-label-md--line-height: 16px;
+  --text-ds-label-md--letter-spacing: 0.05em;
+  --text-ds-label-md--font-weight: 600;
+
+  --text-ds-label-sm: 11px;
+  --text-ds-label-sm--line-height: 14px;
+  --text-ds-label-sm--font-weight: 500;
+}
+
+:root {
+  /* Primary */
+  --ds-primary: #022448;
+  --ds-on-primary: #ffffff;
+  --ds-primary-container: #1e3a5f;
+  --ds-on-primary-container: #8aa4cf;
+  --ds-primary-fixed: #d5e3ff;
+  --ds-primary-fixed-dim: #adc8f5;
+  --ds-on-primary-fixed: #001c3b;
+  --ds-on-primary-fixed-variant: #2d486d;
+  --ds-inverse-primary: #adc8f5;
+
+  /* Secondary */
+  --ds-secondary: #5c5f60;
+  --ds-on-secondary: #ffffff;
+  --ds-secondary-container: #e1e3e4;
+  --ds-on-secondary-container: #626566;
+  --ds-secondary-fixed: #e1e3e4;
+  --ds-secondary-fixed-dim: #c5c7c8;
+  --ds-on-secondary-fixed: #191c1d;
+  --ds-on-secondary-fixed-variant: #454748;
+
+  /* Tertiary */
+  --ds-tertiary: #002928;
+  --ds-on-tertiary: #ffffff;
+  --ds-tertiary-container: #00413f;
+  --ds-on-tertiary-container: #30b5af;
+  --ds-tertiary-fixed: #7df6ef;
+  --ds-tertiary-fixed-dim: #5ed9d3;
+  --ds-on-tertiary-fixed: #00201f;
+  --ds-on-tertiary-fixed-variant: #00504d;
+
+  /* Error */
+  --ds-error: #ba1a1a;
+  --ds-on-error: #ffffff;
+  --ds-error-container: #ffdad6;
+  --ds-on-error-container: #93000a;
+
+  /* Surfaces */
+  --ds-surface: #f8f9ff;
+  --ds-surface-dim: #d1dbec;
+  --ds-surface-bright: #f8f9ff;
+  --ds-surface-container-lowest: #ffffff;
+  --ds-surface-container-low: #eef4ff;
+  --ds-surface-container: #e5eeff;
+  --ds-surface-container-high: #dfe9fa;
+  --ds-surface-container-highest: #d9e3f4;
+  --ds-surface-variant: #d9e3f4;
+  --ds-on-surface: #121c28;
+  --ds-on-surface-variant: #43474e;
+  --ds-surface-tint: #455f87;
+
+  /* Outline / inverse / background */
+  --ds-outline: #74777f;
+  --ds-outline-variant: #c4c6cf;
+  --ds-inverse-surface: #27313e;
+  --ds-inverse-on-surface: #eaf1ff;
+  --ds-background: #f8f9ff;
+  --ds-on-background: #121c28;
+
+  /* Radii */
+  --ds-radius-none: 0px;
+  --ds-radius-sm: 0.125rem;
+  --ds-radius: 0.25rem;
+  --ds-radius-md: 0.375rem;
+  --ds-radius-lg: 0.5rem;
+  --ds-radius-xl: 0.75rem;
+  --ds-radius-card: 0.75rem;
+  --ds-radius-full: 9999px;
+
+  /* Type */
+  --ds-font-headline: 'Inter', sans-serif;
+  --ds-font-body: 'Inter', sans-serif;
+  --ds-font-label: 'Inter', sans-serif;
+
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: var(--ds-font-body);
+  background-color: var(--ds-background);
+  color: var(--ds-on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: var(--ds-primary-fixed-dim);
+  color: var(--ds-primary);
+}
+
+/* Material Symbols baseline. Default outlined; the Icon component opts into
+   FILL 1 per-instance for the filled corporate look. */
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Indeterminate "processing" bar: a chip slides across the track. */
+@keyframes ds-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* Sheen sweeping over an active progress bar. */
+@keyframes ds-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

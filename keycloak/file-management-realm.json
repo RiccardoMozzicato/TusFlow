@@ -1,6 +1,7 @@
 {
   "id" : "e9d7faa5-e5f5-41a0-ac81-660f1c319dcc",
   "realm" : "file-management",
+  "loginTheme" : "docportal",
   "notBefore" : 0,
   "defaultSignatureAlgorithm" : "RS256",
   "revokeRefreshToken" : false,

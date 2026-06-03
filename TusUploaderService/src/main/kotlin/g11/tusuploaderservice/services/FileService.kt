@@ -112,20 +112,18 @@ class FileService(
     }
 
     /**
-     * Restituisce file con sharingScope ORGANIZATION o DEPARTMENT
-     * Filtrati per organization e department dell'utente corrente
+     * Restituisce i file visibili all'utente nei sharingScope richiesti (in OR):
+     * - PERSONAL: file dove l'utente è owner O è presente nei fileShare
+     * - DEPARTMENT: file del department dell'utente
+     * - ORGANIZATION: file dell'organization dell'utente
+     * Org/department sono ricavati dal token dell'utente, mai dai parametri.
+     * Restituisce una pagina vuota se nessun file corrisponde ai criteri.
      */
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun getOrganizationDepartmentFiles(filtersDTO: FiltersDTO): Page<FileDTO> {
-        log.debug("Retrieving organization/department files with criteria {}", filtersDTO)
+    override fun getFiles(filtersDTO: FiltersDTO): Page<FileDTO> {
+        log.debug("Retrieving files with criteria {}", filtersDTO)
 
-        // Verifica che lo sharingScope sia ORGANIZATION o DEPARTMENT
-        require(
-            filtersDTO.sharingScope == SharingScope.ORGANIZATION ||
-                    filtersDTO.sharingScope == SharingScope.DEPARTMENT
-        ) {
-            "getOrganizationDepartmentFiles requires sharingScope to be ORGANIZATION or DEPARTMENT"
-        }
+        require(filtersDTO.sharingScopes.isNotEmpty()) { "At least one sharing scope is required" }
 
         val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
@@ -137,75 +135,18 @@ class FileService(
             Sort.by(filtersDTO.sortDirection, filtersDTO.sortField)
         )
 
-        val spec = FileSpecifications.buildOrganizationDepartmentFiles(
+        val spec = FileSpecifications.buildFilesByScopes(
             contentType = filtersDTO.contentType,
             dateFrom = filtersDTO.dateFrom,
             dateTo = filtersDTO.dateTo,
-            sharingScope = filtersDTO.sharingScope,
+            sharingScopes = filtersDTO.sharingScopes,
+            userId = userDetails.id,
             organization = userDetails.organization,
-            department = userDetails.department
+            department = userDetails.department,
+            isAdmin = userDetails.role == UserRole.ROLE_admin
         )
 
         val files = fileRepository.findAll(spec, pageable)
-
-        if (files.isEmpty) {
-            log.warn("No organization/department file found")
-            throw ResourceNotFoundException("No files found matching the specified criteria")
-        }
-
-        // Batch request per ottenere i nomi degli owner
-        val ownerIds = files.content.map { it.ownerId }.distinct()
-        val ownerNamesMap = getUsersBatchFromUserService(token, ownerIds)
-
-        return files.map {
-            val ownerName = ownerNamesMap[it.ownerId]?.fullName
-            it.toDTO(ownerName)
-        }
-    }
-
-    /**
-     * Restituisce file con sharingScope PERSONAL
-     * Include file dove l'utente è owner O è presente in fileShare
-     */
-    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun getPersonalFiles(filtersDTO: FiltersDTO): Page<FileDTO> {
-        log.debug("Retrieving personal files with criteria {}", filtersDTO)
-
-        // Verifica che lo sharingScope sia PERSONAL (o usa PERSONAL come default)
-        val sharingScope = filtersDTO.sharingScope
-        require(sharingScope == SharingScope.PERSONAL) {
-            "getPersonalFiles requires sharingScope to be PERSONAL"
-        }
-
-        // Get service token to call UserDetailService
-        val token = authService.getAccessToken()
-        val userDetails = getUserDetails(token)
-        log.debug("Current user details: {}", userDetails)
-
-        val pageable = PageRequest.of(
-            filtersDTO.pageNumber.toInt(),
-            filtersDTO.pageSize.toInt(),
-            Sort.by(filtersDTO.sortDirection, filtersDTO.sortField)
-        )
-
-        log.debug("pageable: {}", pageable)
-        val spec = FileSpecifications.buildPersonalFiles(
-            contentType = filtersDTO.contentType,
-            dateFrom = filtersDTO.dateFrom,
-            dateTo = filtersDTO.dateTo,
-            ownerId = userDetails.id,
-            userId = userDetails.id
-        )
-
-        log.debug("Specification: {}", spec.toString())
-        val files = fileRepository.findAll(spec, pageable)
-
-        log.debug("files: {}", files.toString())
-
-        if (files.isEmpty) {
-            log.warn("No personal file found")
-            throw ResourceNotFoundException("No files found matching the specified criteria")
-        }
 
         // Batch request per ottenere i nomi degli owner
         val ownerIds = files.content.map { it.ownerId }.distinct()

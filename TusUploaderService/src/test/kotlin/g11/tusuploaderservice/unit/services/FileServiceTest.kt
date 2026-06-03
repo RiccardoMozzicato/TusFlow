@@ -380,13 +380,83 @@ class FileServiceTest {
         assertTrue(ex.message!!.contains("does not belong"))
     }
 
+    private fun mockUsersBatch(users: Map<UUID, UserDTO>) {
+        val postUriSpec = mockk<RestClient.RequestBodyUriSpec>()
+        val responseSpec = mockk<RestClient.ResponseSpec>()
+
+        every { userServiceClient.post() } returns postUriSpec
+        every { postUriSpec.uri("/api/v1/users/batch") } returns postUriSpec
+        every { postUriSpec.headers(any()) } returns postUriSpec
+        every { postUriSpec.body(any<List<UUID>>()) } returns postUriSpec
+        every { postUriSpec.retrieve() } returns responseSpec
+        every {
+            responseSpec.body(any<org.springframework.core.ParameterizedTypeReference<Map<UUID, UserDTO>>>())
+        } returns users
+    }
+
+    private fun makeFilters(sharingScopes: Set<SharingScope> = setOf(SharingScope.PERSONAL)) =
+        FiltersDTO(null, null, null, "createdAt", Sort.Direction.DESC, 0u, 10u, sharingScopes)
+
     @Test
-    fun `getPersonalFiles throws ResourceNotFoundException when empty`() {
+    fun `getFiles returns empty page when no files match`() {
         mockUserServiceOk(userId)
         every { fileRepository.findAll(any(), any<Pageable>()) } returns PageImpl(emptyList(), PageRequest.of(0,10), 0)
-        val filters = FiltersDTO(null, null, null, "createdAt", Sort.Direction.DESC, 0u, 10u)
 
-        assertThrows<ResourceNotFoundException> { fileService.getPersonalFiles(filters) }
+        val result = fileService.getFiles(makeFilters())
+
+        assertEquals(0, result.totalElements)
+        assertTrue(result.content.isEmpty())
+    }
+
+    @Test
+    fun `getFiles throws IllegalArgumentException when no sharing scope provided`() {
+        mockUserServiceOk(userId)
+
+        assertThrows<IllegalArgumentException> { fileService.getFiles(makeFilters(emptySet())) }
+
+        verify(exactly = 0) { fileRepository.findAll(any(), any<Pageable>()) }
+    }
+
+    @Test
+    fun `getFiles returns mapped page with owner names`() {
+        mockUserServiceOk(userId)
+        val file = makeFile()
+        mockUsersBatch(
+            mapOf(
+                userId to UserDTO(
+                    id = userId,
+                    fullName = "Test User",
+                    email = "test@example.com",
+                    organization = "TestOrg",
+                    department = "TestDept",
+                    role = UserRole.ROLE_staff,
+                )
+            )
+        )
+        every { fileRepository.findAll(any(), any<Pageable>()) } returns
+            PageImpl(listOf(file), PageRequest.of(0, 10), 1)
+
+        val result = fileService.getFiles(makeFilters())
+
+        assertEquals(1, result.totalElements)
+        assertEquals(file.uuid, result.content[0].id)
+    }
+
+    @Test
+    fun `getFiles runs a single paginated query when multiple scopes requested`() {
+        mockUserServiceOk(userId)
+        val personalFile = makeFile(sharingScope = SharingScope.PERSONAL)
+        val departmentFile = makeFile(sharingScope = SharingScope.DEPARTMENT)
+        mockUsersBatch(emptyMap())
+        every { fileRepository.findAll(any(), any<Pageable>()) } returns
+            PageImpl(listOf(personalFile, departmentFile), PageRequest.of(0, 10), 2)
+
+        val result = fileService.getFiles(
+            makeFilters(setOf(SharingScope.PERSONAL, SharingScope.DEPARTMENT))
+        )
+
+        assertEquals(2, result.totalElements)
+        verify(exactly = 1) { fileRepository.findAll(any(), any<Pageable>()) }
     }
 
     @Test

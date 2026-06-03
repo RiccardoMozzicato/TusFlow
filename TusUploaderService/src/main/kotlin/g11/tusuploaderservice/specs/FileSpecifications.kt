@@ -3,6 +3,8 @@ package g11.tusuploaderservice.specs
 import g11.tusuploaderservice.dto.SharingScope
 import g11.tusuploaderservice.entities.File
 import g11.tusuploaderservice.entities.FileShare
+import jakarta.persistence.criteria.JoinType
+import jakarta.persistence.criteria.Predicate
 import org.springframework.data.jpa.domain.Specification
 import java.time.Instant
 import java.util.Date
@@ -58,84 +60,82 @@ object FileSpecifications {
         }
 
         /**
-         * Build specification per file ORGANIZATION o DEPARTMENT filtrati per organization/department dell'utente
-         * Filtra solo per sharingScope ORGANIZATION o DEPARTMENT
+         * Build specification per i file visibili all'utente nei sharingScope richiesti (in OR):
+         * - PERSONAL: file dove l'utente è owner O è presente nei fileShare
+         * - DEPARTMENT: file del department dell'utente; l'admin vede tutti i department
+         *   dell'organization, un non-admin senza department non vede alcun file DEPARTMENT
+         * - ORGANIZATION: file dell'organization dell'utente
          */
-        fun buildOrganizationDepartmentFiles(
+        fun buildFilesByScopes(
             contentType: String?,
             dateFrom: String?,
             dateTo: String?,
-            sharingScope: SharingScope,
+            sharingScopes: Set<SharingScope>,
+            userId: UUID,
             organization: String,
-            department: String?
+            department: String?,
+            isAdmin: Boolean
         ): Specification<File> {
-            // Verifica che lo sharingScope sia ORGANIZATION o DEPARTMENT
-            require(sharingScope == SharingScope.ORGANIZATION || sharingScope == SharingScope.DEPARTMENT) {
-                "buildOrganizationDepartmentFiles accepts only ORGANIZATION or DEPARTMENT scope"
-            }
+            require(sharingScopes.isNotEmpty()) { "At least one sharing scope is required" }
 
-            var spec: Specification<File> = hasSharingScope(sharingScope)
-                .and(hasOrganization(organization))
-
-            // Applica filtri opzionali
-            if (contentType != null) {
-                spec = spec.and(hasContentType(contentType))
-            }
-            if (dateFrom != null) {
-                spec = spec.and(createdAfter(dateFrom))
-            }
-            if (dateTo != null) {
-                spec = spec.and(createdBefore(dateTo))
-            }
-
-            // Se sharingScope è DEPARTMENT, filtra anche per department
-            if (sharingScope == SharingScope.DEPARTMENT && department != null) {
-                spec = spec.and(hasDepartment(department))
-            }
-
-            return spec
-        }
-
-        /**
-         * Build specification per file PERSONAL
-         * Restituisce file personal dove l'utente è owner O è presente nei fileShare
-         */
-        fun buildPersonalFiles(
-            contentType: String?,
-            dateFrom: String?,
-            dateTo: String?,
-            ownerId: UUID,
-            userId: UUID
-        ): Specification<File> {
             return Specification { root, query, cb ->
                 query?.distinct(true)
 
-                // Condizioni base
-                val predicates = mutableListOf(
-                    cb.equal(root.get<SharingScope>("sharingScope"), SharingScope.PERSONAL)
-                )
+                val predicates = mutableListOf<Predicate>()
 
-                // Filtri opzionali
+                // Filtri opzionali comuni a tutti gli scope
                 if (contentType != null) {
-                    val versions = root.join<File, Any>("versions", jakarta.persistence.criteria.JoinType.LEFT)
+                    val versions = root.join<File, Any>("versions", JoinType.LEFT)
                     predicates.add(cb.equal(versions.get<String>("contentType"), contentType))
                 }
                 if (dateFrom != null) {
-                    val from = Instant.parse(dateFrom)
-                    val fromDate = Date.from(from)
+                    val fromDate = Date.from(Instant.parse(dateFrom))
                     predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), fromDate))
                 }
                 if (dateTo != null) {
-                    val to = Instant.parse(dateTo)
-                    val toDate = Date.from(to)
+                    val toDate = Date.from(Instant.parse(dateTo))
                     predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), toDate))
                 }
 
-                // Condizione OR: owner O shared with user (usando LEFT JOIN)
-                val shares = root.join<File, FileShare>("shares", jakarta.persistence.criteria.JoinType.LEFT)
-                val ownerCondition = cb.equal(root.get<UUID>("ownerId"), ownerId)
-                val sharedCondition = cb.equal(shares.get<UUID>("userID"), userId)
-                predicates.add(cb.or(ownerCondition, sharedCondition))
+                // Un predicato per ogni scope richiesto, combinati in OR
+                val scopeField = root.get<SharingScope>("sharingScope")
+                val scopePredicates = sharingScopes.map { scope ->
+                    when (scope) {
+                        SharingScope.PERSONAL -> {
+                            // Owner O shared with user (usando LEFT JOIN)
+                            val shares = root.join<File, FileShare>("shares", JoinType.LEFT)
+                            cb.and(
+                                cb.equal(scopeField, SharingScope.PERSONAL),
+                                cb.or(
+                                    cb.equal(root.get<UUID>("ownerId"), userId),
+                                    cb.equal(shares.get<UUID>("userID"), userId)
+                                )
+                            )
+                        }
+
+                        SharingScope.DEPARTMENT -> {
+                            val deptPredicates = mutableListOf(
+                                cb.equal(scopeField, SharingScope.DEPARTMENT),
+                                cb.equal(root.get<String>("organization"), organization)
+                            )
+                            when {
+                                // Admin: vede i file DEPARTMENT di tutti i department dell'organization
+                                isAdmin -> {}
+                                department != null ->
+                                    deptPredicates.add(cb.equal(root.get<String>("department"), department))
+                                // Non-admin senza department: nessun file DEPARTMENT
+                                else -> deptPredicates.add(cb.disjunction())
+                            }
+                            cb.and(*deptPredicates.toTypedArray())
+                        }
+
+                        SharingScope.ORGANIZATION -> cb.and(
+                            cb.equal(scopeField, SharingScope.ORGANIZATION),
+                            cb.equal(root.get<String>("organization"), organization)
+                        )
+                    }
+                }
+                predicates.add(cb.or(*scopePredicates.toTypedArray()))
 
                 cb.and(*predicates.toTypedArray())
             }
