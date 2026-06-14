@@ -31,6 +31,8 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.security.Principal
 import java.util.UUID
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 
 
@@ -41,6 +43,12 @@ class UserController(
 ) {
 
     private val log = LoggerFactory.getLogger(UserController::class.java)
+
+    // Resolves the authenticated user (owner) id from the JWT for request logging.
+    // Never throws so an API log line can't break the request flow.
+    private fun currentUserOwnerId(): String =
+        runCatching { (SecurityContextHolder.getContext().authentication.principal as Jwt).subject }
+            .getOrDefault("unknown")
 
     //region Swagger Documentation
     @Operation(
@@ -99,6 +107,7 @@ class UserController(
         @RequestParam(defaultValue = "0") page: UInt,
         @RequestParam(defaultValue = "10") size: UInt
     ): Page<UserDTO> {
+        log.debug("API GET /api/v1/users userOwnerId={} page={} size={}", currentUserOwnerId(), page, size)
         return userService.getUsers(FiltersDTO(page.toInt(), size.toInt()))
     }
 
@@ -211,7 +220,7 @@ class UserController(
     @ResponseStatus(HttpStatus.OK)
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_serviceaccount-fileservice')")
     fun getUser(@PathVariable id: UUID): UserDTO {
-        log.debug("Retrieving user with UUID {}", id)
+        log.debug("API GET /api/v1/users/{} userOwnerId={} userId={}", id, currentUserOwnerId(), id)
         return userService.getUser(id)
     }
 
@@ -219,7 +228,7 @@ class UserController(
     @ResponseStatus(HttpStatus.OK)
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_serviceaccount-fileservice')")
     fun getUsersBatch(@RequestBody ids: List<UUID>): Map<UUID, UserDTO> {
-        log.debug("Retrieving batch of {} users", ids.size)
+        log.debug("API POST /api/v1/users/batch userOwnerId={} userCount={} userIds={}", currentUserOwnerId(), ids.size, ids)
         return userService.getUsersBatch(ids)
     }
 
@@ -327,7 +336,7 @@ class UserController(
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('ROLE_admin')")
     fun postUser(@Valid @RequestBody userDTO: UserCreationDTO) {
-        log.debug("Creating user {}", userDTO)
+        log.debug("API POST /api/v1/users userOwnerId={} user={}", currentUserOwnerId(), userDTO)
         userService.createUser(userDTO)
     }
 
@@ -467,7 +476,11 @@ class UserController(
         @PathVariable id: UUID,
         @RequestBody @UserUpdateValidation userDTO: UserDTO
     ) {
-        if(id != userDTO.id) throw UserConflictError("ID mismatch")
+        log.debug("API PUT /api/v1/users/{} userOwnerId={} userId={}", id, currentUserOwnerId(), id)
+        if(id != userDTO.id) {
+            log.warn("User update rejected due to ID mismatch pathId={} bodyId={}", id, userDTO.id)
+            throw UserConflictError("ID mismatch")
+        }
         userService.updateUser(userDTO)
     }
 
@@ -559,6 +572,7 @@ class UserController(
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('ROLE_admin')")
     fun deleteUser(@PathVariable id: UUID) {
+        log.debug("API DELETE /api/v1/users/{} userOwnerId={} userId={}", id, currentUserOwnerId(), id)
         userService.deleteUser(id)
     }
 
@@ -567,6 +581,8 @@ class UserController(
     @GetMapping("/me")
     @ResponseStatus(HttpStatus.OK)
     fun getCurrentUser(principal: Principal): UserDTO {
+        log.debug("API GET /api/v1/users/me userOwnerId={}", currentUserOwnerId())
+
         val auth = principal as JwtAuthenticationToken
         val jwt = auth.token
 

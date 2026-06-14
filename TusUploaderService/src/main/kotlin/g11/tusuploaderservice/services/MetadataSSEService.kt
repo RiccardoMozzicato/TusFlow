@@ -35,12 +35,19 @@ class MetadataSSEService(
      * @return SseEmitter that emits status events
      */
     fun streamMetadataProcessingStatus(fileId: UUID, version: Long?): SseEmitter {
+        log.info("Creating SSE stream for file {} with version {}", fileId, version)
         val existingMetadata = fileService.getFileGeneratedMetadata(fileId, version)
         val emitter = SseEmitter(timeoutMs + EMITTER_TIMEOUT_GRACE_MS)
         val key = StreamKey(fileId, version)
 
-        emitter.onCompletion { removeEmitter(key, emitter) }
-        emitter.onError { removeEmitter(key, emitter) }
+        emitter.onCompletion { 
+            log.debug("SSE emitter completed for file {} version {}", fileId, version)
+            removeEmitter(key, emitter) 
+        }
+        emitter.onError { throwable ->
+            log.warn("SSE emitter error for file {} version {}: {}", fileId, version, throwable.message)
+            removeEmitter(key, emitter) 
+        }
         emitter.onTimeout {
             log.debug("SSE emitter timed out for file {} version {}", fileId, version)
             removeEmitter(key, emitter)
@@ -60,8 +67,10 @@ class MetadataSSEService(
                 sendAndComplete(key, emitter, "completed", existingMetadata)
             }
             else -> {
+                log.debug("Starting to wait for AI analysis for file {} version {}", fileId, version)
                 registerEmitter(key, emitter)
                 if (!sendEvent(emitter, "waiting", mapOf("message" to "Waiting for AI analysis to complete"))) {
+                    log.warn("Failed to send waiting event for file {} version {}", fileId, version)
                     removeEmitter(key, emitter)
                 }
             }
@@ -72,14 +81,17 @@ class MetadataSSEService(
 
     @PreDestroy
     fun shutdown() {
+        log.info("Shutting down MetadataSSEService")
         timeoutScheduler.shutdownNow()
     }
 
     fun notifyAnalysisCompleted(fileId: UUID, version: Long, metadata: MetadataAIDTO) {
+        log.info("Analysis completed for file {} version {}", fileId, version)
         notifyMatchingEmitters(fileId, version, "completed", metadata)
     }
 
     fun notifyAnalysisUnsupported(fileId: UUID, version: Long, reason: String?) {
+        log.warn("Analysis unsupported for file {} version {}: {}", fileId, version, reason)
         notifyMatchingEmitters(
             fileId,
             version,
@@ -89,6 +101,7 @@ class MetadataSSEService(
     }
 
     fun notifyAnalysisFailed(fileId: UUID, version: Long, error: String?) {
+        log.error("Analysis failed for file {} version {}: {}", fileId, version, error)
         notifyMatchingEmitters(
             fileId,
             version,
@@ -103,23 +116,27 @@ class MetadataSSEService(
         }
         keyEmitters.add(emitter)
         scheduleTimeout(key, emitter)
-        log.debug("Registered SSE emitter for file {} version {}", key.fileId, key.version)
+        log.debug("Registered SSE emitter for file {} version {} (total emitters: {})", key.fileId, key.version, keyEmitters.size)
     }
 
     private fun removeEmitter(key: StreamKey, emitter: SseEmitter) {
+        log.debug("Removing SSE emitter for file {} version {}", key.fileId, key.version)
         timeoutTasks.remove(emitter)?.cancel(false)
         emitters[key]?.let { keyEmitters ->
             keyEmitters.remove(emitter)
             if (keyEmitters.isEmpty()) {
+                log.debug("No more emitters for key file {} version {}, removing key", key.fileId, key.version)
                 emitters.remove(key)
             }
         }
     }
 
     private fun scheduleTimeout(key: StreamKey, emitter: SseEmitter) {
+        log.debug("Scheduling timeout ({} ms) for file {} version {}", timeoutMs, key.fileId, key.version)
         val timeoutTask = timeoutScheduler.schedule(
             {
                 if (emitters[key]?.contains(emitter) == true) {
+                    log.warn("Timeout reached for file {} version {}", key.fileId, key.version)
                     sendAndComplete(
                         key,
                         emitter,
@@ -135,6 +152,7 @@ class MetadataSSEService(
     }
 
     private fun notifyMatchingEmitters(fileId: UUID, version: Long, eventType: String, data: Any) {
+        log.debug("Notifying emitters for file {} version {} with event type: {}", fileId, version, eventType)
         val keys = listOf(StreamKey(fileId, version), StreamKey(fileId, null))
         keys.forEach { key ->
             val keyEmitters = emitters[key]?.toList().orEmpty()
@@ -147,8 +165,11 @@ class MetadataSSEService(
     private fun sendAndComplete(key: StreamKey, emitter: SseEmitter, eventType: String, data: Any) {
         try {
             if (sendEvent(emitter, eventType, data)) {
+                log.debug("Completing SSE stream with event type: {} for file {} version {}", eventType, key.fileId, key.version)
                 emitter.complete()
             }
+        } catch (e: Exception) {
+            log.error("Error completing SSE stream for file {} version {}: {}", key.fileId, key.version, e.message, e)
         } finally {
             removeEmitter(key, emitter)
         }

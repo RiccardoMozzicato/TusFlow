@@ -8,6 +8,8 @@ spring:
           issuer-uri: ${issuer}
   application:
     name: TusUploaderService
+  profiles:
+    active: dev
   flyway:
     enabled: true
     baseline-on-migrate: true

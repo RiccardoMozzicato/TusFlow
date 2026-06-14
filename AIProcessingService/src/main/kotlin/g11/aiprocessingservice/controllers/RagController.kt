@@ -5,6 +5,8 @@ import g11.aiprocessingservice.services.DocumentSource
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -13,6 +15,12 @@ class RagController(
     private val ragService: RagService
 ) {
     private val log= LoggerFactory.getLogger(this::class.java)
+
+    // Resolves the authenticated user (owner) id from the JWT for request logging.
+    // Never throws so an API log line can't break the request flow.
+    private fun currentUserOwnerId(): String =
+        runCatching { (SecurityContextHolder.getContext().authentication.principal as Jwt).subject }
+            .getOrDefault("unknown")
 
     /**
      * Query documents using RAG (Retrieval-Augmented Generation).
@@ -27,8 +35,8 @@ class RagController(
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     @PostMapping("/query")
     fun query(@RequestBody request: RagQueryRequest): ResponseEntity<RagQueryResponse> {
-        log.info("Received RAG query from userId: ${request.filters["userId"] ?: request.filters["ownerId"]}")
-        log.info("Query: ${request.query}")
+        log.debug("API POST /api/rag/query userOwnerId={} requestUserId={} query={}",
+            currentUserOwnerId(), request.filters["userId"] ?: request.filters["ownerId"], request.query)
 
         val ragResponse = ragService.queryWithRag(request.query, request.filters, request.topK ?: 5)
 

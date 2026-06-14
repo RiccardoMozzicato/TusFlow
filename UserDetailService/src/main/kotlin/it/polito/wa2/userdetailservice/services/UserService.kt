@@ -53,13 +53,17 @@ class UserService(
             .any { it.authority == "ROLE_serviceaccount-fileservice" }
 
         if (isServiceAccount) {
+            log.debug("returning the list of users")
             return userRepo.findAll(pageable).map { it.toDTO() }
         }
 
         val authenticatedUserId = getAuthenticatedUserId()
         val authenticatedUser = userRepo.findById(authenticatedUserId).orElseThrow {
+            log.warn("authenticated user {} not found", authenticatedUserId)
             UserNotFoundException("The user with id $authenticatedUserId not found")
         }
+
+        log.debug("returning users page: page={}, size={}", filtersDTO.pageNumber, filtersDTO.pageSize)
         val users = userRepo.findByOrganization(authenticatedUser.organization, pageable)
 
         return users.map { it.toDTO() }
@@ -69,24 +73,28 @@ class UserService(
     @PreAuthorize("hasAnyRole('ROLE_admin','ROLE_manager','ROLE_staff', 'ROLE_serviceaccount-fileservice')")
     override fun getUser(id: UUID): UserDTO {
         val user: User = userRepo.findById(id).orElseThrow{
+            log.warn("user {} not found", id)
             UserNotFoundException("The user with id $id not found")
         }
+
+        log.debug("returning user {}", id)
         return user.toDTO()
     }
 
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_admin','ROLE_manager','ROLE_staff', 'ROLE_serviceaccount-fileservice')")
     override fun getUsersBatch(ids: List<UUID>): Map<UUID, UserDTO> {
-        log.debug("Fetching batch of {} users", ids.size)
+        log.debug("Requested batch of {} users", ids.size)
         val users = userRepo.findAllById(ids)
+        log.debug("Returning batch of {} users", users.size)
         return users.associate { it.id to it.toDTO() }
     }
 
     @Transactional
     @PreAuthorize("hasRole('ROLE_admin')")
     override fun createUser(user: UserCreationDTO) {
+        log.debug("Creating user username={}, email={}, org={}, role={}", user.username, user.email, user.organization, user.role)
 
-        log.debug("Creating user: {}", user.toString())
         // 1. Preparing UserRepresentation for keycloak
         val userRep = UserRepresentation().apply {
             username = user.username
@@ -106,15 +114,14 @@ class UserService(
         // 3. This is the UsersResource for the realm
         val usersResource = keycloak.realm(realm).users()
 
-
-        log.debug("usersResource obtained for realm: {}", usersResource.toString())
         // 4. Create user in Keycloak
+        log.info("Creating user in Keycloak with username={}", user.username)
         val response = usersResource.create(userRep)
 
         if (response.status == 201) {
             // 5. Obtain the generated user ID from Keycloak
             val userId = CreatedResponseUtil.getCreatedId(response)
-            log.debug("Created a user in Keycloak with id: {}", userId)
+            log.info("User created in Keycloak userId={}", userId)
 
             // 5.1. Assign Role to the User
             try {
@@ -125,17 +132,20 @@ class UserService(
                     UserRole.ROLE_staff -> "staff"
                 }
 
+                log.debug("Assigning role {} to user {}", roleName, userId)
                 val roleRepresentation = keycloak.realm(realm).roles().get(roleName).toRepresentation()
                 usersResource.get(userId).roles().realmLevel().add(listOf(roleRepresentation))
                 log.debug("Assigned role {} to user {}", roleName, userId)
             } catch (e: Exception) {
-                log.error("Failed to assign role to user, rolling back user creation", e)
+                log.error("Role assignment failed for userId={}, rolling back Keycloak user", userId, e)
                 usersResource.get(userId).remove()
                 throw RuntimeException("Error on assigning the role, deleting the user", e)
             }
 
             try {
                 // 6. Save user in local DB
+                log.info("Saving user in local DB userId={}", userId)
+
                 val newUser = User(
                     id = UUID.fromString(userId), // <--- This is the Keycloak user ID
                     fullName = user.username,
@@ -146,16 +156,19 @@ class UserService(
                     storageQuota = user.storageQuota,
                     createdAt = Date.from(Instant.now()),
                 )
+                log.debug("Saving the user {} in local DB", newUser.id)
                 userRepo.save(newUser)
-
+                log.info("User persisted in local DB userId={}", userId)
             } catch (e: Exception) {
                 // 7. Manage local DB save error
                 // Rollback: delete user from Keycloak
+                log.error("Unable to save the user {}", userId, e)
                 usersResource.get(userId).remove()
                 throw RuntimeException("Error on local save, rollback keycloak", e)
             }
         } else {
             // Generic keycloak user creation error
+            log.error("Failed to create user in Keycloak username={} status={}", user.username, response.status)
             throw RuntimeException("Error on user creation in Keycloak: ${response.status} - ${response.statusInfo}")
         }
     }
@@ -164,24 +177,31 @@ class UserService(
     @Transactional
     @PreAuthorize("hasRole('ROLE_admin')")
     override fun updateUser(user: UserDTO) {
+        log.debug("Updating user id={}", user.id)
+
         val userEntity: User = userRepo.findById(user.id).orElseThrow {
+            log.warn("Update failed: user not found id={}", user.id)
             throw UserNotFoundException("User with id ${user.id} not found")
         }
 
         if(userEntity.email != user.email){
-            if(userRepo.getUserByEmail(user.email).isPresent)
+            if(userRepo.getUserByEmail(user.email).isPresent){
+                log.warn("Update rejected due to email conflict userId={} email={}", user.id, user.email)
                 throw UserConflictError("Another user with that email already exists")
+            }
         }
 
         if (user.storageQuota != null) {
             val currentUsed = userEntity.storageUsed
             if (user.storageQuota < currentUsed) {
+                log.warn("Update rejected due to quota lower than used userId={} quota={} used={}", user.id, user.storageQuota, currentUsed)
                 throw StorageQuotaBelowUsedException(
                     "Cannot set storage quota to ${user.storageQuota} bytes: user has already used $currentUsed bytes"
                 )
             }
         }
 
+        log.debug("Applying updates to user id={}", user.id)
         userEntity.fullName = user.fullName
         userEntity.email = user.email
         userEntity.organization = user.organization
@@ -194,40 +214,45 @@ class UserService(
     @Transactional
     @PreAuthorize("hasRole('ROLE_admin')")
     override fun deleteUser(id: UUID) {
+        log.debug("Deleting user {}", id)
         // Get the authenticated user's ID from the security context
         val authenticatedUserId = getAuthenticatedUserId()
 
         // Check if the user is trying to delete themselves
         if (authenticatedUserId == id) {
+            log.warn("Self-deletion attempt blocked userId={}", id)
             throw SelfDeletionNotAllowedException("Cannot delete your own user account")
         }
 
         val user: User = userRepo.findById(id).orElseThrow {
+            log.warn("Delete failed: user {} not found", id)
             UserNotFoundException("User with id $id not found")
         }
 
         // 1. First delete from local DB (within transaction)
         try {
+            log.debug("Deleting user from local database userId={}", id)
             userRepo.deleteById(id)
-            log.debug("Deleted user {} from local database", id)
+            log.info("User deleted from local database userId={}", id)
         } catch (e: Exception) {
-            log.error("Failed to delete user from local database", e)
+            log.error("Failed to delete user from local database userId={}", id, e)
             throw RuntimeException("Error deleting user from database", e)
         }
 
         // 2. Then delete from Keycloak (outside transaction scope)
         try {
+            log.debug("Deleting user from Keycloak userId={}", id)
             val usersResource = keycloak.realm(realm).users()
             usersResource.get(id.toString()).remove()
-            log.debug("Deleted user {} from Keycloak", id)
+            log.info("User deleted from Keycloak userId={}", id)
         } catch (e: Exception) {
             // Keycloak deletion failed, rollback DB deletion
-            log.error("Failed to delete user from Keycloak, rolling back database deletion", e)
+            log.error("Keycloak deletion failed for userId={}, rolling back DB deletion", id, e)
             try {
                 userRepo.save(user)
-                log.debug("Rolled back database deletion for user {}", id)
+                log.warn("Rollback succeeded: restored deleted userId={}", id)
             } catch (rollbackException: Exception) {
-                log.error("CRITICAL: Failed to rollback database deletion for user {}", id, rollbackException)
+                log.error("CRITICAL: rollback failed userId={}", id, rollbackException)
                 throw RuntimeException("Critical error: failed to rollback database deletion after Keycloak failure", rollbackException)
             }
             throw RuntimeException("Error deleting user from Keycloak, rolled back database deletion", e)

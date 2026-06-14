@@ -22,15 +22,20 @@ class StorageService (
     private val log = LoggerFactory.getLogger(StorageService::class.java)
 
     init {
+        log.info("Initializing StorageService with uploads bucket: {} and files bucket: {}", uploadsBucketName, filesBucketName)
         // Crea il bucket se non esiste
         var found = minioClient.bucketExists(
             BucketExistsArgs.builder().bucket(filesBucketName).build()
         )
 
         if (!found) {
+            log.info("Files bucket {} does not exist, creating it", filesBucketName)
             minioClient.makeBucket(
                 MakeBucketArgs.builder().bucket(filesBucketName).build()
             )
+            log.info("Successfully created files bucket: {}", filesBucketName)
+        } else {
+            log.debug("Files bucket {} already exists", filesBucketName)
         }
 
         found = minioClient.bucketExists(
@@ -38,9 +43,13 @@ class StorageService (
         )
 
         if (!found) {
+            log.info("Uploads bucket {} does not exist, creating it", uploadsBucketName)
             minioClient.makeBucket(
                 MakeBucketArgs.builder().bucket(uploadsBucketName).build()
             )
+            log.info("Successfully created uploads bucket: {}", uploadsBucketName)
+        } else {
+            log.debug("Uploads bucket {} already exists", uploadsBucketName)
         }
     }
 
@@ -63,7 +72,7 @@ class StorageService (
 
     override fun composeObject(upload: Upload, targetObjectKey: String) {
         try {
-            log.debug("Composing objects for upload {}", upload.id)
+            log.info("Composing objects for upload {} to target key: {}", upload.id, targetObjectKey)
 
             // Recupera tutti i chunk usando il prefix
             val results = minioClient.listObjects(
@@ -91,10 +100,11 @@ class StorageService (
                 .toList()
 
             if (sourceObjectList.isEmpty()) {
-                log.warn("No chunks found for upload ${upload.id}")
+                log.error("No chunks found for upload {}", upload.id)
                 throw RuntimeException("No chunks found for upload ${upload.id}")
             }
 
+            log.debug("Found {} chunks for upload {}, composing...", sourceObjectList.size, upload.id)
             // Create my-bucketname/my-objectname by combining source object list.
             minioClient.composeObject(
                 ComposeObjectArgs.builder()
@@ -103,8 +113,10 @@ class StorageService (
                     .sources(sourceObjectList)
                     .build()
             )
+            log.info("Successfully composed {} chunks for upload {} into {}", sourceObjectList.size, upload.id, targetObjectKey)
         }
         catch (e: Exception) {
+            log.error("Error composing object for upload {}: {}", upload.id, e.message, e)
             //we throw a StorageException to signal the failure to the caller for triggering rollback of transaction
             throw StorageException("Error composing object for upload ${upload.id}: ${e.message}", e)
         }
@@ -112,8 +124,7 @@ class StorageService (
     }
 
     override fun getObject(bucket: String, objectName: String): ByteArray {
-        log.debug("Retrieving object {}", objectName)
-        log.debug("from bucket {}", bucket)
+        log.debug("Retrieving object {} from bucket {}", objectName, bucket)
 
         val obj = minioClient.getObject(
             GetObjectArgs.builder()
@@ -126,8 +137,7 @@ class StorageService (
     }
 
     override fun getObjectSize(bucket: String, objectName: String): Long {
-        log.debug("Getting size of object {}", objectName)
-        log.debug("from bucket {}", bucket)
+        log.debug("Getting size of object {} from bucket {}", objectName, bucket)
 
         val stat = minioClient.statObject(
             StatObjectArgs.builder()
@@ -140,16 +150,21 @@ class StorageService (
     }
 
     override fun deleteObject(bucket: String, objectName: String) {
-        log.debug("deleting object $objectName")
-        log.debug("from bucket $uploadsBucketName")
+        log.debug("Deleting object {} from bucket {}", objectName, bucket)
 
-        minioClient.removeObject(
-            RemoveObjectArgs.builder().bucket(bucket).`object`(objectName).build()
-        )
+        try {
+            minioClient.removeObject(
+                RemoveObjectArgs.builder().bucket(bucket).`object`(objectName).build()
+            )
+            log.debug("Successfully deleted object {} from bucket {}", objectName, bucket)
+        } catch (e: Exception) {
+            log.error("Error deleting object {} from bucket {}: {}", objectName, bucket, e.message, e)
+            throw e
+        }
     }
 
     override fun deleteObjects(bucket: String, objectKey: List<String>) {
-        log.debug("STORAGE SERVICE - Deleting objects for {}", objectKey)
+        log.debug("Deleting {} objects from bucket {}", objectKey.size, bucket)
 
         val toDelete= objectKey.map {
             DeleteObject(it)
@@ -170,7 +185,7 @@ class StorageService (
 
     override fun deletePartialObjects(objectKey: String) {
         //objectKey rappresenta l'UUID della upload
-        log.debug("Deleting partial objects for $objectKey")
+        log.debug("Deleting partial objects with prefix {}/part- from bucket {}", objectKey, uploadsBucketName)
 
         val objects = minioClient.listObjects(
             ListObjectsArgs.builder()
@@ -183,7 +198,7 @@ class StorageService (
             DeleteObject(item.objectName())
         }
 
-        log.debug(objects.toString())
+            log.debug("Found {} partial objects to delete for upload {}", objects.size, objectKey)
 
         val errors = minioClient.removeObjects(
             RemoveObjectsArgs.builder()
@@ -200,7 +215,7 @@ class StorageService (
 
     override fun getMinimumChunksForSizeWithIndex(objectKey: String, partNumber: Int, targetSize: Long): List<ByteArray> {
         //default targetSize is 5MiB
-        log.debug("Retrieving partial objects for {}", objectKey)
+        log.debug("Retrieving partial objects for {} starting from part {} with target size {} bytes", objectKey, partNumber, targetSize)
 
         val results: Iterable<Result<Item>> = minioClient.listObjects(
             ListObjectsArgs.builder()
@@ -264,13 +279,13 @@ class StorageService (
 
     override fun deleteAllVersions(objectKey: String) {
         val prefix = "$objectKey/"
-        log.debug("Deleting versions with prefix {}", prefix)
+        log.info("Deleting all versions with prefix {}", prefix)
         val objectsToDelete = mutableListOf<String>()
 
         // Lista tutti gli oggetti con il prefisso
         val results = minioClient.listObjects(
             ListObjectsArgs.builder()
-                .bucket("files")
+                .bucket(filesBucketName)
                 .prefix(prefix)
                 .recursive(true)
                 .build()
@@ -282,10 +297,10 @@ class StorageService (
             objectsToDelete.add(item.objectName())
         }
 
-        log.debug(objectsToDelete.toString())
+            log.debug("Found {} versions to delete for key {}", objectsToDelete.size, objectKey)
 
         if (objectsToDelete.isNotEmpty()) {
-            deleteObjects("files",objectsToDelete,)
+            deleteObjects(filesBucketName, objectsToDelete)
         }
     }
 }

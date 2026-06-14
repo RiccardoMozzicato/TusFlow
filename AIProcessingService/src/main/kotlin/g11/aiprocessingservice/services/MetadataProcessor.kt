@@ -64,7 +64,7 @@ class MetadataProcessor(
 
     @KafkaListener(id = "Ai-service-consumer", topics = ["file-outbox"], containerFactory = "debeziumKafkaListenerContainerFactory")
     override fun onMessage(message: String, acknowledgment: Acknowledgment){
-        log.debug("This is the message from Kafka \n {}" ,message)
+        log.debug("Received message from kafka \n {}" ,message)
 
         // Resume the upstream trace carried in the Debezium outbox payload body.
         // The RecordInterceptor approach fires too late (after Spring Kafka creates the
@@ -537,7 +537,7 @@ class MetadataProcessor(
         jobRepository.save(jobEntity)
         while (attempt <= maxAutomaticRetries) {
             try {
-                log.info("AI analysis attempt {}/{} for job {}", attempt, maxAutomaticRetries, job.id)
+                log.debug("AI analysis attempt {}/{} for job {}", attempt, maxAutomaticRetries, job.id)
 
                 // Reset stream if possible (for retries after the first attempt)
                 if (attempt > 1) {

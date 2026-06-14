@@ -1,6 +1,8 @@
 spring:
     application:
       name: UserDetailService
+    profiles:
+      active: dev
     datasource:
       url: jdbc:postgresql://localhost:5433/userdb
       username: myuser
@@ -31,10 +33,10 @@ spring:
 server:
   port: 8082
 
-logging:
-    level:
-      org.springframework.web: DEBUG
-      org.springframework.security: DEBUG
+#logging:
+#    level:
+#      org.springframework.web: DEBUG
+#      org.springframework.security: DEBUG
 
 keycloak-admin:
   server-url: http://localhost:9090/

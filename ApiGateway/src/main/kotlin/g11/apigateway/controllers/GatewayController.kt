@@ -22,8 +22,10 @@ class AuthController(
 
     @GetMapping("/auth/userinfo")
     fun getUserInfo(@AuthenticationPrincipal user: OidcUser?, csrfToken: CsrfToken): ResponseEntity<Any> {
+        log.debug("Requested user info")
         // 1. Se l'utente non è loggato, restituisci 401 o un oggetto anonimo
         if (user == null) {
+            log.warn("Requested user info for a non authenticated user")
             return ResponseEntity.status(401).build()
         }
 
@@ -46,6 +48,7 @@ class AuthController(
             roles = filteredRoles,
         )
 
+        log.debug("User info for user with id={} returned", userInfo.uuid)
         return ResponseEntity.ok(userInfo)
     }
 }

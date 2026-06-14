@@ -9,6 +9,9 @@
     <property name="LOG_LOGGER" value="%clr(%logger{30}){cyan}"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
         <encoder>
             <pattern>
                 ${LOG_DATE} ${LOG_THREAD} ${LOG_LEVEL} ${LOG_LOGGER} %clr([%mdc{traceId:-} %mdc{spanId:-}]){faint}
@@ -33,13 +36,38 @@
         </format>
     </appender>
 
-    <logger name="g11.apigateway" level="DEBUG"/>
-    <logger name="org.springframework" level="INFO"/>
+    <springProfile name="dev">
+        <logger name="g11.apigateway" level="DEBUG"/>
+        <logger name="org.springframework" level="INFO"/>
+        <logger name="org.springframework.web" level="INFO"/>
+        <logger name="org.springframework.cloud.gateway" level="INFO"/>
+        <logger name="org.springframework.security" level="INFO"/>
 
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="LOKI"/>
-    </root>
+        <root level="DEBUG">
+            <appender-ref ref="LOKI"/>
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="prod">
+        <logger name="g11.apigateway" level="INFO"/>
+        <logger name="org.springframework" level="INFO"/>
+        <logger name="org.springframework.web" level="INFO"/>
+        <logger name="org.springframework.cloud.gateway" level="INFO"/>
+        <logger name="org.springframework.security" level="INFO"/>
+
+        <root level="INFO">
+            <appender-ref ref="LOKI"/>
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!dev &amp; !prod">
+        <root level="INFO">
+            <appender-ref ref="LOKI"/>
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
 
 </configuration>
 

@@ -506,10 +506,14 @@ class TusService(
     @PreAuthorize("hasAnyRole('ROLE_staff','ROLE_manager','ROLE_admin')")
     override fun terminateUpload(id: String){
         val upload: Upload = repo.findById(UUID.fromString(id))
-            .orElseThrow{ ResourceNotFoundException("Resource does not exists: $id") }
+            .orElseThrow{
+                log.warn("Terminate upload failed: resource not found uploadId={}", id)
+                ResourceNotFoundException("Resource does not exists: $id")
+            }
 
         //region Access Control
         //calls UserDetailService to get user details
+        log.debug("Resolving access token for upload termination uploadId={}", id)
         val token = authService.getAccessToken()
         val userDetails = fileService.getUserDetails(token)
 
@@ -517,16 +521,20 @@ class TusService(
 
         if(file == null) { //upload of a new file
             //throws ForbiddenException if user has no access
+            log.debug("Upload belongs to new file uploadId={}", id)
             checkUploadPermission(upload, userDetails)
         }
         else{
             //throws ForbiddenException if user has no access
             //READ_ONLY is enough to get upload info
+            log.debug("Upload linked to file entity uploadId={} fileId={}", id, upload.fileId)
             fileService.getCurrentUserPermission(upload.fileId, userDetails)
         }
         //endregion
 
         upload.status = UploadStatus.DELETED // JPA effettua l'aggiornamento in automatico
+        log.info("Upload marked as DELETED uploadId={}", id)
+
 
         if (upload.size != null) {
             val ownerId = file?.ownerId ?: upload.ownerId

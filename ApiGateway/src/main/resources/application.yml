@@ -1,14 +1,16 @@
 # Add log debug for spring wemb mvc and cloud gateway
-logging:
-    level:
-        org.springframework.web: DEBUG
-        org.springframework.cloud.gateway: DEBUG
+#logging:
+#    level:
+#        org.springframework.web: DEBUG
+#        org.springframework.cloud.gateway: DEBUG
 
 baseUrl: http://localhost:8080
 
 spring:
   application:
     name: ApiGateway
+  profiles:
+    active: dev
   security:
     oauth2:
       client:

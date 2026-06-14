@@ -1,6 +1,8 @@
 spring:
   application:
     name: AIProcessingService
+  profiles:
+    active: dev
   datasource:
     url: jdbc:postgresql://localhost:5435/aireqdb
     username: myuser
@@ -99,16 +101,16 @@ kafka:
     key-serializer: org.apache.kafka.common.serialization.StringSerializer
     value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-logging:
-  level:
-    g11:
-      aiprocessingservice: INFO
-    org:
-      springframework:
-        ai:
-          chat:
-            client:
-              advisor: DEBUG
+#logging:
+#  level:
+#    g11:
+#      aiprocessingservice: INFO
+#    org:
+#      springframework:
+#        ai:
+#          chat:
+#            client:
+#              advisor: DEBUG
 server:
     port: 8083
 

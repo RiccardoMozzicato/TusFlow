@@ -27,13 +27,13 @@ class OAuth2Service(
     fun getM2MAccessToken(): String {
         // Return cached token if still valid
         if (cachedToken != null && tokenExpiresAt != null && Instant.now().isBefore(tokenExpiresAt)) {
-            log.debug("Using cached M2M token (expires in {}s)", 
+            log.debug("Using cached M2M token (expires in {}s)",
                 Instant.now().until(tokenExpiresAt, java.time.temporal.ChronoUnit.SECONDS))
             return cachedToken!!
         }
 
         log.debug("Requesting new M2M access token from Keycloak")
-        
+
         try {
             val response = restClient
                 .post()
@@ -53,11 +53,11 @@ class OAuth2Service(
             cachedToken = token
             tokenExpiresAt = Instant.now().plusSeconds(expiresIn - 60)
             
-            log.debug("Successfully obtained M2M token, expires in {}s", expiresIn)
+            log.info("Successfully obtained M2M token from Keycloak, expires in {}s", expiresIn)
             return token
             
         } catch (e: Exception) {
-            log.error("Failed to obtain M2M access token: {}", e.message, e)
+            log.error("Failed to obtain M2M access token from Keycloak: {}", e.message, e)
             throw RuntimeException("Failed to obtain M2M access token", e)
         }
     }
@@ -68,7 +68,7 @@ class OAuth2Service(
      */
     @Synchronized
     fun invalidateCache() {
-        log.debug("Invalidating M2M token cache")
+        log.warn("Invalidating M2M token cache - forcing token refresh on next request")
         cachedToken = null
         tokenExpiresAt = null
     }

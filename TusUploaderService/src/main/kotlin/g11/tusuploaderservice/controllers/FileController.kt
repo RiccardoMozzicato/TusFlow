@@ -17,6 +17,7 @@ import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.FileServiceInterface
 import g11.tusuploaderservice.services.MetadataSSEService
 import g11.tusuploaderservice.services.StorageService
+import g11.tusuploaderservice.utils.getUserIdFromJwt
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.enums.ParameterIn
@@ -66,6 +67,11 @@ class FileController(
 ) {
     private val log = LoggerFactory.getLogger(FileController::class.java)
 
+    // Resolves the authenticated user (owner) id from the JWT for request logging.
+    // Never throws so an API log line can't break the request flow.
+    private fun currentUserOwnerId(): String =
+        runCatching { getUserIdFromJwt().toString() }.getOrDefault("unknown")
+
     @Deprecated("This endpoint is deprecated and will be removed in future versions. Use GET /api/v1/files with appropriate filters instead.")
     //region Swagger Documentation
     @Operation(
@@ -89,8 +95,10 @@ class FileController(
     //endregion
     @GetMapping("/all")
     fun getAllFiles(): ResponseEntity<List<FileDTO>> {
+        log.debug("API GET /api/v1/files/all userOwnerId={}", currentUserOwnerId())
         log.debug("Getting all files from repository")
         val files = fileService.getAllFiles()
+        log.debug("Retrieved {} files from repository", files.size)
         return ResponseEntity.ok(files)
     }
 
@@ -187,7 +195,8 @@ class FileController(
         @RequestParam(defaultValue = "PERSONAL") sharingScope: Set<SharingScope>,
     ): ResponseEntity<Page<FileDTO>> {
 
-        log.debug("getFilesMetadata")
+        log.debug("API GET /api/v1/files userOwnerId={}", currentUserOwnerId())
+        log.debug("Requested file metadata: contentType={}, dateFrom={}, dateTo={}, sort={}, page={}, size={}, sharingScope={}", contentType, dateFrom, dateTo, sort, page, size, sharingScope)
         // Parse sort parameter
         val sortParts = sort.split(",")
         val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "createdAt"
@@ -196,6 +205,7 @@ class FileController(
         val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope)
 
         val files = fileService.getFiles(filtersDTO)
+        log.debug("Retrieved {} files with applied filters", files.totalElements)
 
         return ResponseEntity.ok(files)
     }
@@ -242,7 +252,9 @@ class FileController(
     //endregion
     @GetMapping("/{id}")
     fun getFileMetadata(@PathVariable id: UUID): ResponseEntity<FileDTO> {
+        log.debug("API GET /api/v1/files/{} userOwnerId={} fileId={}", id, currentUserOwnerId(), id)
         val fileDTO = fileService.getFileMetadata(id)
+        log.debug("Successfully retrieved file metadata for id: {}", id)
         return ResponseEntity.ok(fileDTO)
     }
 
@@ -292,8 +304,9 @@ class FileController(
         @PathVariable id: UUID,
         @RequestParam(required = false) version: Long?
     ): ResponseEntity<MetadataAIDTO> {
-        log.debug("Fetching AI-generated metadata for file: {} version: {}", id, version)
+        log.debug("API GET /api/v1/files/generatedmetadata/{} userOwnerId={} fileId={}, version={}", id, currentUserOwnerId(), id, version)
         val metadata = fileService.getFileGeneratedMetadata(id, version)
+        log.debug("Successfully retrieved AI-generated metadata for file: {}", id)
         return ResponseEntity.ok(metadata)
     }
 
@@ -323,6 +336,7 @@ class FileController(
         @PathVariable id: UUID,
         @RequestParam(required = false) version: Long?
     ): ResponseEntity<SseEmitter> {
+        log.debug("API GET /api/v1/files/generatedmetadata/stream/{} userOwnerId={} fileId={}", id, currentUserOwnerId(), id)
         log.debug("Opening SSE stream for AI metadata processing - fileId: {} version: {}", id, version)
 
         val emitter = metadataSSEService.streamMetadataProcessingStatus(id, version)
@@ -370,8 +384,10 @@ class FileController(
         @RequestParam(required = false) version: Long?,
         @RequestBody metadata: Map<String, String>
     ): ResponseEntity<HttpStatus> {
+        log.debug("API PATCH /api/v1/files/generatedmetadata/{} userOwnerId={} fileId={}, version={}", id, currentUserOwnerId(), id, version)
 
         if (metadata.isEmpty()) {
+            log.warn("Rejected generated-metadata update: empty payload fileId={}", id)
             throw ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Metadata cannot be empty"
@@ -380,6 +396,7 @@ class FileController(
 
         metadata.keys.forEach { key ->
             if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                log.warn("Rejected generated-metadata update: non-ASCII key fileId={} key={}", id, key)
                 throw ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Metadata key '$key' must be ASCII encoded"
@@ -388,6 +405,7 @@ class FileController(
         }
 
         fileService.updateGeneratedMetadataByUser(id, version, metadata)
+        log.info("Generated metadata updated successfully fileId={} version={}", id, version)
         return ResponseEntity.ok(HttpStatus.OK)
     }
 
@@ -457,8 +475,10 @@ class FileController(
         @RequestBody metadata: Map<String, String>
     ): ResponseEntity<HttpStatus> {
 
+        log.debug("API PATCH /api/v1/files/{}/versions/{} userOwnerId={} fileId={}, version={}", id, version, currentUserOwnerId(), id, version)
         // Check if metadata is empty
         if (metadata.isEmpty()) {
+            log.warn("Rejected metadata update: empty payload fileId={} version={}", id, version)
             throw ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Metadata cannot be empty"
@@ -468,13 +488,16 @@ class FileController(
         // Validate metadata keys are ASCII
         metadata.keys.forEach { key ->
             if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                log.warn("Rejected metadata update: non-ASCII key fileId={} version={} key={}", id, version, key)
                 throw ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Metadata key '$key' must be ASCII encoded"
                 )
             }
         }
+        log.debug("Requested update for file metadata: fileId={}, version={}", id, version)
         fileService.updateFileMetadataByUser(id,version, metadata)
+        log.info("File metadata updated successfully fileId={} version={}", id, version)
         return ResponseEntity.ok(HttpStatus.OK)
 
     }
@@ -533,7 +556,10 @@ class FileController(
     //endregion
     @DeleteMapping("/{id}")
     fun deleteFileMetadata(@PathVariable id: UUID): ResponseEntity<HttpStatus> {
+        log.debug("API DELETE /api/v1/files/{} userOwnerId={} fileId={}", id, currentUserOwnerId(), id)
+
         fileService.deleteFile(id)
+        log.info("File metadata deleted successfully for id: {}", id)
         return ResponseEntity.ok(HttpStatus.OK)
     }
 
@@ -606,10 +632,14 @@ class FileController(
         @RequestParam("version") version: Long? = null,
         res: HttpServletResponse
     ) {
+        log.debug("API GET /api/v1/files/{}/download userOwnerId={} fileId={}, version={}", id, currentUserOwnerId(), id, version)
+
         val download: DownloadDTO = fileService.downloadFile(id, version)
+        log.info("File download started: {} version: {}", id, version)
         res.setHeader("Content-Disposition", "attachment; filename=\"${download.filename}\"")
         res.setHeader("Content-Type", download.contentType)
         res.outputStream.use { output -> output.write(download.file) }
+        log.debug("File download completed: {}", id)
     }
 
     @GetMapping("/{id}/preview")
@@ -618,10 +648,14 @@ class FileController(
         @RequestParam("version") version: Long? = null,
         res: HttpServletResponse
     ) {
+        log.debug("API GET /api/v1/files/{}/preview userOwnerId={} fileId={}, version={}", id, currentUserOwnerId(), id, version)
+
         val preview: DownloadDTO = fileService.downloadFile(id, version)
+        log.info("File preview started: {} version: {}", id, version)
         res.setHeader("Content-Disposition", "inline; filename=\"${preview.filename}\"")
         res.setHeader("Content-Type", preview.contentType)
         res.outputStream.use { output -> output.write(preview.file) }
+        log.debug("File preview completed: {}", id)
     }
 
 
@@ -707,7 +741,10 @@ class FileController(
        @RequestParam(defaultValue = "0") page: UInt,
        @RequestParam(defaultValue = "10") size: UInt
    ): ResponseEntity<Page<FileShareDTO>> {
+       log.debug("API GET /api/v1/files/{}/shares userOwnerId={} fileId={}", id, currentUserOwnerId(), id)
+
        val shares = fileService.getFileShares(id, PageRequest.of(page.toInt(), size.toInt()))
+       log.debug("Retrieved {} shares for file: {}", shares.totalElements, id)
        return ResponseEntity.ok(shares)
    }
 
@@ -810,6 +847,8 @@ class FileController(
        @RequestParam userId: UUID,
        @RequestParam permission: PERMISSION_LEVEL
    ): ResponseEntity<FileShareDTO> {
+       log.debug("API POST /api/v1/files/{}/shares userOwnerId={} fileId={} targetUserId={}, permission={}", id, currentUserOwnerId(), id, userId, permission)
+
        val fileShareDTO = FileShareDTO(null, id, userId, permission, Date.from(Instant.now()).toString())
        val share = fileService.createFileShare(fileShareDTO)
        return ResponseEntity.status(HttpStatus.CREATED).body(share)
@@ -913,7 +952,10 @@ class FileController(
        @RequestParam(defaultValue = "0") page: UInt,
        @RequestParam(defaultValue = "10") size: UInt
    ): ResponseEntity<Page<FileDTO>> {
+       log.debug("API GET /api/v1/files/my-shared userOwnerId={}", currentUserOwnerId())
+
        val sharedFiles = fileService.getFilesSharedWithCurrentUser(PageRequest.of(page.toInt(), size.toInt()))
+       log.debug("Retrieved {} shared files for current user", sharedFiles.totalElements)
        return ResponseEntity.ok(sharedFiles)
    }
 
@@ -975,7 +1017,9 @@ class FileController(
        @PathVariable id: UUID,
        @PathVariable shareId: Long
    ): ResponseEntity<HttpStatus> {
+       log.debug("API DELETE /api/v1/files/{}/shares/{} userOwnerId={} fileId={} shareId={}", id, shareId, currentUserOwnerId(), id, shareId)
        fileService.deleteFileShare(id, shareId)
+       log.info("File share deleted successfully: fileId={}, shareId={}", id, shareId)
        return ResponseEntity.ok(HttpStatus.OK)
    }
 
@@ -1037,7 +1081,10 @@ class FileController(
         req: HttpServletRequest,
         res: HttpServletResponse
     ) {
+        log.debug("API POST /api/v1/files/{}/versions userOwnerId={} fileId={}", fileId, currentUserOwnerId(), fileId)
+
         fileService.existsFileOrThrow(fileId) // Throws 404 if file does not exist
+        log.debug("File exists, redirecting to upload endpoint for file: {}", fileId)
         res.status = HttpServletResponse.SC_TEMPORARY_REDIRECT // 307
         res.setHeader("Location", "/uploads?fileId=${fileId}")
     }
@@ -1064,8 +1111,10 @@ class FileController(
     //endregion
     @GetMapping("/{fileId}/versions")
     fun getFileVersions(@PathVariable fileId: UUID): ResponseEntity<List<FileVersionDTO>> {
-        log.debug("Getting all versions for file: $fileId")
+        log.debug("API GET /api/v1/files/{}/versions userOwnerId={} fileId={}", fileId, currentUserOwnerId(), fileId)
+
         val versions = fileService.getFileVersions(fileId)
+        log.debug("Retrieved {} versions for file: {}", versions.size, fileId)
         return ResponseEntity.ok(versions)
     }
 
@@ -1089,10 +1138,15 @@ class FileController(
 
     @PostMapping("/query")
     fun queryFiles(@RequestBody request: RagQueryRequest, principal: Authentication): ResponseEntity<RagQueryResponse> {
+        //TODO modify the api or delete it
+        log.debug("API POST /api/v1/files/query userOwnerId={}", currentUserOwnerId())
         // Estrai userId dal JWT token
         val userId = when (principal) {
             is JwtAuthenticationToken -> principal.token.subject
-            else -> throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid authentication")
+            else -> {
+                log.warn("Invalid authentication token provided for RAG query")
+                throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid authentication")
+            }
         }
 
         log.info("Forwarding RAG query to AI Service: {} for user: {}", request.query, userId)
@@ -1104,12 +1158,14 @@ class FileController(
 
             val requestWithFilters = request.copy(filters = filters)
 
+            log.debug("Sending RAG request with filters to AI Service for user: {}", userId)
             val response = aiServiceClient.post()
                 .uri("/api/rag/query")
                 .body(requestWithFilters)
                 .retrieve()
                 .body(RagQueryResponse::class.java)
 
+            log.debug("Successfully received RAG response from AI Service for user: {}", userId)
             return ResponseEntity.ok(response)
 
         } catch (e: Exception) {

@@ -1,5 +1,6 @@
 package g11.tusuploaderservice.services
 
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
@@ -14,7 +15,12 @@ class KeycloakAuthService(
     @Value("\${keycloak.client-id}") private val clientId: String,
     @Value("\${keycloak.client-secret}") private val clientSecret: String
 ) : AuthService {
+
+    private val log = LoggerFactory.getLogger(KeycloakAuthService::class.java)
+
     override fun getAccessToken(): String {
+        log.debug("Requesting access token from Keycloak")
+
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_FORM_URLENCODED
         }
@@ -26,7 +32,9 @@ class KeycloakAuthService(
         val restTemplate = RestTemplate()
         val request = HttpEntity(body, headers)
         val response = restTemplate.postForEntity(tokenUri, request, Map::class.java)
+        log.debug("Received access token from Keycloak")
         return response.body?.get("access_token") as String
     }
 }
+
 

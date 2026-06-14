@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.http.ProblemDetail
 import java.util.UUID
 import g11.tusuploaderservice.utils.parseMetadataHeader
+import g11.tusuploaderservice.utils.getUserIdFromJwt
 import org.springframework.web.bind.annotation.RequestParam
 import kotlin.text.get
 
@@ -42,6 +43,12 @@ import kotlin.text.get
 @RequestMapping("/api/v1/uploads")
 class TusController(val tus: TusProperties, val tusService: TusServiceInterface, private val fileService: FileServiceInterface) {
     private val log = LoggerFactory.getLogger(TusController::class.java)
+
+    // Resolves the authenticated user (owner) id from the JWT for request logging.
+    // Never throws so an API log line can't break the request flow.
+    private fun currentUserOwnerId(): String =
+        runCatching { getUserIdFromJwt().toString() }.getOrDefault("unknown")
+
     //region Swagger Documentation
     @Operation(
         tags = [ "Tus Server Capabilities" ],
@@ -100,6 +107,8 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
     @RequestMapping("", method = [RequestMethod.OPTIONS])
     @ResponseStatus(HttpStatus.NO_CONTENT)
     open fun optionsUploads(res: HttpServletResponse) {
+        log.debug("API OPTIONS /api/v1/uploads userOwnerId={}", currentUserOwnerId())
+
         res.setHeader("Tus-Version", tus.version)
         res.setHeader("Tus-Extension", tus.extensions?.joinToString(separator = ","))
         res.setHeader("Tus-Checksum-Algorithm", tusService.getSupportedHashAlgorithms().joinToString(", "))
@@ -332,6 +341,8 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         @RequestHeader("Content-Type", required = false) contentType: String?,
         res: HttpServletResponse
     ) {
+        log.debug("API POST /api/v1/uploads userOwnerId={} fileId={}", currentUserOwnerId(), fileId)
+
         //if no scope is provided, default to PERSONAL
         val sharingScope = scope ?: SharingScope.PERSONAL
 
@@ -339,6 +350,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         val parsedUploadMetadata: Map<String, String>? = parseMetadataHeader(uploadMetadata)
 
         val filename = parsedUploadMetadata?.get("filename")
+        log.debug("Upload metadata parsed fileId={} filename={}", fileId, filename)
 
         var file = UploadDTO(
             filename = filename,
@@ -358,35 +370,40 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
 
         //creation with upload
         if (contentLength != null && contentLength > 0) {
+            log.info("Starting upload chunk fileId={} size={}", fileId, contentLength)
             contentType?.let {
                 // Extract media type without parameters (e.g., remove ";charset=UTF-8")
                 val mediaType = it.split(";").firstOrNull()?.trim()
                 if (mediaType != "application/offset+octet-stream") {
+                    log.warn("Invalid Content-Type for upload fileId={} contentType={}", fileId, contentType)
                     throw TusContentTypeException("Invalid Content-Type for upload - must be provided for TUS protocol")
                 }
             } ?: throw MissingFieldException("Missing Content-Type header for upload")
 
             val chunk: ByteArray = req.inputStream.readAllBytes()
             if (chunk.size.toLong() != contentLength) {
+                log.warn("Upload length mismatch fileId={} expected={} actual={}", fileId, contentLength, chunk.size)
                 throw UploadLengthException("Content-Length header does not match chunk size")
             }
 
             if (checksumHeader != null) {
+                log.debug("Checksum validation started fileId={}", fileId)
                 tusService.executeChecksum(chunk, checksumHeader)
             }
 
             file = tusService.createUploadWithChunk(file, chunk)
-            log.debug("CONTROLLER - UPLOADING CHUNK: {}", file)
+            log.info("Upload chunk processed fileId={} offset={}", fileId, file.uploadOffset)
             res.setHeader("Upload-Offset", file.uploadOffset.toString())
             uploadExpires = file.uploadExpires
         }
         else {
+            log.debug("Initializing empty upload fileId={}", fileId)
             file = tusService.createUpload(file)
-            log.debug("CONTROLLER - Creating new upload: \n{}", file)
+            log.info("Upload initialized fileId={}", fileId)
         }
 
         val location = "http://localhost:8080/api/v1/uploads/${file.id}"
-
+        log.debug("Upload location set fileId={} location={}", fileId, location)
         res.setHeader("Location", location)
         res.setHeader("Upload-Expires", uploadExpires)
     }
@@ -534,7 +551,18 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
     @RequestMapping("/{id}", method = [RequestMethod.HEAD])
     @ResponseStatus(HttpStatus.NO_CONTENT)
     open fun headUploads(@PathVariable id: String, req: HttpServletRequest, res: HttpServletResponse) {
+        log.debug("API HEAD /api/v1/uploads/{} userOwnerId={} uploadId={}", id, currentUserOwnerId(), id)
         val result = tusService.getUploadInfo(id)
+
+        log.debug(
+            "Upload info resolved id={} offset={} length={} defer={} expiresPresent={} metadataPresent={}",
+            id,
+            result.uploadOffset,
+            result.uploadLength,
+            result.uploadDeferLength,
+            result.uploadExpires != null,
+            !result.uploadMetadata.isNullOrEmpty()
+        )
 
         res.setHeader("Upload-Offset", result.uploadOffset.toString())
         result.uploadLength?.let { res.setHeader("Upload-Length", it.toString()) }
@@ -816,19 +844,18 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         req: HttpServletRequest,
         res: HttpServletResponse
     ) {
+        log.debug("API PATCH /api/v1/uploads/{} userOwnerId={} uploadId={}", id, currentUserOwnerId(), id)
 
-        log.debug("request headers:")
-        req.headerNames.toList().forEach { headerName ->
+    req.headerNames.toList().forEach { headerName ->
             log.debug("$headerName: ${req.getHeader(headerName)}")
         }
         val contentLength = req.getHeader("Content-Length")
-
-        log.debug("patchUploads $id $offset $contentType $version $contentLength")
 
         val uuid: UUID
         try{
             uuid= UUID.fromString(id)
         } catch (e: IllegalArgumentException){
+            log.warn("Invalid UUID format in PATCH upload id={}", id)
             throw InvalidFormatException("Invalid UUID format for upload ID", e)
         }
 
@@ -846,18 +873,20 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         val checksumHeader = req.getHeader("Upload-Checksum")
 
         if (checksumHeader != null) {
+            log.debug("Checksum validation started uploadId={}", id)
             tusService.executeChecksum(chunk, checksumHeader)
         }
 
-        log.debug("CONTROLLER - UPLOADING NEW CHUNK: {}", uploadDto)
+        log.debug("Uploading chunk received: uploadId={} offset={} size={}", id, offset, chunk.size)
 
         uploadDto = tusService.appendChunk(uploadDto, chunk)
 
-        log.debug("CONTROLLER - NEW UPLOAD DTO AFTER CHUNK APPEND: {}", uploadDto)
-
+        log.info("Chunk appended successfully uploadId={} newOffset={}", id, uploadDto.uploadOffset)
         res.setHeader("Tus-Resumable", tus.version)
         res.setHeader("Upload-Offset", uploadDto.uploadOffset.toString())
+
         if (uploadDto.uploadExpires != null) {
+            log.debug("Upload expiration updated uploadId={} expires={}", id, uploadDto.uploadExpires)
             res.setHeader("Upload-Expires", uploadDto.uploadExpires)
         }
     }
@@ -985,8 +1014,9 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
     open fun deleteUploads(
         @PathVariable("id") file_id: String,
         req: HttpServletRequest,
-        res: HttpServletResponse) {
-
+        res: HttpServletResponse
+    ) {
+        log.debug("API DELETE /api/v1/uploads/{} userOwnerId={} uploadId={}", file_id, currentUserOwnerId(), file_id)
         tusService.terminateUpload(file_id)
         res.setHeader("Tus-Resumable", tus.version)
     }
