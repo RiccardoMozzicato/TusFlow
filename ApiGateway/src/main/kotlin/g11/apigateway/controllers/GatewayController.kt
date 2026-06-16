@@ -25,7 +25,8 @@ class AuthController(
         log.debug("Requested user info")
         // 1. Se l'utente non è loggato, restituisci 401 o un oggetto anonimo
         if (user == null) {
-            log.warn("Requested user info for a non authenticated user")
+            // Expected: the SPA polls this endpoint on load and treats 401 as "anonymous".
+            log.debug("Requested user info for a non authenticated user")
             return ResponseEntity.status(401).build()
         }
 

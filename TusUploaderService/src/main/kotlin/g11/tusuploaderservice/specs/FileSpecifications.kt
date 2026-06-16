@@ -1,5 +1,6 @@
 package g11.tusuploaderservice.specs
 
+import g11.tusuploaderservice.dto.Ownership
 import g11.tusuploaderservice.dto.SharingScope
 import g11.tusuploaderservice.dto.UserRole
 import g11.tusuploaderservice.entities.File
@@ -70,6 +71,9 @@ object FileSpecifications {
          *   dell'organization, un non-admin senza department non vede alcun file DEPARTMENT
          * - ORGANIZATION: file dell'organization dell'utente
          * Restituisce solo file la cui versione corrente è AVAILABLE.
+         *
+         * [ownership] partiziona l'insieme già visibile: OWNED tiene solo i file di cui
+         * l'utente è owner, SHARED solo quelli con owner diverso, null nessun vincolo.
          */
         fun buildFilesByScopes(
             contentType: String?,
@@ -79,7 +83,8 @@ object FileSpecifications {
             userId: UUID,
             organization: String,
             department: String?,
-            isAdmin: Boolean
+            isAdmin: Boolean,
+            ownership: Ownership? = null
         ): Specification<File> {
             require(sharingScopes.isNotEmpty()) { "At least one sharing scope is required" }
 
@@ -158,6 +163,13 @@ object FileSpecifications {
                     }
                 }
                 predicates.add(cb.or(*scopePredicates.toTypedArray()))
+
+                // Ownership: partiziona i file visibili in base all'owner corrente.
+                when (ownership) {
+                    Ownership.OWNED -> predicates.add(cb.equal(root.get<UUID>("ownerId"), userId))
+                    Ownership.SHARED -> predicates.add(cb.notEqual(root.get<UUID>("ownerId"), userId))
+                    null -> {}
+                }
 
                 cb.and(*predicates.toTypedArray())
             }

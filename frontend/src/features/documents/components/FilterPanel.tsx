@@ -1,6 +1,6 @@
 import { FILE_TYPE_OPTIONS } from '../mockData'
 import { FILE_TYPE_CONTENT_TYPE } from '../mappers'
-import { SharingScope } from '../documentsApi'
+import { Ownership, SharingScope } from '../documentsApi'
 import type { DocumentFilters } from '../documentsSlice'
 import Icon from '@/components/Icon'
 
@@ -23,6 +23,13 @@ const SHARING_SCOPE_OPTIONS: { scope: SharingScope; label: string }[] = [
   { scope: SharingScope.PERSONAL, label: 'Personal' },
   { scope: SharingScope.DEPARTMENT, label: 'Department' },
   { scope: SharingScope.ORGANIZATION, label: 'Organization' },
+]
+
+// Ownership is a mutually-exclusive partition (a file is either yours or not), so
+// the two checkboxes act like a clearable radio: re-clicking the active one clears it.
+const OWNERSHIP_OPTIONS: { value: Ownership; label: string }[] = [
+  { value: Ownership.OWNED, label: 'Owned by you' },
+  { value: Ownership.SHARED, label: 'Shared with you' },
 ]
 
 // Converts an ISO-8601 timestamp to the `YYYY-MM-DD` value an <input type=date>
@@ -57,8 +64,12 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
     onChange({ sharingScope: next })
   }
 
+  const toggleOwnership = (value: Ownership) => {
+    onChange({ ownership: filters.ownership === value ? undefined : value })
+  }
+
   return (
-    <aside className="sticky top-0 flex w-64 shrink-0 flex-col gap-6 self-start rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6">
+    <aside className="flex w-full flex-col gap-6 self-start rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6 lg:sticky lg:top-0 lg:w-64 lg:shrink-0">
       <div className="flex items-center justify-between border-b border-ds-outline-variant pb-3">
         <h3 className="font-ds-label text-ds-label-md uppercase tracking-widest text-ds-primary">
           Filters
@@ -140,6 +151,22 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
               type="checkbox"
               checked={filters.sharingScope.includes(scope)}
               onChange={() => toggleScope(scope)}
+              className="h-4 w-4 rounded border-ds-outline-variant bg-ds-surface text-ds-primary focus:ring-ds-primary"
+            />
+            <span className="font-ds-body text-ds-body-sm text-ds-secondary transition-colors group-hover:text-ds-on-surface">
+              {label}
+            </span>
+          </label>
+        ))}
+      </FilterGroup>
+
+      <FilterGroup title="Ownership">
+        {OWNERSHIP_OPTIONS.map(({ value, label }) => (
+          <label key={value} className="group flex cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              checked={filters.ownership === value}
+              onChange={() => toggleOwnership(value)}
               className="h-4 w-4 rounded border-ds-outline-variant bg-ds-surface text-ds-primary focus:ring-ds-primary"
             />
             <span className="font-ds-body text-ds-body-sm text-ds-secondary transition-colors group-hover:text-ds-on-surface">

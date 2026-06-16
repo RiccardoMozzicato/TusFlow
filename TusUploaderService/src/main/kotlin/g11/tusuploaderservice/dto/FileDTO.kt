@@ -30,3 +30,13 @@ enum class SharingScope{
     DEPARTMENT,
     ORGANIZATION
 }
+
+/**
+ * Ownership filter for the file listing, applied as a partition of the files already
+ * visible to the caller: OWNED keeps only files the caller owns, SHARED keeps only files
+ * owned by someone else. Absent means no ownership restriction.
+ */
+enum class Ownership {
+    OWNED,
+    SHARED
+}

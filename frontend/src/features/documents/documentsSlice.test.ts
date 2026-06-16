@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import authReducer from '@/features/auth/authSlice'
+import chatReducer from '@/features/chat/chatSlice'
 import uiReducer from '@/features/ui/uiSlice'
 import documentDetailsReducer from './documentDetailsSlice'
 import documentsReducer, {
@@ -62,6 +63,7 @@ function makeStore() {
   return configureStore({
     reducer: {
       auth: authReducer,
+      chat: chatReducer,
       documents: documentsReducer,
       documentDetails: documentDetailsReducer,
       ui: uiReducer,

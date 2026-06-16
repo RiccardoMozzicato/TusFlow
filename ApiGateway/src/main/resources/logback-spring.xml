@@ -9,9 +9,8 @@
     <property name="LOG_LOGGER" value="%clr(%logger{30}){cyan}"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>INFO</level>
-        </filter>
+        <!-- No threshold here: the console honors the active profile's logger
+             levels, so the dev profile (root=DEBUG) prints DEBUG to the console. -->
         <encoder>
             <pattern>
                 ${LOG_DATE} ${LOG_THREAD} ${LOG_LEVEL} ${LOG_LOGGER} %clr([%mdc{traceId:-} %mdc{spanId:-}]){faint}
@@ -23,6 +22,11 @@
     <!-- Loki appender (LGTM stack) -->
     <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="ApiGateway"/>
     <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <!-- Ship only INFO+ to Loki to stay under its ingestion rate limit. The
+             console already filters to INFO, so DEBUG was being sent to Loki only. -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
         <http>
             <url>http://localhost:3100/loki/api/v1/push</url>
         </http>

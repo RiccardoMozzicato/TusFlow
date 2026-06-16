@@ -7,6 +7,7 @@ import g11.tusuploaderservice.dto.FileVersionDTO
 import g11.tusuploaderservice.dto.FileVersionFavoriteDTO
 import g11.tusuploaderservice.dto.FiltersDTO
 import g11.tusuploaderservice.dto.MetadataAIDTO
+import g11.tusuploaderservice.dto.Ownership
 import g11.tusuploaderservice.dto.RagQueryRequest
 import g11.tusuploaderservice.dto.RagQueryResponse
 import g11.tusuploaderservice.dto.SharingScope
@@ -190,16 +191,17 @@ class FileController(
         @RequestParam(defaultValue = "0") page: UInt,
         @RequestParam(defaultValue = "10") size: UInt,
         @RequestParam(defaultValue = "PERSONAL") sharingScope: Set<SharingScope>,
+        @RequestParam(required = false) ownership: Ownership?,
     ): ResponseEntity<Page<FileDTO>> {
 
         log.debug("API GET /api/v1/files userOwnerId={}", currentUserOwnerId())
-        log.debug("Requested file metadata: contentType={}, dateFrom={}, dateTo={}, sort={}, page={}, size={}, sharingScope={}", contentType, dateFrom, dateTo, sort, page, size, sharingScope)
+        log.debug("Requested file metadata: contentType={}, dateFrom={}, dateTo={}, sort={}, page={}, size={}, sharingScope={}, ownership={}", contentType, dateFrom, dateTo, sort, page, size, sharingScope, ownership)
         // Parse sort parameter
         val sortParts = sort.split(",")
         val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "createdAt"
         val sortDirection = if (sortParts.getOrNull(1)?.lowercase() == "asc") Sort.Direction.ASC else Sort.Direction.DESC
 
-        val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope)
+        val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope, ownership)
 
         val files = fileService.getFiles(filtersDTO)
         log.debug("Retrieved {} files with applied filters", files.totalElements)

@@ -31,8 +31,8 @@ export default function LibraryToolbar({
   onViewModeChange,
 }: LibraryToolbarProps) {
   return (
-    <div className="flex shrink-0 items-center justify-between border-b border-ds-outline-variant bg-ds-surface-container-lowest px-6 py-4">
-      <div className="group relative flex w-96 items-center">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-ds-outline-variant bg-ds-surface-container-lowest px-6 py-4">
+      <div className="group relative flex w-full items-center sm:w-96">
         <Icon
           name="search"
           filled={false}

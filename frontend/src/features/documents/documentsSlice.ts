@@ -5,13 +5,16 @@ import {
   type PayloadAction,
 } from '@reduxjs/toolkit'
 import type { RootState } from '@/app/store'
+import { selectCurrentUser } from '@/features/auth/authSlice'
 import {
   getFiles,
   SharingScope,
+  type Ownership,
   type PageResponse,
   type FileDTO,
 } from './documentsApi'
 import { getJobStatuses, type JobStatus } from './jobsApi'
+import { getWritableFileIds } from './detailsApi'
 import { mapFileToDocument } from './mappers'
 import type { LibraryDocument } from './types'
 
@@ -27,6 +30,17 @@ async function fetchAiStatuses(files: FileDTO[]): Promise<AiStatusByFile> {
     return Object.fromEntries(statuses.map((s) => [s.fileId, s.status]))
   } catch {
     return {}
+  }
+}
+
+// Best-effort: which of a page's files the current user may modify. Drives the
+// row/card actions menu (Share/New Version/Delete). The library must still render
+// if the check fails, so failures resolve to "none writable".
+async function fetchWritableIds(files: FileDTO[]): Promise<string[]> {
+  try {
+    return await getWritableFileIds(files.map((file) => file.id))
+  } catch {
+    return []
   }
 }
 
@@ -57,6 +71,8 @@ export interface DocumentFilters {
   sort: string
   /** Visibility scopes combined with OR; defaults to all three. */
   sharingScope: SharingScope[]
+  /** Ownership partition; undefined means no ownership restriction (show all). */
+  ownership?: Ownership
 }
 
 const DEFAULT_FILTERS: DocumentFilters = {
@@ -82,6 +98,10 @@ interface DocumentsState {
 interface LoadDocumentsResult {
   page: PageResponse<FileDTO>
   aiStatusByFile: AiStatusByFile
+  /** Ids on this page the caller may modify; lets the reducer flag writable files. */
+  writableIds: string[]
+  /** Current user id at fetch time; lets the reducer flag files the caller owns. */
+  currentUserId?: string
 }
 
 const initialState: DocumentsState = {
@@ -119,9 +139,11 @@ export const loadDocuments = createAsyncThunk<
   { page?: number } | undefined,
   { state: RootState }
 >('documents/loadDocuments', async (args, { getState }) => {
-  const { filters } = getState().documents
+  const state = getState()
+  const { filters } = state.documents
+  const currentUserId = selectCurrentUser(state)?.uuid
   if (filters.sharingScope.length === 0) {
-    return { page: EMPTY_PAGE, aiStatusByFile: {} }
+    return { page: EMPTY_PAGE, aiStatusByFile: {}, writableIds: [], currentUserId }
   }
 
   const page = await getFiles({
@@ -132,10 +154,14 @@ export const loadDocuments = createAsyncThunk<
     dateTo: filters.dateTo,
     sort: filters.sort,
     sharingScope: filters.sharingScope,
+    ownership: filters.ownership,
   })
 
-  const aiStatusByFile = await fetchAiStatuses(page.content)
-  return { page, aiStatusByFile }
+  const [aiStatusByFile, writableIds] = await Promise.all([
+    fetchAiStatuses(page.content),
+    fetchWritableIds(page.content),
+  ])
+  return { page, aiStatusByFile, writableIds, currentUserId }
 })
 
 const documentsSlice = createSlice({
@@ -164,10 +190,11 @@ const documentsSlice = createSlice({
         state.error = null
       })
       .addCase(loadDocuments.fulfilled, (state, action) => {
-        const { page, aiStatusByFile } = action.payload
+        const { page, aiStatusByFile, writableIds, currentUserId } = action.payload
+        const writable = new Set(writableIds)
         state.status = 'succeeded'
         state.documents = page.content.map((file) =>
-          mapFileToDocument(file, aiStatusByFile[file.id]),
+          mapFileToDocument(file, aiStatusByFile[file.id], currentUserId, writable.has(file.id)),
         )
         state.page = page.number
         state.size = page.size

@@ -11,6 +11,15 @@ export const SharingScope = {
 
 export type SharingScope = (typeof SharingScope)[keyof typeof SharingScope]
 
+// Ownership partition for the listing, mirroring the backend Ownership enum:
+// OWNED keeps only files the caller owns, SHARED only files owned by someone else.
+export const Ownership = {
+  OWNED: 'OWNED',
+  SHARED: 'SHARED',
+} as const
+
+export type Ownership = (typeof Ownership)[keyof typeof Ownership]
+
 // Shape returned by GET /api/v1/files. Mirrors the backend FileDTO; most fields
 // are optional because they are populated at different points in a file's life.
 export interface FileDTO {
@@ -55,6 +64,8 @@ export interface GetFilesParams {
   size?: number
   /** One or more scopes; serialized as repeated `sharingScope=` query params. */
   sharingScope?: SharingScope[]
+  /** Partition the visible set by ownership; omitted means no ownership restriction. */
+  ownership?: Ownership
 }
 
 /**

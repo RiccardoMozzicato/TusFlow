@@ -22,8 +22,16 @@ export interface LibraryDocument {
   scope: DocumentScope
   status: DocumentStatus
   owner: string
-  /** Pre-formatted creation date and time (e.g. "Oct 24, 2023, 09:12 AM"). */
+  /** Whether the current user owns this file; drives the "You" owner label. */
+  isOwnedByMe: boolean
+  /** Whether the current user may modify this file; gates the row/card actions menu. */
+  isWritable: boolean
+  /** Raw backend sharing scope, reused when uploading a new version. */
+  sharingScope: SharingScope
+  /** Pre-formatted creation date and time (e.g. "Oct 24, 2023, 09:12 AM"); used as tooltip. */
   created: string
+  /** Relative creation time (e.g. "Just now", "Yesterday", "3 days ago"). */
+  createdRelative: string
   /** Version label shown in the corner badge (e.g. "v2.1"). */
   version: string
   /** Numeric current version, used when favoriting the file from the library. */
@@ -35,6 +43,9 @@ export interface LibraryDocument {
 }
 
 export type ViewMode = 'grid' | 'list'
+
+/** Row/card actions reachable from the document actions menu. */
+export type DocumentActionKind = 'share' | 'newVersion' | 'delete'
 
 export interface FileTypeOption {
   type: FileType

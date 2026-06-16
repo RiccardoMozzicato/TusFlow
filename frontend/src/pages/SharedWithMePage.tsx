@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import Icon from '@/components/Icon'
 import LibraryPager from '@/features/documents/components/LibraryPager'
 import SharedFilesTable from '@/features/shared/components/SharedFilesTable'
@@ -39,51 +38,6 @@ function FilterChips({
         </button>
       ))}
     </div>
-  )
-}
-
-function InfoCards({ total }: { total: number }) {
-  return (
-    <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-      <div className="relative overflow-hidden rounded-ds-xl bg-ds-primary-container p-6 text-ds-on-primary-container shadow-md lg:col-span-2">
-        <div className="relative z-10 flex h-full flex-col justify-between gap-6">
-          <div>
-            <h3 className="font-ds-heading text-ds-headline-sm">Collaboration</h3>
-            <p className="mt-1 max-w-lg font-ds-body text-ds-body-md opacity-90">
-              {total > 0
-                ? `You have ${total} document${total === 1 ? '' : 's'} shared with you across your organization.`
-                : 'Nothing has been shared with you yet — documents others share will show up here.'}
-            </p>
-          </div>
-          <Link
-            to="/documents"
-            className="flex w-fit items-center gap-2 rounded-ds-lg bg-ds-surface-container-lowest px-4 py-2 font-ds-label text-ds-label-md text-ds-primary transition-all hover:opacity-90 active:scale-[0.98]"
-          >
-            Browse all documents
-            <Icon name="trending_up" className="text-[18px]" />
-          </Link>
-        </div>
-        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-ds-full bg-white/5 blur-3xl" />
-      </div>
-
-      <div className="flex flex-col gap-3 rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-high p-6 shadow-sm">
-        <div className="flex h-12 w-12 items-center justify-center rounded-ds-full bg-ds-primary/10 text-ds-primary">
-          <Icon name="security" filled className="text-[24px]" />
-        </div>
-        <h3 className="font-ds-heading text-ds-headline-sm text-ds-on-surface">Security tip</h3>
-        <p className="font-ds-body text-ds-body-sm text-ds-on-surface-variant">
-          Review what's shared with you regularly. Open a document's details to see its owner and
-          who else has access.
-        </p>
-        <Link
-          to="/profile"
-          className="mt-auto flex items-center gap-1 font-ds-label text-ds-label-md text-ds-primary hover:underline"
-        >
-          Profile settings
-          <Icon name="arrow_forward" className="text-[16px]" />
-        </Link>
-      </div>
-    </section>
   )
 }
 
@@ -191,8 +145,6 @@ export default function SharedWithMePage() {
           </div>
         </div>
       </div>
-
-      <InfoCards total={pageInfo.totalElements} />
     </div>
   )
 }

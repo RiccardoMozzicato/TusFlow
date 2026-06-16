@@ -148,7 +148,8 @@ class FileService(
             userId = userDetails.id,
             organization = userDetails.organization,
             department = userDetails.department,
-            isAdmin = userDetails.role == UserRole.ROLE_admin
+            isAdmin = userDetails.role == UserRole.ROLE_admin,
+            ownership = filtersDTO.ownership
         )
 
         val files = fileRepository.findAll(spec, pageable)

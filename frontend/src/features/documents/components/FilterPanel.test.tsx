@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import FilterPanel from './FilterPanel'
-import { SharingScope } from '../documentsApi'
+import { Ownership, SharingScope } from '../documentsApi'
 import type { DocumentFilters } from '../documentsSlice'
 
 const baseFilters: DocumentFilters = {
@@ -33,7 +33,33 @@ describe('FilterPanel', () => {
     expect(screen.getByText('File Type')).toBeInTheDocument()
     expect(screen.getByText('Created Date')).toBeInTheDocument()
     expect(screen.getByText('Sharing Scope')).toBeInTheDocument()
+    expect(screen.getByText('Ownership')).toBeInTheDocument()
     expect(screen.getByText('Sort')).toBeInTheDocument()
+  })
+
+  it('sets ownership to OWNED when "Owned by you" is checked', async () => {
+    const { onChange } = renderPanel()
+    await userEvent.click(screen.getByLabelText('Owned by you'))
+    expect(onChange).toHaveBeenCalledWith({ ownership: Ownership.OWNED })
+  })
+
+  it('sets ownership to SHARED when "Shared with you" is checked', async () => {
+    const { onChange } = renderPanel()
+    await userEvent.click(screen.getByLabelText('Shared with you'))
+    expect(onChange).toHaveBeenCalledWith({ ownership: Ownership.SHARED })
+  })
+
+  it('clears ownership when the active option is re-clicked', async () => {
+    const { onChange } = renderPanel({ ownership: Ownership.OWNED })
+    await userEvent.click(screen.getByLabelText('Owned by you'))
+    expect(onChange).toHaveBeenCalledWith({ ownership: undefined })
+  })
+
+  it('treats the ownership options as mutually exclusive', async () => {
+    // With OWNED active, choosing SHARED switches to SHARED (not "both").
+    const { onChange } = renderPanel({ ownership: Ownership.OWNED })
+    await userEvent.click(screen.getByLabelText('Shared with you'))
+    expect(onChange).toHaveBeenCalledWith({ ownership: Ownership.SHARED })
   })
 
   it('emits the exact contentType when a File Type is selected', async () => {

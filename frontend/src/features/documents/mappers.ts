@@ -111,6 +111,48 @@ function formatWith(formatter: Intl.DateTimeFormat, raw?: string): string {
   return formatter.format(parsed)
 }
 
+const RELATIVE_FORMATTER = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+
+// Largest→smallest units with their length in seconds. The first unit the elapsed
+// time reaches drives the phrasing (e.g. 90_000s → "Yesterday", not "25 hours ago").
+const RELATIVE_UNITS: { unit: Intl.RelativeTimeFormatUnit; seconds: number }[] = [
+  { unit: 'year', seconds: 31_536_000 },
+  { unit: 'month', seconds: 2_592_000 },
+  { unit: 'week', seconds: 604_800 },
+  { unit: 'day', seconds: 86_400 },
+  { unit: 'hour', seconds: 3_600 },
+  { unit: 'minute', seconds: 60 },
+]
+
+// Anything more recent than this reads as "Just now" rather than "0 minutes ago".
+const JUST_NOW_THRESHOLD_SECONDS = 60
+
+function capitalize(text: string): string {
+  return text.length === 0 ? text : text[0].toUpperCase() + text.slice(1)
+}
+
+// Formats an ISO timestamp as a relative phrase ("Just now", "Yesterday",
+// "3 days ago"). Uses `numeric: 'auto'` so single-unit gaps read naturally
+// ("Yesterday", "Last week"). Returns a dash for missing/unparseable input.
+export function formatRelativeTime(raw?: string): string {
+  if (!raw) return MISSING_VALUE
+
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return MISSING_VALUE
+
+  const diffSeconds = (parsed.getTime() - Date.now()) / 1000
+  const absSeconds = Math.abs(diffSeconds)
+  if (absSeconds < JUST_NOW_THRESHOLD_SECONDS) return 'Just now'
+
+  for (const { unit, seconds } of RELATIVE_UNITS) {
+    if (absSeconds >= seconds) {
+      const value = Math.round(diffSeconds / seconds)
+      return capitalize(RELATIVE_FORMATTER.format(value, unit))
+    }
+  }
+  return 'Just now'
+}
+
 // Maps the backend SharingScope onto the library's presentation scope. Anything
 // unrecognized (or absent) falls back to 'personal', the most restrictive scope.
 const SCOPE_BY_SHARING_SCOPE: Record<SharingScope, DocumentScope> = {
@@ -132,16 +174,26 @@ export function mapStatusToDocumentStatus(status?: string): DocumentStatus {
 }
 
 // Projects a backend FileDTO onto the presentation-facing LibraryDocument. The
-// AI-job status is sourced separately (jobs service) and passed in.
-export function mapFileToDocument(dto: FileDTO, aiStatus?: JobStatus): LibraryDocument {
+// AI-job status is sourced separately (jobs service) and passed in. The current
+// user id, when known, flags files the caller owns so the UI can label them "You".
+export function mapFileToDocument(
+  dto: FileDTO,
+  aiStatus?: JobStatus,
+  currentUserId?: string,
+  isWritable = false,
+): LibraryDocument {
   return {
     id: dto.id,
     title: dto.fileName ?? 'Untitled',
     fileType: resolveFileType(dto.contentType, dto.fileName),
     scope: mapSharingScopeToScope(dto.sharingScope),
+    sharingScope: dto.sharingScope ?? SharingScope.PERSONAL,
     status: mapStatusToDocumentStatus(dto.status),
     owner: dto.ownerName ?? dto.owner ?? 'Unknown',
+    isOwnedByMe: !!dto.owner && dto.owner === currentUserId,
+    isWritable,
     created: formatDateTime(dto.createdAt),
+    createdRelative: formatRelativeTime(dto.createdAt),
     version: `v${dto.version ?? 1}`,
     versionNumber: dto.version ?? 1,
     size: dto.size != null ? formatBytes(dto.size) : MISSING_VALUE,

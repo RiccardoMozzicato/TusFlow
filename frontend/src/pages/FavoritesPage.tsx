@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import Icon from '@/components/Icon'
 import LibraryPager from '@/features/documents/components/LibraryPager'
 import FavoritesTable from '@/features/favorites/components/FavoritesTable'
@@ -30,31 +29,6 @@ function useRemoveFavorite(reload: () => void) {
   )
 
   return { removingId, error, remove }
-}
-
-function InfoCard({ total }: { total: number }) {
-  return (
-    <section className="relative overflow-hidden rounded-ds-xl bg-ds-primary-container p-6 text-ds-on-primary-container shadow-md">
-      <div className="relative z-10 flex h-full flex-col justify-between gap-6">
-        <div>
-          <h3 className="font-ds-heading text-ds-headline-sm">Pinned versions</h3>
-          <p className="mt-1 max-w-lg font-ds-body text-ds-body-md opacity-90">
-            {total > 0
-              ? `You have ${total} favorite version${total === 1 ? '' : 's'}. Favorites stay pinned to the exact version you starred, even when the document is updated.`
-              : 'Star a version from a document’s version history and it will show up here, pinned to that exact version.'}
-          </p>
-        </div>
-        <Link
-          to="/documents"
-          className="flex w-fit items-center gap-2 rounded-ds-lg bg-ds-surface-container-lowest px-4 py-2 font-ds-label text-ds-label-md text-ds-primary transition-all hover:opacity-90 active:scale-[0.98]"
-        >
-          Browse all documents
-          <Icon name="trending_up" className="text-[18px]" />
-        </Link>
-      </div>
-      <div className="absolute -right-16 -top-16 h-56 w-56 rounded-ds-full bg-white/5 blur-3xl" />
-    </section>
-  )
 }
 
 // Favorites: a table of the file versions the current user has starred,
@@ -156,8 +130,6 @@ export default function FavoritesPage() {
           </div>
         </div>
       </div>
-
-      <InfoCard total={pageInfo.totalElements} />
     </div>
   )
 }
