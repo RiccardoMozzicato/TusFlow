@@ -1,23 +1,14 @@
 import type { UserInfo } from '@/features/auth/types'
 import ProfileBanner from './ProfileBanner'
-import DepartmentStats from './DepartmentStats'
-import RecentManagedDocuments from './RecentManagedDocuments'
-import QuickActions from './QuickActions'
-import TeamOverviewCard from './TeamOverviewCard'
-import {
-  DEPARTMENT_STATS,
-  MANAGED_DOCUMENTS,
-  MANAGER_QUICK_ACTIONS,
-  TEAM_OVERVIEW,
-} from '../../mockData'
+import ManagerDepartmentSection from './ManagerDepartmentSection'
 
 interface ManagerProfileProps {
   user: UserInfo
 }
 
-// Department-scoped manager profile: banner, KPI stats, managed documents, and
-// a sidebar of quick actions + team overview. Rendered by ProfilePage for the
-// manager role. Stats/docs/team are mocked pending API wiring.
+// Department-scoped manager profile: banner plus a real, view-only management
+// surface for the manager's own department (head-count, role mix, storage, and
+// the member roster). Rendered by ProfilePage for the manager role.
 export default function ManagerProfile({ user }: ManagerProfileProps) {
   const displayName = user.fullName || user.username || 'Manager'
 
@@ -29,16 +20,7 @@ export default function ManagerProfile({ user }: ManagerProfileProps) {
         subtitle={user.department || undefined}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="space-y-6 lg:col-span-8">
-          <DepartmentStats stats={DEPARTMENT_STATS} />
-          <RecentManagedDocuments documents={MANAGED_DOCUMENTS} />
-        </div>
-        <div className="space-y-6 lg:col-span-4">
-          <QuickActions actions={MANAGER_QUICK_ACTIONS} />
-          <TeamOverviewCard team={TEAM_OVERVIEW} />
-        </div>
-      </div>
+      <ManagerDepartmentSection userId={user.uuid} />
     </div>
   )
 }

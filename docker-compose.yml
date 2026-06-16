@@ -305,6 +305,8 @@ services:
             "transforms.router.type": "io.debezium.transforms.ByLogicalTableRouter",
             "transforms.router.topic.regex": ".*",
             "transforms.router.topic.replacement": "file-outbox",
+            "topic.creation.default.partitions": "3",
+            "topic.creation.default.replication.factor": "1",
             "plugin.name": "pgoutput",
             "key.converter.schemas.enable": "false",
             "value.converter.schemas.enable": "false",

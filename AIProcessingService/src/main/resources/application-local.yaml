@@ -1,0 +1,50 @@
+# Local profile: route AI chat to a self-hosted OpenWebUI instance.
+#
+# OpenWebUI exposes an OpenAI-compatible API, so we reuse Spring AI's existing
+# `openai` provider and just override the endpoint, key, model, and the
+# completions path (OpenWebUI serves it at /api/chat/completions, not /v1/...).
+#
+# Activate with:  --spring.profiles.active=local
+# (or env var SPRING_PROFILES_ACTIVE=local)
+#
+# Required env vars:
+#   OPENWEBUI_BASE_URL   e.g. http://localhost:3000   (no trailing slash)
+#   OPENWEBUI_API_KEY    Bearer key from OpenWebUI > Settings > Account > API Keys
+#   OPENWEBUI_MODEL      model id as listed in OpenWebUI (e.g. llama3.1)
+
+spring:
+  ai:
+    openai:
+      api-key: ${OPENWEBUI_API_KEY}
+      base-url: ${OPENWEBUI_BASE_URL:https://openwebui.nicolfo.it/api/}
+      chat:
+        # OpenWebUI's OpenAI-compatible chat endpoint lives under /api, not /v1
+        completions-path: /chat/completions
+        options:
+          model: ${OPENWEBUI_MODEL:Qwen/Qwen3.5-122B-A10B-FP8}
+    # Embeddings stay on local Ollama (inherited from application.yml).
+    # Override here only if OpenWebUI also serves your embedding model.
+
+# Point every document-processing task at the same self-hosted model.
+# OpenWebUI typically fronts a single (or few) model(s), so we don't assume
+# separate powerful/vision variants like the Groq defaults do.
+ai:
+  # The self-hosted reasoning model thinks for tens of seconds before answering,
+  # which blows past AiConfig's 20s default. Give it generous headroom.
+  openai:
+    read-timeout-ms: 300000   # 5 min
+    connect-timeout-ms: 10000 # 10 s
+  chat:
+    model: ${OPENWEBUI_MODEL:Qwen/Qwen3.5-122B-A10B-FP8}
+  pdf:
+    model: ${OPENWEBUI_MODEL:Qwen/Qwen3.5-122B-A10B-FP8}
+  # Image analysis intentionally stays on Groq: imageChatClient uses its own endpoint from
+  # ai.image.base-url / ai.image.api-key (defined in application.yml, defaulting to GROQ_*).
+  # We deliberately do NOT override those here, so vision keeps hitting Groq's Llama 4 Scout
+  # even though chat/pdf above are repointed at the self-hosted OpenWebUI model.
+  image:
+    model: ${IMAGE_MODEL:meta-llama/llama-4-scout-17b-16e-instruct}
+  document:
+    # Qwen has a large context window, so send the whole document untruncated.
+    # 0 disables truncation (see MetadataProcessor.truncateContent).
+    max-content-chars: 0

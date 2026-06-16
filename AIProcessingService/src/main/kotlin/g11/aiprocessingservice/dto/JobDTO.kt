@@ -9,7 +9,15 @@ enum class jobStatus {
     PROCESSING,
     COMPLETED,
     FAILED,
-    UNSUPPORTED
+    UNSUPPORTED,
+
+    /**
+     * Terminal "given up" state: the automatic Kafka retry and all the user's manual retries failed.
+     * The job is kept (history + a visible terminal status) but excluded from the retryable
+     * failed-jobs list, and a row is written to dead_letter_events. Treated as terminal everywhere,
+     * like COMPLETED/UNSUPPORTED, so a stray Kafka redelivery never reprocesses it.
+     */
+    DEAD_LETTERED
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)

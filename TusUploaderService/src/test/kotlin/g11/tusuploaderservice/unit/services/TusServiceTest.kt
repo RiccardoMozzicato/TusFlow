@@ -75,6 +75,9 @@ class TusServiceTest {
         // Generic save<S>(): S returns Object under a relaxed mock, which fails the
         // call-site cast to FilesOutboxEvent. Return the saved entity instead.
         every { outboxRepository.save(any()) } answers { firstArg() }
+        // appendChunk/terminateUpload now read via the pessimistic-lock finder; mirror it onto
+        // findById so existing findById stubs in each test continue to drive both paths.
+        every { tusRepository.findWithLockById(any()) } answers { tusRepository.findById(firstArg()) }
     }
 
     private fun makeUploadDTO(

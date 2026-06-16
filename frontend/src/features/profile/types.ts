@@ -11,6 +11,8 @@ export interface OverviewStat {
   note?: ReactNode
   /** Optional thin progress bar (0–1) shown under the value. */
   progress?: number
+  /** When set, the tile becomes a button that opens a detail view. */
+  onClick?: () => void
 }
 
 // The wide storage tile spanning the bento grid.

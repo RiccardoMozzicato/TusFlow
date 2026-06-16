@@ -7,9 +7,12 @@ interface SystemOverviewProps {
   storage: StorageInfo
 }
 
-function OverviewTile({ label, value, icon, iconClassName, note, progress }: OverviewStat) {
-  return (
-    <div className="flex items-center justify-between rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6 transition-colors hover:border-ds-primary">
+function OverviewTile({ label, value, icon, iconClassName, note, progress, onClick }: OverviewStat) {
+  const baseClass =
+    'flex w-full items-center justify-between rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6 text-left transition-colors hover:border-ds-primary'
+
+  const body = (
+    <>
       <div>
         <p className="font-ds-label text-ds-label-md text-ds-secondary">{label}</p>
         <p className="mt-1 font-ds-heading text-ds-headline-md text-ds-primary">{value}</p>
@@ -23,11 +26,26 @@ function OverviewTile({ label, value, icon, iconClassName, note, progress }: Ove
           </div>
         ) : null}
       </div>
-      <div className={`rounded-ds-xl p-4 ${iconClassName}`}>
-        <Icon name={icon} className="text-[32px]" />
+      <div className="flex items-center gap-3">
+        {onClick ? (
+          <Icon name="chevron_right" filled={false} className="text-ds-outline" />
+        ) : null}
+        <div className={`rounded-ds-xl p-4 ${iconClassName}`}>
+          <Icon name={icon} className="text-[32px]" />
+        </div>
       </div>
-    </div>
+    </>
   )
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${baseClass} cursor-pointer hover:bg-ds-surface-container`}>
+        {body}
+      </button>
+    )
+  }
+
+  return <div className={baseClass}>{body}</div>
 }
 
 function StorageTile({ label, usage, fraction, consumedLabel, availableLabel }: StorageInfo) {

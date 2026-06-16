@@ -1,5 +1,5 @@
 import type { UploadItem } from '../types'
-import TransferQueueRow, { ROW_GRID } from './TransferQueueRow'
+import TransferQueueRow, { ROW_GRID, type RowActionKind } from './TransferQueueRow'
 
 const HEADERS = [
   { label: 'Type', className: 'w-8' },
@@ -9,7 +9,13 @@ const HEADERS = [
   { label: 'Actions', className: 'w-20 text-center' },
 ]
 
-export default function TransferQueue({ items }: { items: UploadItem[] }) {
+export default function TransferQueue({
+  items,
+  onAction,
+}: {
+  items: UploadItem[]
+  onAction: (id: string, kind: RowActionKind) => void
+}) {
   return (
     <div className="overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.02)]">
       <div
@@ -22,13 +28,20 @@ export default function TransferQueue({ items }: { items: UploadItem[] }) {
         ))}
       </div>
 
-      {items.map((item, index) => (
-        <TransferQueueRow
-          key={item.id}
-          item={item}
-          last={index === items.length - 1}
-        />
-      ))}
+      {items.length === 0 ? (
+        <p className="px-6 py-10 text-center text-ds-body-sm text-ds-on-surface-variant">
+          No transfers yet. Drop files above to start uploading.
+        </p>
+      ) : (
+        items.map((item, index) => (
+          <TransferQueueRow
+            key={item.id}
+            item={item}
+            last={index === items.length - 1}
+            onAction={onAction}
+          />
+        ))
+      )}
     </div>
   )
 }

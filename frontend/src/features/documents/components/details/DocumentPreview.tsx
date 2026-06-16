@@ -1,101 +1,165 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { renderAsync } from 'docx-preview'
 import Icon from '@/components/Icon'
+import type { FileType } from '../../types'
+import { usePreviewBlob } from '../../usePreviewBlob'
 
 interface DocumentPreviewProps {
-  /** Total page count shown in the toolbar. */
-  pageCount: number
+  /** File id whose bytes are fetched for the preview. */
+  fileId: string
+  /** Triggers a download; used by the fallback when a type can't be rendered. */
+  onDownload: () => void
+  /** File name, shown in the toolbar. */
+  title: string
+  /** Coarse type, used to pick a renderer. */
+  fileType: FileType
 }
 
-const ZOOM_MIN = 50
-const ZOOM_MAX = 200
-const ZOOM_STEP = 10
+// Types rendered directly from the blob's object URL.
+const IFRAME_TYPES: ReadonlySet<FileType> = new Set(['pdf', 'txt'])
 
-// Document preview pane: a toolbar (page count, zoom, fullscreen) over a
-// simulated PDF page. Zoom is the live control; the page body is placeholder
-// content until a real renderer is wired.
-export default function DocumentPreview({ pageCount }: DocumentPreviewProps) {
-  const [zoom, setZoom] = useState(100)
+// Expected MIME per type, used to correct a missing/generic content type from
+// the server so blob: URLs render correctly (notably PDFs in an iframe).
+const EXPECTED_MIME: Partial<Record<FileType, string>> = {
+  pdf: 'application/pdf',
+  txt: 'text/plain',
+}
 
-  const zoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))
-  const zoomIn = () => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))
+// Shown when a file can't be rendered in the browser. Offers an explicit
+// download instead of leaving the pane blank.
+function PreviewFallback({ onDownload }: { onDownload: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <Icon name="visibility_off" filled={false} className="text-[40px] text-ds-secondary" />
+      <p className="font-ds-body text-ds-body-sm text-ds-secondary">
+        Preview isn't available for this file type.
+      </p>
+      <button
+        type="button"
+        onClick={onDownload}
+        className="flex items-center gap-2 rounded-ds-lg bg-ds-primary px-4 py-2 font-ds-label text-ds-label-md text-ds-on-primary transition-colors hover:bg-ds-primary-container"
+      >
+        <Icon name="download" filled={false} className="text-[18px]" />
+        Download to view
+      </button>
+    </div>
+  )
+}
+
+// Renders a DOCX in-page from its bytes via docx-preview. Falls back to a
+// download prompt if rendering fails (e.g. legacy .doc, which isn't supported).
+function DocxPreview({ blob, onDownload }: { blob: Blob; onDownload: () => void }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const container = containerRef.current
+    if (!container) return
+
+    setFailed(false)
+    container.innerHTML = ''
+    void blob
+      .arrayBuffer()
+      .then((buffer) => renderAsync(buffer, container, undefined, {
+        inWrapper: true,
+        breakPages: true,
+      }))
+      .catch(() => {
+        if (!cancelled) setFailed(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [blob])
+
+  if (failed) return <PreviewFallback onDownload={onDownload} />
+  return <div ref={containerRef} className="h-full overflow-auto bg-white p-4" />
+}
+
+// Picks the right renderer for the loaded blob based on the file type.
+function PreviewBody({
+  fileType,
+  url,
+  blob,
+  title,
+  onDownload,
+}: {
+  fileType: FileType
+  url: string
+  blob: Blob
+  title: string
+  onDownload: () => void
+}) {
+  if (fileType === 'image') {
+    return <img src={url} alt={title} className="h-full w-full object-contain" />
+  }
+  if (fileType === 'video') {
+    return <video src={url} controls className="h-full w-full bg-black" />
+  }
+  if (IFRAME_TYPES.has(fileType)) {
+    return <iframe src={url} title={title} className="h-full w-full border-0" />
+  }
+  if (fileType === 'docx') {
+    return <DocxPreview blob={blob} onDownload={onDownload} />
+  }
+  // Generic 'file' bucket (unknown type): no inline renderer, offer download.
+  return <PreviewFallback onDownload={onDownload} />
+}
+
+// Document preview pane: fetches the file's bytes once and renders them inline —
+// DOCX via docx-preview, and PDF/text/image/video from a same-origin object URL
+// (which, unlike the raw preview URL, isn't blocked by X-Frame-Options).
+export default function DocumentPreview({
+  fileId,
+  onDownload,
+  title,
+  fileType,
+}: DocumentPreviewProps) {
+  const { status, url, blob } = usePreviewBlob(fileId, EXPECTED_MIME[fileType])
 
   return (
-    <div className="flex h-[600px] flex-col overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest shadow-sm lg:h-auto">
+    <div className="flex h-[600px] flex-col overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest shadow-sm lg:h-full lg:min-h-0">
       <div className="flex items-center justify-between border-b border-ds-outline-variant bg-ds-surface-container-low px-4 py-3">
-        <div className="flex items-center gap-4">
-          <span className="font-ds-body text-ds-body-sm font-medium text-ds-on-surface">
-            Page 1 of {pageCount}
-          </span>
-          <div className="h-4 w-px bg-ds-outline-variant" />
-          <button
-            type="button"
-            onClick={zoomOut}
-            disabled={zoom <= ZOOM_MIN}
-            aria-label="Zoom out"
-            className="text-ds-secondary transition-colors hover:text-ds-primary disabled:cursor-not-allowed disabled:opacity-40"
+        <span className="truncate font-ds-body text-ds-body-sm font-medium text-ds-on-surface">
+          {title}
+        </span>
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open preview in new tab"
+            title="Open in new tab"
+            className="rounded-ds p-1 text-ds-secondary transition-colors hover:bg-ds-surface-container hover:text-ds-primary"
           >
-            <Icon name="zoom_out" filled={false} className="text-[20px]" />
-          </button>
-          <span className="w-12 text-center font-ds-body text-ds-body-sm text-ds-secondary">
-            {zoom}%
-          </span>
-          <button
-            type="button"
-            onClick={zoomIn}
-            disabled={zoom >= ZOOM_MAX}
-            aria-label="Zoom in"
-            className="text-ds-secondary transition-colors hover:text-ds-primary disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Icon name="zoom_in" filled={false} className="text-[20px]" />
-          </button>
-        </div>
-        <button
-          type="button"
-          aria-label="Fullscreen"
-          className="rounded-ds p-1 text-ds-secondary transition-colors hover:bg-ds-surface-container hover:text-ds-primary"
-        >
-          <Icon name="fullscreen" filled={false} className="text-[20px]" />
-        </button>
+            <Icon name="open_in_new" filled={false} className="text-[20px]" />
+          </a>
+        ) : null}
       </div>
 
-      <div className="relative flex flex-1 justify-center overflow-auto bg-ds-surface-dim p-6">
-        <div
-          className="relative min-h-[1000px] w-full max-w-[800px] origin-top rounded-ds-sm border border-ds-outline-variant bg-white p-8 shadow-md transition-transform"
-          style={{ transform: `scale(${zoom / 100})` }}
-        >
-          <div className="mb-8 h-48 rounded bg-ds-surface-container-low" />
-          <h2 className="mb-4 font-ds-heading text-ds-headline-md text-ds-on-surface">
-            Q3 Fiscal Performance Overview
-          </h2>
-          <p className="mb-4 font-ds-body text-ds-body-md leading-relaxed text-ds-on-surface-variant">
-            This document serves as the finalized financial report for the third quarter of 2023.
-            It encompasses detailed breakdowns of revenue streams, operational expenditures, and
-            strategic growth metrics observed across all global departments.
-          </p>
-          <div className="mb-8 grid grid-cols-2 gap-4">
-            <div className="rounded-ds-lg border border-ds-outline-variant bg-ds-surface-container p-4">
-              <span className="mb-1 block font-ds-label text-ds-label-sm uppercase tracking-wide text-ds-secondary">
-                SaaS Revenue
-              </span>
-              <span className="font-ds-heading text-ds-headline-sm text-ds-primary">+15.2%</span>
-            </div>
-            <div className="rounded-ds-lg border border-ds-outline-variant bg-ds-surface-container p-4">
-              <span className="mb-1 block font-ds-label text-ds-label-sm uppercase tracking-wide text-ds-secondary">
-                OpEx Reduction
-              </span>
-              <span className="font-ds-heading text-ds-headline-sm text-ds-tertiary">-4.8%</span>
-            </div>
+      <div className="min-h-0 flex-1 overflow-hidden bg-ds-surface-dim">
+        {status === 'loading' ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3">
+            <Icon
+              name="hourglass_empty"
+              filled={false}
+              className="text-[36px] text-ds-secondary"
+            />
+            <p className="font-ds-body text-ds-body-sm text-ds-secondary">Loading preview…</p>
           </div>
-          <p className="font-ds-body text-ds-body-md leading-relaxed text-ds-on-surface-variant">
-            Key drivers for this quarter's performance include the successful rollout of the new
-            enterprise tier, resulting in higher average contract values, alongside continued
-            efficiency optimizations in server infrastructure costs.
-          </p>
-          <div className="absolute bottom-8 left-8 right-8 flex justify-between border-t border-ds-outline-variant pt-3 font-ds-label text-ds-label-sm text-ds-secondary">
-            <span>DocPortal Secure View</span>
-            <span>CONFIDENTIAL</span>
-          </div>
-        </div>
+        ) : status === 'error' || !url || !blob ? (
+          <PreviewFallback onDownload={onDownload} />
+        ) : (
+          <PreviewBody
+            fileType={fileType}
+            url={url}
+            blob={blob}
+            title={title}
+            onDownload={onDownload}
+          />
+        )}
       </div>
     </div>
   )

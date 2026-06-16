@@ -1,6 +1,6 @@
+import { Link, useNavigate } from 'react-router-dom'
 import Icon from '@/components/Icon'
 import type { DocStatus, DocumentRow } from '../types'
-import { RECENT_DOCUMENTS } from '../mockData'
 
 const STATUS_STYLES: Record<DocStatus, { label: string; className: string; icon?: string }> = {
   processed: {
@@ -33,9 +33,13 @@ function StatusBadge({ status }: { status: DocStatus }) {
 const HEADERS = ['Document Name', 'Type', 'Status', 'Date Modified']
 
 function DocumentTableRow({ doc, last }: { doc: DocumentRow; last: boolean }) {
+  const navigate = useNavigate()
+  const to = `/documents/${doc.id}`
+
   return (
     <tr
-      className={`group transition-colors hover:bg-ds-surface/50 ${
+      onClick={() => navigate(to)}
+      className={`group cursor-pointer transition-colors hover:bg-ds-surface/50 ${
         last ? '' : 'border-b border-ds-outline-variant/30'
       }`}
     >
@@ -46,7 +50,14 @@ function DocumentTableRow({ doc, last }: { doc: DocumentRow; last: boolean }) {
           >
             <Icon name={doc.icon} className="text-[18px]" />
           </div>
-          <span className="font-medium text-ds-on-surface">{doc.name}</span>
+          {/* Real link for keyboard/middle-click; the whole row also navigates. */}
+          <Link
+            to={to}
+            onClick={(e) => e.stopPropagation()}
+            className="font-medium text-ds-on-surface transition-colors group-hover:text-ds-primary"
+          >
+            {doc.name}
+          </Link>
         </div>
       </td>
       <td className="px-6 py-4 text-ds-secondary">{doc.type}</td>
@@ -55,28 +66,36 @@ function DocumentTableRow({ doc, last }: { doc: DocumentRow; last: boolean }) {
       </td>
       <td className="px-6 py-4 text-ds-secondary">{doc.modified}</td>
       <td className="px-6 py-4 text-right">
-        <button
-          type="button"
-          aria-label="Document actions"
-          className="text-ds-secondary opacity-0 transition-opacity hover:text-ds-primary group-hover:opacity-100"
+        <Link
+          to={to}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Open ${doc.name}`}
+          className="inline-flex text-ds-secondary opacity-0 transition-opacity hover:text-ds-primary group-hover:opacity-100"
         >
-          <Icon name="more_vert" />
-        </button>
+          <Icon name="open_in_new" />
+        </Link>
       </td>
     </tr>
   )
 }
 
-export default function RecentDocumentsTable() {
+export default function RecentDocumentsTable({
+  documents,
+}: {
+  documents: DocumentRow[] | null
+}) {
   return (
-    <div className="col-span-12 overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.02)] xl:col-span-8">
+    <div className="w-full overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.02)]">
       <div className="flex items-center justify-between border-b border-ds-outline-variant bg-ds-surface-bright px-6 py-5">
         <h3 className="font-ds-heading text-ds-headline-sm text-ds-on-surface">
           Recent Documents
         </h3>
-        <a href="#" className="font-ds-label text-ds-label-md text-ds-primary hover:underline">
+        <Link
+          to="/documents"
+          className="font-ds-label text-ds-label-md text-ds-primary hover:underline"
+        >
           View all
-        </a>
+        </Link>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left">
@@ -96,13 +115,24 @@ export default function RecentDocumentsTable() {
             </tr>
           </thead>
           <tbody className="text-ds-body-sm text-ds-on-surface">
-            {RECENT_DOCUMENTS.map((doc, index) => (
-              <DocumentTableRow
-                key={doc.name}
-                doc={doc}
-                last={index === RECENT_DOCUMENTS.length - 1}
-              />
-            ))}
+            {documents === null || documents.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={HEADERS.length + 1}
+                  className="px-6 py-10 text-center text-ds-on-surface-variant"
+                >
+                  {documents === null ? 'Loading documents…' : 'No documents yet.'}
+                </td>
+              </tr>
+            ) : (
+              documents.map((doc, index) => (
+                <DocumentTableRow
+                  key={doc.name}
+                  doc={doc}
+                  last={index === documents.length - 1}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>

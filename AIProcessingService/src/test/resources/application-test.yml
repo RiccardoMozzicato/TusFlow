@@ -23,6 +23,17 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
+# imageChatClient builds a dedicated OpenAiApi from ai.image.* (it isn't mocked in the
+# integration KafkaListenerTest), so provide test values — GROQ_BASE_URL isn't set under `test`.
+ai:
+  image:
+    base-url: http://localhost:9999
+    api-key: test-api-key
+  retry:
+    # No real sleeping between analysis backoff attempts under test.
+    analysis-backoff-base-ms: 0
+    analysis-backoff-cap-ms: 0
+
 issuer: http://localhost:9090/realms/file-management
 
 keycloak:

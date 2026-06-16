@@ -204,7 +204,9 @@ class TusService(
     @Transactional(noRollbackFor = [UploadTooLargeException::class])
     @PreAuthorize("hasAnyRole('ROLE_staff','ROLE_manager','ROLE_admin')")
     override fun appendChunk(@Valid upload: UploadDTO, content: ByteArray): UploadDTO {
-        val optUpload = repo.findById(upload.id!!) // ID - Validated by TusController
+        // Lock the row for the duration of the transaction so a concurrent terminate (DELETE)
+        // cannot interleave and have its DELETED status clobbered by this chunk's commit.
+        val optUpload = repo.findWithLockById(upload.id!!) // ID - Validated by TusController
 
         log.debug("Service: Appending chunk to upload ID: ${upload.id}, Chunk size: ${content.size} bytes")
         if (optUpload.isEmpty)
@@ -505,7 +507,9 @@ class TusService(
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_staff','ROLE_manager','ROLE_admin')")
     override fun terminateUpload(id: String){
-        val upload: Upload = repo.findById(UUID.fromString(id))
+        // Lock the row so this terminate waits out any in-flight chunk append (PATCH) on the
+        // same upload, then commits DELETED last. The DELETE always wins without a client retry.
+        val upload: Upload = repo.findWithLockById(UUID.fromString(id))
             .orElseThrow{
                 log.warn("Terminate upload failed: resource not found uploadId={}", id)
                 ResourceNotFoundException("Resource does not exists: $id")

@@ -2,38 +2,39 @@
 // presentation-friendly view models that the mock layer fills today and the
 // file/job services will fill once wired.
 
+import type { SharingScope } from './documentsApi'
+import type { JobStatus } from './jobsApi'
+
 export type DocumentStatus = 'processing' | 'ready' | 'draft' | 'scan_failed'
 
-export type FileType = 'pdf' | 'docx' | 'image' | 'video'
+/** Coarse file-type buckets; 'file' is the generic fallback for unknown MIME types. */
+export type FileType = 'pdf' | 'docx' | 'txt' | 'image' | 'video' | 'file'
+
+/** Visibility scope of a file; mirrors the backend SharingScope enum. */
+export type DocumentScope = 'personal' | 'department' | 'organization'
 
 export interface LibraryDocument {
   id: string
   title: string
   /** Semantic file type, drives the icon chip. */
   fileType: FileType
+  /** Visibility scope, drives the scope indicator next to the title. */
+  scope: DocumentScope
   status: DocumentStatus
   owner: string
-  /** Pre-formatted, human-readable date (e.g. "Oct 24, 2023"). */
-  modified: string
+  /** Pre-formatted creation date and time (e.g. "Oct 24, 2023, 09:12 AM"). */
+  created: string
   /** Version label shown in the corner badge (e.g. "v2.1"). */
   version: string
+  /** Numeric current version, used when favoriting the file from the library. */
+  versionNumber: number
+  /** Pre-formatted file size (e.g. "2.3 MB"); "—" when unknown. */
+  size: string
+  /** Current AI-job status; drives the AI indicator. Undefined when no job exists. */
+  aiStatus?: JobStatus
 }
 
 export type ViewMode = 'grid' | 'list'
-
-export interface CategoryFilter {
-  id: string
-  label: string
-  /** Whether the box starts checked in the mock. */
-  defaultChecked?: boolean
-}
-
-export interface TagFilter {
-  id: string
-  label: string
-  /** Whether the tag starts selected (filled) in the mock. */
-  defaultSelected?: boolean
-}
 
 export interface FileTypeOption {
   type: FileType
@@ -63,8 +64,12 @@ export interface ProcessingStep {
 /** A row in the version history list. */
 export interface DocumentVersion {
   id: string
+  /** Numeric backend version, sent as the `version` query param when downloading. */
+  version: number
   /** Version label (e.g. "v2.1"). */
   label: string
+  /** Filename of this version, used as the download's save name. */
+  filename: string
   /** Author or origin of the version (e.g. "Alex Mercer", "System Migration"). */
   author: string
   /** Pre-formatted date (e.g. "Oct 20, 2023" or "Today, 09:12 AM"). */
@@ -72,22 +77,56 @@ export interface DocumentVersion {
   isCurrent?: boolean
 }
 
+/** One user-inserted (non-AI) metadata key/value pair. */
+export interface MetadataEntry {
+  key: string
+  value: string
+}
+
+/** Outcome of the AI analysis for a file, used to drive the details-page indicator. */
+export type AiAnalysisStatus = 'completed' | 'failed' | 'unsupported' | 'pending'
+
+/** A user the file is shared with, as shown in the sharing panel. */
+export interface DocumentShare {
+  id: string
+  /** Numeric share record id, used to remove/update the share; null when unsaved. */
+  shareId: number | null
+  /** Owner/recipient user id (UUID); displayed truncated when no name is known. */
+  userId: string
+  /** Recipient display name, resolved server-side; null when unavailable. */
+  userName: string | null
+  /** 'READ_ONLY' | 'READ_WRITE', shown as a permission badge. */
+  permission: string
+  /** Pre-formatted share timestamp. */
+  sharedAt: string
+}
+
 /** Full detail view model for a single document. */
 export interface DocumentDetail {
   id: string
   title: string
   fileType: FileType
+  /**
+   * Raw backend sharing scope (PERSONAL | DEPARTMENT | ORGANIZATION). Carried so
+   * a new-version upload reuses the file's existing scope for authorization.
+   */
+  sharingScope: SharingScope
+  /** Current version number; targets metadata edits at the right file version. */
+  currentVersion: number
   /** Location trail shown above the header. */
   breadcrumbs: Breadcrumb[]
-  /** Generated one-line summary, shown in the AI summary card. */
-  aiSummary: string
-  category: string
+  /** Whether AI analysis has completed, failed, is unsupported, or is still pending. */
+  aiAnalysisStatus: AiAnalysisStatus
+  /** Generated one-line summary, shown in the AI summary card; null while absent. */
+  aiSummary: string | null
+  /** AI-assessed sensitivity classification (e.g. "Confidential"). */
+  sensitivity: string
   tags: string[]
+  /** User-inserted (non-AI) metadata for the current version; system keys excluded. */
+  userMetadata: MetadataEntry[]
   owner: string
-  /** Pre-formatted creation/modification date (e.g. "Oct 24, 2023"). */
+  /** Pre-formatted creation date (e.g. "Oct 24, 2023"). */
   date: string
-  /** Total page count for the preview toolbar. */
-  pageCount: number
   processing: ProcessingStep[]
   versions: DocumentVersion[]
 }

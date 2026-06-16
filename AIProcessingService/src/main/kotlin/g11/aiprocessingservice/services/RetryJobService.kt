@@ -56,6 +56,11 @@ class RetryJobService(
             }
 
             job.status = jobStatus.PENDING
+            // A user retry consumes one unit of the manual-retry budget. The automatic Kafka path
+            // does NOT increment, so `attempts` reflects user retries only (capped by
+            // max-user-retries). Incremented here — after the file fetch succeeds — so a failed
+            // prepare doesn't burn an attempt.
+            job.attempts += 1u
             jobRepository.save(job)
 
             return job.toDTO(file)

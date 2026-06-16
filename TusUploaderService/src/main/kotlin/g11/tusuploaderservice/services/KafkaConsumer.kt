@@ -1,8 +1,6 @@
 package g11.tusuploaderservice.services
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import g11.tusuploaderservice.dto.MetadataAIDTO
-import g11.tusuploaderservice.entities.FileStatus
 import io.micrometer.tracing.Tracer
 import io.micrometer.tracing.propagation.Propagator
 import org.slf4j.LoggerFactory
@@ -13,7 +11,6 @@ import java.util.*
 @Service
 class KafkaConsumer(
     private val fileService: FileServiceInterface,
-    private val metadataSSEService: MetadataSSEService,
     private val objectMapper: ObjectMapper,
     private val tracer: Tracer,
     private val propagator: Propagator,
@@ -45,7 +42,7 @@ class KafkaConsumer(
             val eventType = jsonNode.get("event_type")?.asText()
 
             // Only process terminal AI analysis events.
-            if (eventType !in setOf("ANALYSIS_COMPLETED", "ANALYSIS_UNSUPPORTED", "ANALYSIS_FAILED")) {
+            if (eventType !in setOf("ANALYSIS_COMPLETED", "ANALYSIS_UNSUPPORTED", "ANALYSIS_FAILED", "ANALYSIS_DEAD_LETTERED")) {
                 log.debug("Ignoring event type: {}", eventType)
                 return
             }
@@ -84,30 +81,23 @@ class KafkaConsumer(
                     // Update file metadata using internal method (bypasses auth checks)
                     fileService.updateFileMetadata(fileId, version, metadata)
                     log.info("Successfully updated metadata for file: {} with event type: {}", fileId, eventType)
-                    metadataSSEService.notifyAnalysisCompleted(
-                        fileId,
-                        version,
-                        metadata.toMetadataAIDTO()
-                    )
                 }
                 "ANALYSIS_UNSUPPORTED" -> {
                     fileService.updateFileMetadata(fileId, version, metadata)
                     log.info("Successfully updated metadata for file: {} with event type: {}", fileId, eventType)
-                    metadataSSEService.notifyAnalysisUnsupported(
-                        fileId,
-                        version,
-                        payloadNode.get("reason")?.asText()
-                    )
                 }
                 "ANALYSIS_FAILED" -> {
                     val failedMetadata = metadata.withFailureStatus(payloadNode.get("error")?.asText())
                     fileService.updateFileMetadata(fileId, version, failedMetadata)
-                    log.info("AI analysis failed for file: {} version: {}. Persisted failure metadata and notifying SSE clients.", fileId, version)
-                    metadataSSEService.notifyAnalysisFailed(
-                        fileId,
-                        version,
-                        payloadNode.get("error")?.asText()
-                    )
+                    log.info("AI analysis failed for file: {} version: {}. Persisted failure metadata.", fileId, version)
+                }
+                "ANALYSIS_DEAD_LETTERED" -> {
+                    // Terminal: every automatic and manual retry was exhausted. Persist the failure
+                    // on the file (same as a normal failure). The live notification to the browser is
+                    // pushed directly by AIProcessingService over STOMP, not from here.
+                    val failedMetadata = metadata.withFailureStatus(payloadNode.get("error")?.asText())
+                    fileService.updateFileMetadata(fileId, version, failedMetadata)
+                    log.warn("AI analysis dead-lettered for file: {} version: {}. Retries exhausted.", fileId, version)
                 }
             }
         } catch (e: Exception) {
@@ -126,20 +116,6 @@ class KafkaConsumer(
         } ?: root["traceparent"]?.asText()?.takeIf { it.isNotBlank() }
     } catch (_: Exception) { null }
 
-
-    private fun Map<String, String>.toMetadataAIDTO(): MetadataAIDTO {
-        return MetadataAIDTO(
-            tags = this["tags"],
-            summary = this["summary"],
-            filename = this["filename"],
-            contentType = this["contentType"],
-            ownerUserId = this["ownerUserId"],
-            sensitivity = this["sensitivity"],
-            fileVersionId = this["fileVersionId"],
-            analysisStatus = this["analysisStatus"],
-            status = FileStatus.AVAILABLE
-        )
-    }
 
     private fun Map<String, String>.withFailureStatus(error: String?): Map<String, String> {
         val failureDetails = mapOf("error" to (error ?: "AI analysis failed"))

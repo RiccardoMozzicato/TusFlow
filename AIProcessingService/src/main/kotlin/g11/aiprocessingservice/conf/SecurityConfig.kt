@@ -25,6 +25,12 @@ class SecurityConfig {
             .authorizeHttpRequests {
                     it.anyRequest().authenticated()
             }
+            // Stateless Bearer-token resource server behind the gateway: every request is
+            // authenticated by JWT, which is immune to CSRF, and the service is never reached
+            // directly by a browser session. CSRF protection (the browser session's concern) lives
+            // on the gateway. Leaving it enabled here rejects the SockJS/STOMP transport POSTs to
+            // /api/v1/jobs/ws/** — sockjs-client cannot attach an X-XSRF-TOKEN header.
+            .csrf { it.disable() }
             .oauth2ResourceServer {
                 it.jwt { jwt-> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())}
             }

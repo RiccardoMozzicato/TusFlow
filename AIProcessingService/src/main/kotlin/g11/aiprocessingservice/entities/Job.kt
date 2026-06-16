@@ -10,7 +10,9 @@ import jakarta.persistence.EnumType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.annotations.UpdateTimestamp
 import org.hibernate.type.SqlTypes
+import java.time.Instant
 import java.util.UUID
 
 @Entity
@@ -38,7 +40,12 @@ open class Job(
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    open var status: jobStatus
+    open var status: jobStatus,
+
+    /** Set by Hibernate on every save; tracks the latest status transition. */
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    open var updatedAt: Instant? = null
 )
 
 fun Job.toDTO(file: FileDTO): JobDTO {

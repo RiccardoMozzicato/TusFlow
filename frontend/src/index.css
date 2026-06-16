@@ -254,3 +254,32 @@ body {
     transform: translateX(100%);
   }
 }
+
+/* One-shot green wash that enters from the right and sweeps left, then fades —
+   used to confirm a Failed-Processing row reprocessed successfully. */
+@keyframes ds-success-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.ds-success-sweep {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--ds-tertiary-fixed-dim) 70%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: ds-success-sweep 0.9s ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-success-sweep {
+    animation: none;
+  }
+}

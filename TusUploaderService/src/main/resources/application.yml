@@ -56,7 +56,9 @@ tus:
 ai:
   metadata:
     sse:
-      timeout-ms: 60000
+      # 5 min: allow slow self-hosted reasoning models (see AIProcessingService
+      # ai.openai.read-timeout-ms) to finish before the stream emits a timeout.
+      timeout-ms: 300000
 minio:
   url: http://localhost:9000
   access-key: minioadmin
@@ -82,3 +84,8 @@ management:
   otlp:
     tracing:
       endpoint: http://localhost:4318/v1/traces
+logging:
+  level:
+    org:
+      hibernate:
+        SQL: WARN

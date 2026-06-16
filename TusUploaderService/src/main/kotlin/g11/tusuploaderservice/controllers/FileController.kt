@@ -4,6 +4,7 @@ import g11.tusuploaderservice.dto.DownloadDTO
 import g11.tusuploaderservice.dto.FileDTO
 import g11.tusuploaderservice.dto.FileShareDTO
 import g11.tusuploaderservice.dto.FileVersionDTO
+import g11.tusuploaderservice.dto.FileVersionFavoriteDTO
 import g11.tusuploaderservice.dto.FiltersDTO
 import g11.tusuploaderservice.dto.MetadataAIDTO
 import g11.tusuploaderservice.dto.RagQueryRequest
@@ -15,7 +16,6 @@ import g11.tusuploaderservice.exceptions.ResourceNotFoundException
 import g11.tusuploaderservice.exceptions.ResourceUncompletedException
 import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.FileServiceInterface
-import g11.tusuploaderservice.services.MetadataSSEService
 import g11.tusuploaderservice.services.StorageService
 import g11.tusuploaderservice.utils.getUserIdFromJwt
 import io.swagger.v3.oas.annotations.Operation
@@ -35,7 +35,6 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
-import org.springframework.http.MediaType
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -45,7 +44,6 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.client.RestClient
 import org.springframework.web.server.ResponseStatusException
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
@@ -62,7 +60,6 @@ import java.util.UUID
 @RequestMapping("/api/v1/files")
 class FileController(
     private val fileService: FileServiceInterface,
-    private val metadataSSEService: MetadataSSEService,
     @Qualifier("aiServiceClient") private val aiServiceClient: RestClient
 ) {
     private val log = LoggerFactory.getLogger(FileController::class.java)
@@ -106,7 +103,7 @@ class FileController(
     @Operation(
         tags = ["File Management"],
         summary = "Get list of files metadata",
-        description = "Retrieves a paginated list of files visible to the current user in the requested sharing scopes (combined with OR). Returns an empty page when no files match.",
+        description = "Retrieves a paginated list of files visible to the current user in the requested sharing scopes (combined with OR). Files whose current version is AVAILABLE or MERGE_PENDING (still processing) are returned; DELETED versions are excluded. Returns an empty page when no files match.",
         parameters = [
             Parameter(name = "sharingScope", description = "Sharing scopes to include, comma-separated (PERSONAL, DEPARTMENT, ORGANIZATION)", schema = Schema(type = "string", example = "PERSONAL,DEPARTMENT")),
             Parameter(name = "contentType", description = "Filter by content type", schema = Schema(type = "string", example = "application/pdf")),
@@ -185,7 +182,7 @@ class FileController(
     )
     //endregion
     @GetMapping
-    fun getFilesMetadata(
+    fun getFiles(
         @RequestParam(required = false) contentType: String?,
         @RequestParam(required = false) dateFrom: String?,
         @RequestParam(required = false) dateTo: String?,
@@ -308,44 +305,6 @@ class FileController(
         val metadata = fileService.getFileGeneratedMetadata(id, version)
         log.debug("Successfully retrieved AI-generated metadata for file: {}", id)
         return ResponseEntity.ok(metadata)
-    }
-
-    //region Swagger Documentation
-    @Operation(
-        tags = ["File Management"],
-        summary = "Stream AI metadata processing status via Server-Sent Events",
-        description = "Opens a Server-Sent Events connection that streams the status of AI metadata processing. Returns metadata when processing is complete.",
-        parameters = [
-            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
-            Parameter(name = "version", description = "File version number (optional)", required = false, `in` = ParameterIn.QUERY, schema = Schema(type = "integer", format = "int64"))
-        ]
-    )
-    @ApiResponse(
-        responseCode = "200",
-        description = "SSE stream opened successfully",
-        content = [Content(mediaType = "text/event-stream")]
-    )
-    @ApiResponse(
-        responseCode = "404",
-        description = "File not found",
-        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
-    )
-    //endregion
-    @GetMapping("/generatedmetadata/stream/{id}")
-    fun streamMetadataProcessingStatus(
-        @PathVariable id: UUID,
-        @RequestParam(required = false) version: Long?
-    ): ResponseEntity<SseEmitter> {
-        log.debug("API GET /api/v1/files/generatedmetadata/stream/{} userOwnerId={} fileId={}", id, currentUserOwnerId(), id)
-        log.debug("Opening SSE stream for AI metadata processing - fileId: {} version: {}", id, version)
-
-        val emitter = metadataSSEService.streamMetadataProcessingStatus(id, version)
-
-        return ResponseEntity.ok()
-            .contentType(MediaType.TEXT_EVENT_STREAM)
-            .header("Cache-Control", "no-cache")
-            .header("X-Accel-Buffering", "no")
-            .body(emitter)
     }
 
     //region Swagger Documentation
@@ -962,6 +921,31 @@ class FileController(
    //region Swagger Documentation
    @Operation(
        tags = ["File Sharing"],
+       summary = "Filter file ids to those the user can write",
+       description = "Given a set of candidate file ids, returns the subset the current user has " +
+           "WRITE access to: owned files, files shared with READ_WRITE, and (by role) department " +
+           "files for managers and department/organization files for admins. Used by other " +
+           "services to scope actions to files the user may modify, keeping the request bounded to " +
+           "the caller's candidate set."
+   )
+   @ApiResponse(
+       responseCode = "200",
+       description = "Writable subset of the candidate ids",
+       content = [Content(mediaType = "application/json", schema = Schema(implementation = UUID::class))]
+   )
+   //endregion
+   @PostMapping("/writable-ids")
+   fun getWritableFileIds(@RequestBody candidateIds: List<UUID>): ResponseEntity<List<UUID>> {
+       if (candidateIds.isEmpty()) return ResponseEntity.ok(emptyList())
+       if (candidateIds.size > MAX_WRITABLE_CANDIDATES) {
+           return ResponseEntity.badRequest().build()
+       }
+       return ResponseEntity.ok(fileService.getWritableFileIds(candidateIds.distinct()))
+   }
+
+   //region Swagger Documentation
+   @Operation(
+       tags = ["File Sharing"],
        summary = "Delete file share",
        description = "Removes a file share, revoking the user's access to the file. Returns 404 if the file or share does not exist.",
        parameters = [
@@ -1021,6 +1005,71 @@ class FileController(
        fileService.deleteFileShare(id, shareId)
        log.info("File share deleted successfully: fileId={}, shareId={}", id, shareId)
        return ResponseEntity.ok(HttpStatus.OK)
+   }
+
+   //region Swagger Documentation
+   @Operation(
+       tags = ["File Sharing"],
+       summary = "Update file share permission",
+       description = "Updates the permission level (READ_ONLY or READ_WRITE) of an existing share. Only the file owner may change share permissions.",
+       parameters = [
+           Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+           Parameter(name = "shareId", description = "Share record id", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "integer", format = "int64")),
+           Parameter(name = "permission", description = "New permission level", required = true, schema = Schema(type = "string", example = "READ_WRITE"))
+       ]
+   )
+   @ApiResponse(
+       responseCode = "200",
+       description = "Permission updated. Returns the updated share record.",
+       content = [Content(mediaType = "application/json", schema = Schema(implementation = FileShareDTO::class))]
+   )
+   @ApiResponse(
+       responseCode = "403",
+       description = "Forbidden - only the file owner can update shares.",
+       content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
+           examples = [ExampleObject(
+               name = "NotOwner",
+               summary = "Caller is not the file owner",
+               value = """
+               {
+                 "type": "Forbidden",
+                 "title": "Access denied",
+                 "status": 403,
+                 "detail": "Access denied: only file owner can update share for file {id}",
+                 "instance": "/api/v1/files/{id}/shares/{shareId}"
+               }
+               """
+           )]
+       )]
+   )
+   @ApiResponse(
+       responseCode = "404",
+       description = "File or share not found, or the share does not belong to the file.",
+       content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
+           examples = [ExampleObject(
+               name = "ShareNotFound",
+               summary = "File or share missing",
+               value = """
+               {
+                 "type": "Not Found",
+                 "title": "Resource not found",
+                 "status": 404,
+                 "detail": "File share {shareId} does not belong to file {id}",
+                 "instance": "/api/v1/files/{id}/shares/{shareId}"
+               }
+               """
+           )]
+       )]
+   )
+   //endregion
+   @PatchMapping("/{id}/shares/{shareId}")
+   fun updateFileShare(
+       @PathVariable id: UUID,
+       @PathVariable shareId: Long,
+       @RequestParam permission: PERMISSION_LEVEL
+   ): ResponseEntity<FileShareDTO> {
+       val share = fileService.updateFileSharePermission(id, shareId, permission)
+       return ResponseEntity.ok(share)
    }
 
     //region Swagger Documentation
@@ -1120,6 +1169,113 @@ class FileController(
 
     //region Swagger Documentation
     @Operation(
+        tags = ["Version Favorites"],
+        summary = "Favorite a file version",
+        description = "Marks a specific file version as favorite for the current user. Idempotent: favoriting an already-favorited version returns the existing record. Requires at least read access to the file.",
+        parameters = [
+            Parameter(name = "fileId", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "Version number", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "201",
+        description = "Version successfully favorited (or already favorited). Returns the favorite record.",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = FileVersionFavoriteDTO::class))]
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File or version not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @PostMapping("/{fileId}/versions/{version}/favorite")
+    fun addVersionFavorite(
+        @PathVariable fileId: UUID,
+        @PathVariable version: Long
+    ): ResponseEntity<FileVersionFavoriteDTO> {
+        val favorite = fileService.addFavorite(fileId, version)
+        return ResponseEntity.status(HttpStatus.CREATED).body(favorite)
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["Version Favorites"],
+        summary = "Unfavorite a file version",
+        description = "Removes the current user's favorite on a specific file version. Idempotent: removing a non-favorited version succeeds.",
+        parameters = [
+            Parameter(name = "fileId", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "Version number", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(responseCode = "204", description = "Favorite removed (or was not present)")
+    @ApiResponse(
+        responseCode = "404",
+        description = "File or version not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @DeleteMapping("/{fileId}/versions/{version}/favorite")
+    fun removeVersionFavorite(
+        @PathVariable fileId: UUID,
+        @PathVariable version: Long
+    ): ResponseEntity<Void> {
+        fileService.removeFavorite(fileId, version)
+        return ResponseEntity.noContent().build()
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["Version Favorites"],
+        summary = "List my favorite versions",
+        description = "Retrieves the current user's favorited file versions, paginated. Soft-deleted versions and files the user can no longer access are hidden.",
+        parameters = [
+            Parameter(name = "page", description = "Page number (0-indexed)", schema = Schema(type = "integer", example = "0")),
+            Parameter(name = "size", description = "Page size", schema = Schema(type = "integer", example = "10"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Successfully retrieved favorites",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = Page::class))]
+    )
+    //endregion
+    @GetMapping("/favorites")
+    fun getMyFavorites(
+        @RequestParam(defaultValue = "0") page: UInt,
+        @RequestParam(defaultValue = "10") size: UInt
+    ): ResponseEntity<Page<FileVersionFavoriteDTO>> {
+        val favorites = fileService.getMyFavorites(PageRequest.of(page.toInt(), size.toInt()))
+        return ResponseEntity.ok(favorites)
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["Version Favorites"],
+        summary = "Get favorited version numbers for a file",
+        description = "Returns the version numbers of the given file favorited by the current user. Used to render favorite indicators in the version history.",
+        parameters = [
+            Parameter(name = "fileId", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Successfully retrieved favorited version numbers",
+        content = [Content(mediaType = "application/json", schema = Schema(type = "array"))]
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @GetMapping("/{fileId}/favorites")
+    fun getFavoritedVersionsForFile(@PathVariable fileId: UUID): ResponseEntity<List<Long>> {
+        val versions = fileService.getFavoritedVersionsForFile(fileId)
+        return ResponseEntity.ok(versions)
+    }
+
+    //region Swagger Documentation
+    @Operation(
         tags = ["AI RAG"],
         summary = "Query files with RAG",
         description = "Performs semantic search on file contents using RAG (Retrieval-Augmented Generation) powered by AI."
@@ -1175,6 +1331,11 @@ class FileController(
                 "Failed to contact AI Service: ${e.message}"
             )
         }
+    }
+
+    private companion object {
+        /** Upper bound on a writable-ids filter request, to keep the candidate IN query bounded. */
+        const val MAX_WRITABLE_CANDIDATES = 1000
     }
 
 }

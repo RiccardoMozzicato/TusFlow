@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react'
-
 export interface StatCard {
   label: string
   value: string
@@ -12,11 +10,15 @@ export interface StatCard {
   iconClassName: string
   /** Optional progress bar fill (0–1) shown along the bottom of the card. */
   progress?: number
+  /** When set, the card becomes a link to this route. */
+  to?: string
 }
 
 export type DocStatus = 'processed' | 'in_review' | 'failed'
 
 export interface DocumentRow {
+  /** File UUID, used to link the row to its details page. */
+  id: string
   name: string
   type: string
   status: DocStatus
@@ -24,12 +26,4 @@ export interface DocumentRow {
   icon: string
   /** Tailwind classes for the file-type icon chip. */
   iconClassName: string
-}
-
-export interface ActivityItem {
-  icon: string
-  /** Rich message (may contain bold/linked spans). */
-  message: ReactNode
-  time: string
-  tone?: 'default' | 'error'
 }

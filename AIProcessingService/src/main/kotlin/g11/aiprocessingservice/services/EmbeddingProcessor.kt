@@ -11,9 +11,13 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.core.io.Resource
 import org.springframework.http.HttpStatus
+import org.springframework.kafka.annotation.DltHandler
 import org.springframework.kafka.annotation.KafkaListener
+import org.springframework.kafka.annotation.RetryableTopic
 import org.springframework.kafka.core.KafkaTemplate
-import org.springframework.kafka.support.Acknowledgment
+import org.springframework.kafka.support.KafkaHeaders
+import org.springframework.messaging.handler.annotation.Header
+import org.springframework.retry.annotation.Backoff
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
@@ -32,14 +36,41 @@ class EmbeddingProcessor(
     private val authService: AuthServiceInterface,
     private val objectMapper: ObjectMapper,
     private val tracer: Tracer,
+    private val supportedContentTypes: SupportedContentTypes,
+    private val deadLetterService: DeadLetterService,
 ) {
     private val log = LoggerFactory.getLogger(EmbeddingProcessor::class.java)
 
-    @KafkaListener(topics = ["file-analyzed"], groupId = "embedding-processor")
-    fun processFileForEmbeddings(message: String, acknowledgment: Acknowledgment) {
+    // Non-blocking retry (see MetadataProcessor): on failure the record is parked on a retry topic
+    // instead of sleeping this consumer thread, then sent to file-analyzed-dlt once attempts run out.
+    // Re-processing is safe — downstream EmbeddingGenerator dedups chunks by (fileVersionId, index).
+    @RetryableTopic(
+        attempts = "\${ai.retry.embedding-attempts:3}",
+        backoff = Backoff(delayExpression = "\${ai.retry.embedding-delay-ms:60000}"),
+        kafkaTemplate = "kafkaTemplate",
+        listenerContainerFactory = "embeddingKafkaListenerContainerFactory",
+    )
+    @KafkaListener(
+        topics = ["file-analyzed"],
+        groupId = "embedding-processor",
+        containerFactory = "embeddingKafkaListenerContainerFactory",
+    )
+    fun processFileForEmbeddings(message: String) {
         val event = objectMapper.readValue(message, FileAnalyzedEvent::class.java)
 
         log.info("Processing embeddings for file ${event.fileId} v${event.version}")
+
+        // Skip types without extractable text (e.g. images). Defensive — the metadata stage only
+        // publishes file-analyzed for analyzable types — but it also stops images from failing
+        // extraction here and being parked on the DLT.
+        if (!supportedContentTypes.isTextExtractable(event.contentType)) {
+            log.info(
+                "Skipping embeddings for file {} - no extractable text for content type: {}",
+                event.fileId,
+                event.contentType,
+            )
+            return
+        }
 
         try {
             // 1. Download file
@@ -109,12 +140,25 @@ class EmbeddingProcessor(
             }
 
             log.info("Created ${batches.size} embedding batches for file ${event.fileId}")
-            acknowledgment.acknowledge()
+            // No manual ack: the container commits per record on normal return (AckMode.RECORD).
         } catch (e: Exception) {
             log.error("Failed to process embeddings for file ${event.fileId}: ${e.message}", e)
-            // TODO: Dead Letter Queue handling
+            // Rethrow so @RetryableTopic routes the record to the retry topic / DLT.
             throw e
         }
+    }
+
+    /**
+     * Drains the `file-analyzed` dead-letter topic into the audit table once embedding-preparation
+     * retries are exhausted.
+     */
+    @DltHandler
+    fun handleDlt(
+        message: String,
+        @Header(name = KafkaHeaders.DLT_EXCEPTION_FQCN, required = false) exceptionType: ByteArray?,
+        @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) exceptionMessage: ByteArray?,
+    ) {
+        deadLetterService.record("file-analyzed", message, exceptionType, exceptionMessage)
     }
 
     fun downloadFile(fileid: UUID, version: Long?) : InputStream? {

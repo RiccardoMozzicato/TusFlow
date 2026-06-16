@@ -46,6 +46,49 @@ class FileAccessService(
     }
 
     /**
+     * Of [candidateIds], the subset the user has WRITE access to (owned, READ_WRITE shares, and
+     * role-based department/organization access). The permission policy is computed authoritatively
+     * by TusUploaderService; this method forwards the candidate set and the user's token so the
+     * request stays bounded to the files the caller actually cares about.
+     *
+     * @param candidateIds The file ids to check; an empty set returns empty without a round-trip
+     * @param userToken The user's JWT token (NOT the service account token)
+     * @return Subset of [candidateIds] the user can modify; empty on any downstream error (fail-safe)
+     */
+    fun getWritableFileIds(candidateIds: Collection<UUID>, userToken: String): Set<UUID> {
+        if (candidateIds.isEmpty()) return emptySet()
+        return try {
+            // The endpoint caps each request at MAX_WRITABLE_CANDIDATES, so split larger candidate
+            // sets (e.g. the dashboard stats, which span every file with a job) into batches and
+            // union the results. Without this, an over-cap request would 400 and fail-safe to empty,
+            // silently dropping the user's stats/list to zero.
+            val writable = candidateIds.distinct()
+                .chunked(WRITABLE_BATCH_SIZE)
+                .flatMap { batch -> requestWritableBatch(batch, userToken) }
+                .toSet()
+            log.info("User has WRITE access to ${writable.size} of ${candidateIds.size} candidate files")
+            writable
+        } catch (ex: RestClientResponseException) {
+            log.error("Error retrieving writable files: ${ex.message}")
+            emptySet()
+        } catch (ex: Exception) {
+            log.error("Unexpected error retrieving writable files", ex)
+            emptySet()
+        }
+    }
+
+    /** Single round-trip for one bounded batch of candidate ids; callers union the batches. */
+    private fun requestWritableBatch(batch: List<UUID>, userToken: String): List<UUID> {
+        val ids = fileServiceClient.post()
+            .uri { it.path("/api/v1/files/writable-ids").build() }
+            .headers { it.setBearerAuth(userToken) }
+            .body(batch)
+            .retrieve()
+            .body(Array<UUID>::class.java)
+        return ids?.toList() ?: emptyList()
+    }
+
+    /**
      * Get file IDs owned by the user
      */
     private fun getOwnedFileIds(userId: UUID, token: String): Set<String> {
@@ -131,6 +174,14 @@ class FileAccessService(
             }
             throw ex
         }
+    }
+
+    private companion object {
+        /**
+         * Max candidate ids per `writable-ids` request. Must stay at or below the endpoint's own
+         * cap (`FileController.MAX_WRITABLE_CANDIDATES`); larger candidate sets are chunked.
+         */
+        const val WRITABLE_BATCH_SIZE = 1000
     }
 }
 /**

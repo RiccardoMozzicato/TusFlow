@@ -1,8 +1,12 @@
 package g11.tusuploaderservice.specs
 
 import g11.tusuploaderservice.dto.SharingScope
+import g11.tusuploaderservice.dto.UserRole
 import g11.tusuploaderservice.entities.File
 import g11.tusuploaderservice.entities.FileShare
+import g11.tusuploaderservice.entities.FileStatus
+import g11.tusuploaderservice.entities.FileVersion
+import g11.tusuploaderservice.entities.PERMISSION_LEVEL
 import jakarta.persistence.criteria.JoinType
 import jakarta.persistence.criteria.Predicate
 import org.springframework.data.jpa.domain.Specification
@@ -65,6 +69,7 @@ object FileSpecifications {
          * - DEPARTMENT: file del department dell'utente; l'admin vede tutti i department
          *   dell'organization, un non-admin senza department non vede alcun file DEPARTMENT
          * - ORGANIZATION: file dell'organization dell'utente
+         * Restituisce solo file la cui versione corrente è AVAILABLE.
          */
         fun buildFilesByScopes(
             contentType: String?,
@@ -83,10 +88,27 @@ object FileSpecifications {
 
                 val predicates = mutableListOf<Predicate>()
 
-                // Filtri opzionali comuni a tutti gli scope
+                // Join sulla versione corrente: mostriamo i file la cui versione
+                // corrente è AVAILABLE oppure MERGE_PENDING (ancora in lavorazione),
+                // escludendo solo i DELETED.
+                val currentVersion = root.join<File, FileVersion>("versions")
+                predicates.add(cb.equal(currentVersion.get<Long>("version"), root.get<Long>("currentVersion")))
+                predicates.add(
+                    currentVersion.get<FileStatus>("status")
+                        .`in`(FileStatus.AVAILABLE, FileStatus.MERGE_PENDING),
+                )
+
+                // Filtri opzionali comuni a tutti gli scope (sulla versione corrente).
+                // Match "leggero" case-insensitive (contains) sul contentType: così un
+                // filtro come "text/plain" intercetta anche "text/plain; charset=utf-8"
+                // e "word" copre sia application/msword sia il MIME OpenXML del .docx.
                 if (contentType != null) {
-                    val versions = root.join<File, Any>("versions", JoinType.LEFT)
-                    predicates.add(cb.equal(versions.get<String>("contentType"), contentType))
+                    predicates.add(
+                        cb.like(
+                            cb.lower(currentVersion.get<String>("contentType")),
+                            "%${contentType.lowercase()}%",
+                        ),
+                    )
                 }
                 if (dateFrom != null) {
                     val fromDate = Date.from(Instant.parse(dateFrom))
@@ -140,4 +162,97 @@ object FileSpecifications {
                 cb.and(*predicates.toTypedArray())
             }
         }
+
+        /**
+         * Build a specification selecting the files the user has WRITE access to, mirroring
+         * [g11.tusuploaderservice.services.FileService.getCurrentUserPermission] as a single query:
+         * - owner (any scope);
+         * - explicit READ_WRITE share;
+         * - DEPARTMENT scope in the same organization when admin (any department) or manager of
+         *   the file's department;
+         * - ORGANIZATION scope in the same organization when admin.
+         * Staff get no role-based write access (department/organization files are read-only for them).
+         * Excludes files whose current version is DELETED, matching [buildFilesByScopes].
+         *
+         * When [candidateIds] is non-empty the result is further restricted to those files, so
+         * callers that already have a small set of files of interest avoid materializing the
+         * user's entire writable universe.
+         */
+        fun buildWritableFiles(
+            userId: UUID,
+            organization: String,
+            department: String?,
+            role: UserRole,
+            candidateIds: Collection<UUID> = emptyList(),
+        ): Specification<File> =
+            Specification { root, query, cb ->
+                query?.distinct(true)
+
+                // Restrict to the current, non-deleted version (AVAILABLE or still MERGE_PENDING).
+                val currentVersion = root.join<File, FileVersion>("versions")
+                val currentVersionPredicate = cb.and(
+                    cb.equal(currentVersion.get<Long>("version"), root.get<Long>("currentVersion")),
+                    currentVersion.get<FileStatus>("status")
+                        .`in`(FileStatus.AVAILABLE, FileStatus.MERGE_PENDING),
+                )
+
+                val scopeField = root.get<SharingScope>("sharingScope")
+                val orgField = root.get<String>("organization")
+
+                val writePredicates = mutableListOf<Predicate>()
+
+                // Owner always has READ_WRITE.
+                writePredicates.add(cb.equal(root.get<UUID>("ownerId"), userId))
+
+                // Explicit READ_WRITE share for this user.
+                val shares = root.join<File, FileShare>("shares", JoinType.LEFT)
+                writePredicates.add(
+                    cb.and(
+                        cb.equal(shares.get<UUID>("userID"), userId),
+                        cb.equal(shares.get<PERMISSION_LEVEL>("permission"), PERMISSION_LEVEL.READ_WRITE),
+                    ),
+                )
+
+                // Role-based scope write access within the user's organization.
+                when (role) {
+                    UserRole.ROLE_admin -> {
+                        // Admin: READ_WRITE on any DEPARTMENT or ORGANIZATION file in their org.
+                        writePredicates.add(
+                            cb.and(
+                                cb.equal(scopeField, SharingScope.DEPARTMENT),
+                                cb.equal(orgField, organization),
+                            ),
+                        )
+                        writePredicates.add(
+                            cb.and(
+                                cb.equal(scopeField, SharingScope.ORGANIZATION),
+                                cb.equal(orgField, organization),
+                            ),
+                        )
+                    }
+
+                    UserRole.ROLE_manager -> {
+                        // Manager: READ_WRITE on DEPARTMENT files of their own department.
+                        if (department != null) {
+                            writePredicates.add(
+                                cb.and(
+                                    cb.equal(scopeField, SharingScope.DEPARTMENT),
+                                    cb.equal(orgField, organization),
+                                    cb.equal(root.get<String>("department"), department),
+                                ),
+                            )
+                        }
+                    }
+
+                    // Staff: only owner + explicit READ_WRITE share (added above).
+                    UserRole.ROLE_staff -> {}
+                }
+
+                val writable = cb.and(currentVersionPredicate, cb.or(*writePredicates.toTypedArray()))
+                if (candidateIds.isEmpty()) {
+                    writable
+                } else {
+                    cb.and(writable, root.get<UUID>("uuid").`in`(candidateIds))
+                }
+            }
 }

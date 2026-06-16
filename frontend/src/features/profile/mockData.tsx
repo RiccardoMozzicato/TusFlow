@@ -1,52 +1,18 @@
-import Icon from '@/components/Icon'
 import type {
   AdminAction,
   DepartmentStat,
   ManagedDocument,
   ManagementLink,
-  OverviewStat,
   QuickAction,
   StaffActivity,
-  StorageInfo,
   TeamOverview,
   WorkspaceCounter,
   WorkspaceStorage,
 } from './types'
 
-// Placeholder data mirroring the design mock. Replace with API-backed data
-// (user/file/job services) once the admin endpoints are wired.
-
-// --- Global scope (admin) ---------------------------------------------------
-
-export const GLOBAL_OVERVIEW: OverviewStat[] = [
-  {
-    label: 'Total Users',
-    value: '12,842',
-    icon: 'group',
-    iconClassName: 'bg-ds-surface-container text-ds-primary',
-    note: (
-      <span className="flex items-center gap-1 text-ds-on-tertiary-container">
-        <Icon name="trending_up" className="text-[14px]" />
-        +4.2% from last month
-      </span>
-    ),
-  },
-  {
-    label: 'System Health',
-    value: '99.98%',
-    icon: 'speed',
-    iconClassName: 'bg-ds-tertiary-container/10 text-ds-on-tertiary-container',
-    progress: 0.99,
-  },
-]
-
-export const GLOBAL_STORAGE: StorageInfo = {
-  label: 'Storage Usage',
-  usage: '14.2 TB / 20 TB',
-  fraction: 0.71,
-  consumedLabel: '71% Consumed',
-  availableLabel: '5.8 TB Available',
-}
+// Placeholder data mirroring the design mock. The admin System Overview is now
+// API-backed (see useOrgStats / adminOverview); the remaining manager/staff
+// data below is still placeholder pending their own wiring.
 
 // --- Department scope (manager) ---------------------------------------------
 
@@ -195,7 +161,7 @@ export const STAFF_ACTIVITY: StaffActivity[] = [
 // --- Management quick links (admin) -----------------------------------------
 
 export const MANAGEMENT_LINKS: ManagementLink[] = [
-  { label: 'User Management', icon: 'person' },
+  { label: 'User Management', icon: 'person', to: '/admin/users' },
   { label: 'Security Settings', icon: 'security' },
   { label: 'Audit Logs', icon: 'history_edu' },
   { label: 'Global Config', icon: 'settings_suggest' },

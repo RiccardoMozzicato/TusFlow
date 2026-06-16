@@ -3,6 +3,7 @@ package g11.aiprocessingservice.conf
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.openai.OpenAiChatModel
 import org.springframework.ai.openai.OpenAiChatOptions
+import org.springframework.ai.openai.api.OpenAiApi
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.web.client.RestClientCustomizer
@@ -64,15 +65,37 @@ class AiConfig {
             )
             .build()
 
-    // Vision model client for image analysis (Groq Llama 4 Scout or equivalent)
+    // Vision model client for image analysis (Groq Llama 4 Scout or equivalent).
+    //
+    // Unlike the chat/pdf clients, this one does NOT reuse the shared `openAiChatModel`'s endpoint:
+    // it builds a dedicated OpenAiApi pointed at `ai.image.base-url` (defaults to Groq). That keeps
+    // image analysis on a vision-capable model even when a profile (e.g. `local`) repoints
+    // spring.ai.openai.* at a non-vision self-hosted model. `mutate()` keeps the auto-configured
+    // model's retry/observation/tool collaborators — only the endpoint differs.
     @Bean
     @Qualifier("imageChatClient")
     fun imageChatClient(
         @Qualifier("openAiChatModel") openAiChatModel: OpenAiChatModel,
         @Value("\${ai.image.model}") imageModel: String,
+        @Value("\${ai.image.base-url}") imageBaseUrl: String,
+        @Value("\${ai.image.api-key}") imageApiKey: String,
+        @Value("\${ai.image.connect-timeout-ms:10000}") connectTimeoutMs: Int,
+        @Value("\${ai.image.read-timeout-ms:60000}") readTimeoutMs: Int,
         @Value("classpath:/prompts/image-analysis-prompt.st") imagePrompt: org.springframework.core.io.Resource
-    ): ChatClient =
-        ChatClient.builder(openAiChatModel)
+    ): ChatClient {
+        val requestFactory = SimpleClientHttpRequestFactory()
+        requestFactory.setConnectTimeout(connectTimeoutMs)
+        requestFactory.setReadTimeout(readTimeoutMs)
+
+        val imageApi = OpenAiApi.builder()
+            .baseUrl(imageBaseUrl)
+            .apiKey(imageApiKey)
+            .restClientBuilder(RestClient.builder().requestFactory(requestFactory))
+            .build()
+
+        val imageChatModel = openAiChatModel.mutate().openAiApi(imageApi).build()
+
+        return ChatClient.builder(imageChatModel)
             .defaultSystem(imagePrompt)
             .defaultOptions(
                 OpenAiChatOptions.builder()
@@ -80,14 +103,23 @@ class AiConfig {
                     .build()
             )
             .build()
+    }
 
-    // Sets a 20-second read timeout on the RestClient.Builder used by Spring AI's OpenAiApi
+    // Sets the read/connect timeout on the RestClient.Builder used by Spring AI's OpenAiApi
     // (injected via ObjectProvider<RestClient.Builder> in OpenAiChatAutoConfiguration).
     // The TusUploaderService client overrides this factory explicitly with its own timeouts (3s/5s).
+    //
+    // Default (20s) suits fast Groq responses. Self-hosted reasoning models (e.g. Qwen via
+    // OpenWebUI) think for tens of seconds to minutes before answering, so the `local` profile
+    // raises ai.openai.read-timeout-ms accordingly.
     @Bean
-    fun groqReadTimeoutCustomizer(): RestClientCustomizer = RestClientCustomizer { builder ->
+    fun groqReadTimeoutCustomizer(
+        @Value("\${ai.openai.read-timeout-ms:20000}") readTimeoutMs: Int,
+        @Value("\${ai.openai.connect-timeout-ms:10000}") connectTimeoutMs: Int,
+    ): RestClientCustomizer = RestClientCustomizer { builder ->
         val factory = SimpleClientHttpRequestFactory()
-        factory.setReadTimeout(20_000) // 20 seconds
+        factory.setConnectTimeout(connectTimeoutMs)
+        factory.setReadTimeout(readTimeoutMs)
         builder.requestFactory(factory)
     }
 

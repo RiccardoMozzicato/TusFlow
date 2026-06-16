@@ -4,6 +4,9 @@ import type { ViewMode } from '../types'
 interface LibraryToolbarProps {
   /** Number of documents currently shown. */
   count: number
+  /** Current client-side search query. */
+  searchQuery: string
+  onSearchChange: (query: string) => void
   viewMode: ViewMode
   onViewModeChange: (mode: ViewMode) => void
 }
@@ -22,6 +25,8 @@ const VIEW_BUTTONS: ViewToggleButton[] = [
 // Library toolbar: local search, result count, and grid/list view toggle.
 export default function LibraryToolbar({
   count,
+  searchQuery,
+  onSearchChange,
   viewMode,
   onViewModeChange,
 }: LibraryToolbarProps) {
@@ -36,6 +41,8 @@ export default function LibraryToolbar({
         <input
           type="text"
           placeholder="Search within library..."
+          value={searchQuery}
+          onChange={(event) => onSearchChange(event.target.value)}
           className="w-full rounded-ds-md border border-ds-outline-variant bg-ds-surface py-2 pl-10 pr-4 font-ds-body text-ds-body-sm shadow-sm transition-all focus:border-ds-primary focus:outline-none focus:ring-2 focus:ring-ds-primary"
         />
       </div>

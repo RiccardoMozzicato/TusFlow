@@ -52,7 +52,10 @@ class SecurityConfig ( val crr : ClientRegistrationRepository){
                 .oauth2Login { oauth2 ->
                         oauth2.defaultSuccessUrl("/ui", true)
                 }
-            .csrf { it.ignoringRequestMatchers("/api/v1/outbox/**") }
+            // `/api/v1/jobs/ws/**` is the SockJS/STOMP endpoint: sockjs-client cannot attach the
+            // X-XSRF-TOKEN header to its transport POSTs, so exempt it from CSRF here. It stays
+            // protected by the authenticated session and the downstream JWT (TokenRelay).
+            .csrf { it.ignoringRequestMatchers("/api/v1/outbox/**", "/api/v1/jobs/ws/**") }
                 .logout { it.logoutSuccessHandler(oidcLogoutSuccessHandler()) }
 
         httpSecurity{

@@ -1,10 +1,37 @@
-import {
-  CATEGORIES,
-  DEPARTMENTS,
-  FILE_TYPE_OPTIONS,
-  TAGS,
-} from '../mockData'
+import { FILE_TYPE_OPTIONS } from '../mockData'
+import { FILE_TYPE_CONTENT_TYPE } from '../mappers'
+import { SharingScope } from '../documentsApi'
+import type { DocumentFilters } from '../documentsSlice'
 import Icon from '@/components/Icon'
+
+interface FilterPanelProps {
+  filters: DocumentFilters
+  onChange: (partial: Partial<DocumentFilters>) => void
+  onClear: () => void
+}
+
+// Only file types that map to a single exact MIME the backend can match on are
+// offered as filters (the `contentType` param is an exact equality check).
+const SELECTABLE_FILE_TYPES = FILE_TYPE_OPTIONS.filter(
+  (option) => option.type in FILE_TYPE_CONTENT_TYPE,
+)
+
+const SORT_NEWEST = 'createdAt,desc'
+const SORT_OLDEST = 'createdAt,asc'
+
+const SHARING_SCOPE_OPTIONS: { scope: SharingScope; label: string }[] = [
+  { scope: SharingScope.PERSONAL, label: 'Personal' },
+  { scope: SharingScope.DEPARTMENT, label: 'Department' },
+  { scope: SharingScope.ORGANIZATION, label: 'Organization' },
+]
+
+// Converts an ISO-8601 timestamp to the `YYYY-MM-DD` value an <input type=date>
+// expects, and back. Empty/invalid input clears the bound filter.
+function isoToDateInput(iso?: string): string {
+  if (!iso) return ''
+  const parsed = new Date(iso)
+  return Number.isNaN(parsed.getTime()) ? '' : iso.slice(0, 10)
+}
 
 // Small section wrapper to keep the panel's groups visually consistent.
 function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
@@ -16,9 +43,20 @@ function FilterGroup({ title, children }: { title: string; children: React.React
   )
 }
 
-// Left filter rail. Presentational for now (defaultChecked / styling only) — the
-// controls become stateful once the library query is wired to the file service.
-export default function FilterPanel() {
+// Left filter rail. Controlled by the documents slice's filter state — every
+// change bubbles up via onChange, and the page re-fetches page 0.
+export default function FilterPanel({ filters, onChange, onClear }: FilterPanelProps) {
+  const activeFileType = SELECTABLE_FILE_TYPES.find(
+    (option) => FILE_TYPE_CONTENT_TYPE[option.type] === filters.contentType,
+  )?.type
+
+  const toggleScope = (scope: SharingScope) => {
+    const next = filters.sharingScope.includes(scope)
+      ? filters.sharingScope.filter((s) => s !== scope)
+      : [...filters.sharingScope, scope]
+    onChange({ sharingScope: next })
+  }
+
   return (
     <aside className="sticky top-0 flex w-64 shrink-0 flex-col gap-6 self-start rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6">
       <div className="flex items-center justify-between border-b border-ds-outline-variant pb-3">
@@ -27,70 +65,99 @@ export default function FilterPanel() {
         </h3>
         <button
           type="button"
+          onClick={onClear}
           className="font-ds-label text-ds-label-sm text-ds-secondary transition-colors hover:text-ds-primary"
         >
           Clear All
         </button>
       </div>
 
-      <FilterGroup title="Category">
-        {CATEGORIES.map((category) => (
-          <label
-            key={category.id}
-            className="group flex cursor-pointer items-center gap-3"
-          >
+      <FilterGroup title="File Type">
+        <div className="grid grid-cols-2 gap-3">
+          {SELECTABLE_FILE_TYPES.map((option) => {
+            const isActive = activeFileType === option.type
+            return (
+              <button
+                key={option.type}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() =>
+                  onChange({
+                    contentType: isActive ? undefined : FILE_TYPE_CONTENT_TYPE[option.type],
+                  })
+                }
+                className={`flex cursor-pointer items-center gap-1 rounded-ds border px-2 py-1.5 transition-colors ${
+                  isActive
+                    ? 'border-ds-primary bg-ds-primary-fixed'
+                    : 'border-transparent bg-ds-surface-container hover:border-ds-outline-variant'
+                }`}
+              >
+                <Icon name={option.icon} className={`text-[16px] ${option.iconClassName}`} />
+                <span className="font-ds-label text-ds-label-sm text-ds-on-surface">
+                  {option.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </FilterGroup>
+
+      <FilterGroup title="Created Date">
+        <label className="flex flex-col gap-1">
+          <span className="font-ds-body text-ds-body-sm text-ds-secondary">From</span>
+          <input
+            type="date"
+            value={isoToDateInput(filters.dateFrom)}
+            max={isoToDateInput(filters.dateTo) || undefined}
+            onChange={(event) =>
+              onChange({
+                dateFrom: event.target.value ? `${event.target.value}T00:00:00Z` : undefined,
+              })
+            }
+            className="w-full rounded-ds-md border border-ds-outline-variant bg-ds-surface-container-lowest px-3 py-2 font-ds-body text-ds-body-sm outline-none focus:border-ds-primary focus:ring-1 focus:ring-ds-primary"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="font-ds-body text-ds-body-sm text-ds-secondary">To</span>
+          <input
+            type="date"
+            value={isoToDateInput(filters.dateTo)}
+            min={isoToDateInput(filters.dateFrom) || undefined}
+            onChange={(event) =>
+              onChange({
+                dateTo: event.target.value ? `${event.target.value}T23:59:59Z` : undefined,
+              })
+            }
+            className="w-full rounded-ds-md border border-ds-outline-variant bg-ds-surface-container-lowest px-3 py-2 font-ds-body text-ds-body-sm outline-none focus:border-ds-primary focus:ring-1 focus:ring-ds-primary"
+          />
+        </label>
+      </FilterGroup>
+
+      <FilterGroup title="Sharing Scope">
+        {SHARING_SCOPE_OPTIONS.map(({ scope, label }) => (
+          <label key={scope} className="group flex cursor-pointer items-center gap-3">
             <input
               type="checkbox"
-              defaultChecked={category.defaultChecked}
+              checked={filters.sharingScope.includes(scope)}
+              onChange={() => toggleScope(scope)}
               className="h-4 w-4 rounded border-ds-outline-variant bg-ds-surface text-ds-primary focus:ring-ds-primary"
             />
             <span className="font-ds-body text-ds-body-sm text-ds-secondary transition-colors group-hover:text-ds-on-surface">
-              {category.label}
+              {label}
             </span>
           </label>
         ))}
       </FilterGroup>
 
-      <FilterGroup title="Department">
-        <select className="w-full rounded-ds-md border border-ds-outline-variant bg-ds-surface-container-lowest px-3 py-2 font-ds-body text-ds-body-sm outline-none focus:border-ds-primary focus:ring-1 focus:ring-ds-primary">
-          {DEPARTMENTS.map((department) => (
-            <option key={department}>{department}</option>
-          ))}
+      <FilterGroup title="Sort">
+        <select
+          value={filters.sort}
+          onChange={(event) => onChange({ sort: event.target.value })}
+          className="w-full rounded-ds-md border border-ds-outline-variant bg-ds-surface-container-lowest px-3 py-2 font-ds-body text-ds-body-sm outline-none focus:border-ds-primary focus:ring-1 focus:ring-ds-primary"
+        >
+          <option value={SORT_NEWEST}>Newest first</option>
+          <option value={SORT_OLDEST}>Oldest first</option>
         </select>
-      </FilterGroup>
-
-      <FilterGroup title="File Type">
-        <div className="grid grid-cols-2 gap-3">
-          {FILE_TYPE_OPTIONS.map((option) => (
-            <label
-              key={option.type}
-              className="flex cursor-pointer items-center gap-1 rounded-ds border border-transparent bg-ds-surface-container px-2 py-1.5 transition-colors hover:border-ds-outline-variant"
-            >
-              <Icon name={option.icon} className={`text-[16px] ${option.iconClassName}`} />
-              <span className="font-ds-label text-ds-label-sm text-ds-on-surface">
-                {option.label}
-              </span>
-            </label>
-          ))}
-        </div>
-      </FilterGroup>
-
-      <FilterGroup title="Tags">
-        <div className="flex flex-wrap gap-1">
-          {TAGS.map((tag) => (
-            <button
-              key={tag.id}
-              type="button"
-              className={`rounded-ds-full px-2 py-1 font-ds-label text-ds-label-sm transition-colors ${
-                tag.defaultSelected
-                  ? 'bg-ds-primary text-ds-on-primary'
-                  : 'bg-ds-surface-container-high text-ds-on-surface hover:bg-ds-outline-variant'
-              }`}
-            >
-              {tag.label}
-            </button>
-          ))}
-        </div>
       </FilterGroup>
     </aside>
   )

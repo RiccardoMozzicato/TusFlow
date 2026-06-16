@@ -10,8 +10,3 @@ class AIAnalysisUnsupportedException(
     message: String,
     cause: Throwable? = null
 ) : Exception(message, cause)
-
-class UnsupportedContentTypeException(
-    message: String,
-    cause: Throwable? = null
-) : Exception(message, cause)

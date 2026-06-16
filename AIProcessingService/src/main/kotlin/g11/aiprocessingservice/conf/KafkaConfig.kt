@@ -10,15 +10,19 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.annotation.EnableKafka
+import org.springframework.kafka.annotation.EnableKafkaRetryTopic
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
 import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.*
 import org.springframework.kafka.listener.ContainerProperties
 import org.springframework.kafka.listener.DefaultErrorHandler
+import org.springframework.kafka.retrytopic.RetryTopicSchedulerWrapper
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.util.backoff.BackOff
 
 @EnableKafka
+@EnableKafkaRetryTopic
 @Configuration
 class KafkaConfig (
     @Value ("\${kafka.bootstrap-servers}")  private val bootstrapAddress: String,
@@ -61,29 +65,27 @@ class KafkaConfig (
     }
 
     /**
-     * Creates the Dead Letter Topic (DLT) automatically on application startup.
-     * Topic: file-outbox-dlt
-     * Partitions: 1
-     * Replication factor: 1
-     *
-     * Note: If Kafka is not available at startup, the topic creation will fail silently.
-     * The topic will be created on first use if auto.create.topics.enable=true in Kafka.
-     */
-    @Bean
-    fun deadLetterTopic(): NewTopic {
-        return TopicBuilder.name("file-outbox-dlt")
-            .partitions(1)
-            .replicas(1)
-            .build()
-    }
-
-    /**
      * Creates the file-analyzed topic for downstream embedding processing
      */
     @Bean
     fun fileAnalyzedTopic(): NewTopic {
         return TopicBuilder.name("file-analyzed")
             .partitions(3)
+            .replicas(1)
+            .build()
+    }
+
+    /**
+     * Declares the file-outbox topic (produced by Debezium) with multiple partitions so the
+     * MetadataProcessor listener can consume it with concurrency > 1 and analyze several files
+     * in parallel. KafkaAdmin creates it if missing and, on an already-existing topic with fewer
+     * partitions, increases the partition count to this value on startup. Debezium keys each
+     * outbox event by its unique row id, so events spread evenly across partitions.
+     */
+    @Bean
+    fun fileOutboxTopic(): NewTopic {
+        return TopicBuilder.name("file-outbox")
+            .partitions(FILE_OUTBOX_PARTITIONS)
             .replicas(1)
             .build()
     }
@@ -153,16 +155,56 @@ class KafkaConfig (
     // Factory for Debezium-sourced topics (file-outbox).
     // Debezium never sets Kafka headers, so isObservationEnabled would create orphan root spans.
     // Trace propagation is handled manually inside the listener via Propagator.extract().
+    //
+    // No common error handler is set here on purpose: the listener uses @RetryableTopic, whose
+    // non-blocking retry infrastructure installs its own error handler (forwards failures to a
+    // retry topic instead of blocking the consumer thread). AckMode.RECORD commits each record
+    // after the listener returns — the listener no longer acknowledges manually.
     @Bean
-    fun debeziumKafkaListenerContainerFactory(
-        errorHandler: DefaultErrorHandler
-    ): ConcurrentKafkaListenerContainerFactory<String, String> {
+    fun debeziumKafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
         factory.consumerFactory = consumerFactory()
-        factory.containerProperties.ackMode = ContainerProperties.AckMode.MANUAL
+        factory.containerProperties.ackMode = ContainerProperties.AckMode.RECORD
         // Must be explicitly false — Spring Boot auto-config sets it to true on all factories
         factory.containerProperties.isObservationEnabled = false
-        factory.setCommonErrorHandler(errorHandler)
         return factory
+    }
+
+    // Factory for the embedding pipeline listeners (file-analyzed, embeddings-batch), which also use
+    // @RetryableTopic for non-blocking retries — so, like the Debezium factory, it sets no common
+    // error handler and commits per record (AckMode.RECORD) instead of relying on manual acks.
+    // Observation stays enabled: these messages carry a traceparent header, so spans link correctly.
+    @Bean
+    fun embeddingKafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
+        val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
+        factory.consumerFactory = consumerFactory()
+        factory.containerProperties.ackMode = ContainerProperties.AckMode.RECORD
+        factory.containerProperties.isObservationEnabled = true
+        return factory
+    }
+
+    /**
+     * Scheduler required by @RetryableTopic's non-blocking retry infrastructure: it parks records
+     * on retry topics until their delay elapses, then resumes consumption. Without a scheduler bean
+     * the retry-topic bootstrapping fails to start.
+     *
+     * Wrapped in a [RetryTopicSchedulerWrapper] (rather than exposed as a bare [TaskScheduler] bean)
+     * so it is unambiguous: enabling the STOMP WebSocket broker registers its own
+     * `messageBrokerTaskScheduler`, and the retry-topic backoff manager requires a *single*
+     * TaskScheduler. The wrapper lets Spring Kafka pick this one specifically and manages its
+     * lifecycle (initialize/shutdown).
+     */
+    @Bean
+    fun retryTopicSchedulerWrapper(): RetryTopicSchedulerWrapper {
+        val scheduler = ThreadPoolTaskScheduler().apply {
+            poolSize = 1
+            setThreadNamePrefix("retry-topic-scheduler-")
+        }
+        return RetryTopicSchedulerWrapper(scheduler)
+    }
+
+    companion object {
+        /** Partition count for the file-outbox topic; also the upper bound on listener concurrency. */
+        const val FILE_OUTBOX_PARTITIONS = 3
     }
 }

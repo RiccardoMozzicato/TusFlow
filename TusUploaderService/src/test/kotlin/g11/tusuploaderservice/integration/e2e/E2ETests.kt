@@ -352,7 +352,7 @@ class E2ETests : IntegrationTest() {
     )
 
     @Test
-    fun `getFilesMetadata returns paginated list of files with Keycloak auth`() {
+    fun `getFiles returns paginated list of files with Keycloak auth`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -373,7 +373,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata filters by contentType with Keycloak auth`() {
+    fun `getFiles filters by contentType with Keycloak auth`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -1170,7 +1170,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata filters by date range`() {
+    fun `getFiles filters by date range`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
         // Use a date range that includes the test file created in @BeforeEach (current date)
         val dateFrom = "2020-01-01T00:00:00Z"
@@ -1200,7 +1200,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata sorts by field and direction`() {
+    fun `getFiles sorts by field and direction`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -1221,7 +1221,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata sorts by createdAt ascending`() {
+    fun `getFiles sorts by createdAt ascending`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val file1Id = UUID.randomUUID()
@@ -1264,7 +1264,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata sorts by createdAt descending`() {
+    fun `getFiles sorts by createdAt descending`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val file1Id = UUID.randomUUID()
@@ -1304,7 +1304,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata sorts by lastFilename ascending`() {
+    fun `getFiles sorts by lastFilename ascending`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val fileAId = UUID.randomUUID()
@@ -1344,7 +1344,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata sorts by lastFilename descending`() {
+    fun `getFiles sorts by lastFilename descending`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val fileXId = UUID.randomUUID()
@@ -1384,7 +1384,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata uses default sort when not specified`() {
+    fun `getFiles uses default sort when not specified`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -1405,7 +1405,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata handles sort with only field no direction`() {
+    fun `getFiles handles sort with only field no direction`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -1426,7 +1426,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata handles sort with uppercase ASC`() {
+    fun `getFiles handles sort with uppercase ASC`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -1447,7 +1447,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata handles sort with invalid direction`() {
+    fun `getFiles handles sort with invalid direction`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -1468,7 +1468,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata handles empty sort parameter`() {
+    fun `getFiles handles empty sort parameter`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -1489,7 +1489,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata handles sort with only comma`() {
+    fun `getFiles handles sort with only comma`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -1510,7 +1510,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata combines all filters together`() {
+    fun `getFiles combines all filters together`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
         val dateFrom = "2020-01-01T00:00:00Z"
         val dateTo = "2030-12-31T23:59:59Z"
@@ -1535,7 +1535,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata filters by dateFrom only`() {
+    fun `getFiles filters by dateFrom only`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
         val dateFrom = "2020-01-01T00:00:00Z"
 
@@ -1559,7 +1559,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata filters by dateTo only`() {
+    fun `getFiles filters by dateTo only`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
         val dateTo = "2030-12-31T23:59:59Z"
 
@@ -1583,7 +1583,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata uses custom page and size`() {
+    fun `getFiles uses custom page and size`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         // Create enough files for pagination
@@ -1632,7 +1632,7 @@ class E2ETests : IntegrationTest() {
     }
 
     @Test
-    fun `getFilesMetadata with no filters uses all defaults`() {
+    fun `getFiles with no filters uses all defaults`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         val headers = HttpHeaders().apply {
@@ -3407,7 +3407,7 @@ class E2ETests : IntegrationTest() {
      * Expected: Files from other organization should not appear in list
      */
     @Test
-    fun `getFilesMetadata filters by current user organization`() {
+    fun `getFiles filters by current user organization`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
 
         // Create file in "Test Organization"

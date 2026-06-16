@@ -7,8 +7,12 @@ import g11.aiprocessingservice.repositories.FileVersionEmbeddingRepository
 import org.slf4j.LoggerFactory
 import org.springframework.ai.document.Document
 import org.springframework.ai.vectorstore.VectorStore
+import org.springframework.kafka.annotation.DltHandler
 import org.springframework.kafka.annotation.KafkaListener
-import org.springframework.kafka.support.Acknowledgment
+import org.springframework.kafka.annotation.RetryableTopic
+import org.springframework.kafka.support.KafkaHeaders
+import org.springframework.messaging.handler.annotation.Header
+import org.springframework.retry.annotation.Backoff
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -19,17 +23,41 @@ import java.util.UUID
 class EmbeddingGenerator(
     private val vectorStore: VectorStore,
     private val embeddingRepository: FileVersionEmbeddingRepository,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val deadLetterService: DeadLetterService,
 ) {
     private val log = LoggerFactory.getLogger(EmbeddingGenerator::class.java)
 
+    /**
+     * Drains the `embeddings-batch` dead-letter topic into the audit table once embedding-generation
+     * retries are exhausted.
+     */
+    @DltHandler
+    fun handleDlt(
+        message: String,
+        @Header(name = KafkaHeaders.DLT_EXCEPTION_FQCN, required = false) exceptionType: ByteArray?,
+        @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) exceptionMessage: ByteArray?,
+    ) {
+        deadLetterService.record("embeddings-batch", message, exceptionType, exceptionMessage)
+    }
+
+    // Non-blocking retry (see MetadataProcessor): a failed batch is parked on a retry topic rather
+    // than sleeping this consumer thread, then sent to embeddings-batch-dlt once attempts run out.
+    // Re-processing is safe — chunks are deduped by (fileVersionId, chunkIndex) before embedding.
+    @RetryableTopic(
+        attempts = "\${ai.retry.embedding-attempts:3}",
+        backoff = Backoff(delayExpression = "\${ai.retry.embedding-delay-ms:60000}"),
+        kafkaTemplate = "kafkaTemplate",
+        listenerContainerFactory = "embeddingKafkaListenerContainerFactory",
+    )
     @KafkaListener(
         topics = ["embeddings-batch"],
         groupId = "embedding-generator",
+        containerFactory = "embeddingKafkaListenerContainerFactory",
         concurrency = "3"  // 3 consumer in parallelo
     )
     @Transactional
-    fun generateEmbeddings(message: String, acknowledgment: Acknowledgment) {
+    fun generateEmbeddings(message: String) {
         val batch = objectMapper.readValue(message, ChunkBatchEvent::class.java)
 
         log.info("Generating embeddings for batch ${batch.batchNumber}/${batch.totalBatches} " +
@@ -87,8 +115,8 @@ class EmbeddingGenerator(
         }
 
         log.info("Completed embedding batch ${batch.batchNumber} for fileVersion ${batch.fileVersionId}")
-
-        //ACK manuale SOLO dopo processing completo con successo
-        acknowledgment.acknowledge()
+        // No manual ack: the container commits per record on normal return (AckMode.RECORD). If a
+        // chunk threw above it was caught and logged, so the batch still completes and commits; only
+        // an exception escaping this method triggers @RetryableTopic.
     }
 }

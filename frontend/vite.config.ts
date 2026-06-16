@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -17,6 +18,11 @@ export default defineConfig({
   // to this server — with '/ui/' the bare /ui would 404 after login.
   base: '/ui',
   plugins: [react(), tailwindcss()],
+  // sockjs-client references Node's `global`, which doesn't exist in the browser
+  // and Vite doesn't polyfill. Alias it to globalThis so the SockJS transport loads.
+  define: {
+    global: 'globalThis',
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -32,5 +38,11 @@ export default defineConfig({
       protocol: 'ws',
       clientPort: 5173,
     },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: false,
   },
 })

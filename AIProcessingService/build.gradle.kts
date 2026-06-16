@@ -48,6 +48,9 @@ dependencies {
     // PDF Processing
     implementation("org.apache.pdfbox:pdfbox:2.0.31")
 
+    // Word (.docx) processing
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
+
     //Security
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
     implementation("org.springframework.boot:spring-boot-starter-security")
@@ -55,12 +58,15 @@ dependencies {
 
     //Web
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     //Kafka
     implementation("org.springframework.kafka:spring-kafka")
+    // Required by @RetryableTopic's @Backoff (spring-retry is an optional dependency of spring-kafka)
+    implementation("org.springframework.retry:spring-retry")
 
     // unit testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")

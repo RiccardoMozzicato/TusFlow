@@ -1,5 +1,7 @@
 package g11.aiprocessingservice.unit.services
 
+import g11.aiprocessingservice.conf.SupportedContentTypeProperties
+import g11.aiprocessingservice.dto.JobDTO
 import g11.aiprocessingservice.dto.jobStatus
 import g11.aiprocessingservice.entities.Job
 import g11.aiprocessingservice.repositories.JobRepository
@@ -9,15 +11,16 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.core.io.Resource
-import org.springframework.kafka.support.Acknowledgment
 import org.springframework.web.client.RestClient
 import org.springframework.http.HttpStatus
 import org.springframework.web.client.RestClientResponseException
 import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class KafkaListenerTest {
     private lateinit var kafkaListener: MetadataProcessor
@@ -30,7 +33,6 @@ class KafkaListenerTest {
     private lateinit var jobStatusService: JobStatusServiceInterface
     private lateinit var retryJobService: RetryJobService
     private lateinit var promptTemplate: Resource
-    private lateinit var acknowledgment: Acknowledgment
     private lateinit var kafkaTemplate: org.springframework.kafka.core.KafkaTemplate<String, String>
     private lateinit var tracer: io.micrometer.tracing.Tracer
     private lateinit var propagator: io.micrometer.tracing.propagation.Propagator
@@ -50,12 +52,15 @@ class KafkaListenerTest {
         jobStatusService = mockk()
         retryJobService = mockk(relaxed = true)
         promptTemplate = mockk()
-        acknowledgment = mockk(relaxed = true)
         kafkaTemplate = mockk(relaxed = true)
         tracer = mockk(relaxed = true)
         propagator = mockk(relaxed = true)
 
-        kafkaListener = spyk(MetadataProcessor(
+        kafkaListener = spyk(buildProcessor(simulateLlmOffline = false), recordPrivateCalls = true)
+    }
+
+    private fun buildProcessor(simulateLlmOffline: Boolean, maxAutomaticRetries: Int = 3) =
+        MetadataProcessor(
             jobRepository = jobRepository,
             authService = authService,
             fileServiceClient = fileServiceClient,
@@ -67,14 +72,27 @@ class KafkaListenerTest {
             tracer = mockk(relaxed = true),
             propagator = mockk(relaxed = true),
             promptTemplate = promptTemplate,
+            chatModelName = "test-chat-model",
+            pdfModelName = "test-pdf-model",
+            imageModelName = "test-image-model",
             maxContentChars = 15000,
             beginningPercentage = 70,
-            maxAutomaticRetries = 5,
+            maxAutomaticRetries = maxAutomaticRetries,
+            // Zero base delay: the backoff loop runs its full iteration count without any real
+            // sleep, so the test exercises the retry logic instantly (no Thread mocking needed).
+            analysisBackoffBaseMs = 0,
+            analysisBackoffCapMs = 0,
             maxUserRetries = 4,
-            simulateLlmOffline = false,
-            retryJobService = retryJobService
-        ), recordPrivateCalls = true)
-    }
+            simulateLlmOffline = simulateLlmOffline,
+            retryJobService = retryJobService,
+            textExtractionService = TextExtractionService(),
+            supportedContentTypes = SupportedContentTypes(
+                SupportedContentTypeProperties(
+                    prefixes = listOf("text/", "image/"),
+                    types = listOf("application/pdf"),
+                ),
+            ),
+        )
 
     @Test
     fun `onMessage should successfully process new job`() {
@@ -97,10 +115,9 @@ class KafkaListenerTest {
         } returns null
 
         // Act
-        kafkaListener.onMessage(kafkaMessage, acknowledgment)
+        kafkaListener.onMessage(kafkaMessage)
 
         // Assert
-        verify { acknowledgment.acknowledge() }
         verify { jobRepository.save(any<Job>()) }
         verify { kafkaListener.processJob(any(), testJobId) }
     }
@@ -129,10 +146,9 @@ class KafkaListenerTest {
         every { jobRepository.findById(testJobId) } returns Optional.of(existingJob)
 
         // Act
-        kafkaListener.onMessage(kafkaMessage, acknowledgment)
+        kafkaListener.onMessage(kafkaMessage)
 
         // Assert
-        verify { acknowledgment.acknowledge() }
         verify(exactly = 0) { kafkaListener.processJob(any(), any()) }
         verify(exactly = 0) { jobRepository.save(any<Job>()) }
     }
@@ -162,10 +178,9 @@ class KafkaListenerTest {
         every { kafkaListener.processJob(any(), any()) } returns null
 
         // Act
-        kafkaListener.onMessage(kafkaMessage, acknowledgment)
+        kafkaListener.onMessage(kafkaMessage)
 
         // Assert
-        verify { acknowledgment.acknowledge() }
         verify { kafkaListener.processJob(any(), testJobId) }
         verify(exactly = 0) { jobRepository.save(any<Job>()) } // No new job created
     }
@@ -177,10 +192,9 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<Exception> {
-            kafkaListener.onMessage(invalidKafkaMessage, acknowledgment)
+            kafkaListener.onMessage(invalidKafkaMessage)
         }
 
-        verify(exactly = 0) { acknowledgment.acknowledge() }
         verify(exactly = 0) { kafkaListener.processJob(any(), any()) }
     }
 
@@ -199,15 +213,14 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<RuntimeException> {
-            kafkaListener.onMessage(kafkaMessage, acknowledgment)
+            kafkaListener.onMessage(kafkaMessage)
         }
 
-        verify(exactly = 0) { acknowledgment.acknowledge() }
         verify(exactly = 0) { kafkaListener.processJob(any(), any()) }
     }
 
     @Test
-    fun `onMessage should handle first failure and retry`() {
+    fun `onMessage should mark job FAILED and rethrow on processing failure`() {
         // Arrange
         val kafkaMessage = """
             {
@@ -236,18 +249,19 @@ class KafkaListenerTest {
         every { kafkaListener.processJob(any(), any()) } throws RuntimeException("Processing failed")
         every { jobStatusService.markJobAsFailed(any(), any(), any()) } just Runs
 
-        // Act & Assert
+        // Act & Assert: the exception propagates so @RetryableTopic can route it to the retry topic/DLT.
         assertFailsWith<RuntimeException> {
-            kafkaListener.onMessage(kafkaMessage, acknowledgment)
+            kafkaListener.onMessage(kafkaMessage)
         }
 
-        verify { acknowledgment.acknowledge() }
         verify { jobStatusService.markJobAsFailed(testJobId, any(), "Processing failed") }
     }
 
     @Test
-    fun `onMessage should send to DLT on retry failure`() {
-        // Arrange
+    fun `onMessage should resume and reprocess a previously FAILED job`() {
+        // A @RetryableTopic redelivery carries the same file-outbox message for a job we already
+        // marked FAILED. createJobIfNotExists must reset it to PENDING and reprocess, instead of
+        // skipping it (the old behavior, which silently no-op'd every retry).
         val kafkaMessage = """
             {
                 "event_type": "FILE_INSERTED",
@@ -266,43 +280,26 @@ class KafkaListenerTest {
             status = jobStatus.FAILED // Already failed once
         )
 
-        // For a retry scenario, the job already exists with FAILED status
-        // createJobIfNotExists finds it and returns the jobId (to resume)
-        // Then processJob is called and fails again
-        // The exception handler checks the status and sees it's FAILED (retry)
+        // Let the real createJobIfNotExists run: it must see FAILED and reset to PENDING.
         every { jobRepository.findById(testJobId) } returns Optional.of(failedJob)
         every { jobRepository.save(any<Job>()) } returns failedJob
-
-        // Don't mock createJobIfNotExists - let it run and see that job exists with FAILED status
-        // According to the code, if job exists but is not PENDING, it returns null
-        // But we need to test the retry scenario, so we need the job to have PENDING status
-        // Let's change the job status to PENDING to simulate a stuck retry
-        val pendingJob = Job(
-            jobid = testJobId,
-            fileid = testFileId,
-            version = 1,
-            type = "FILE_ANALYSIS",
-            attempts = 1u,
-            payload = mapOf(),
-            status = jobStatus.PENDING // Stuck in PENDING from previous attempt
-        )
-
-        every { jobRepository.findById(testJobId) } returns Optional.of(pendingJob) andThen Optional.of(failedJob)
 
         every { kafkaListener.processJob(any(), any()) } throws RuntimeException("Processing failed again")
         every { jobStatusService.markJobAsFailed(any(), any(), any()) } just Runs
 
         // Act & Assert
         assertFailsWith<RuntimeException> {
-            kafkaListener.onMessage(kafkaMessage, acknowledgment)
+            kafkaListener.onMessage(kafkaMessage)
         }
 
-        verify { acknowledgment.acknowledge() }
-        verify { jobStatusService.markJobAsFailed(testJobId, any(), "Retry failed: Processing failed again") }
+        // The FAILED job was reset to PENDING (resumed) and reprocessed, then re-failed.
+        verify { jobRepository.save(match<Job> { it.status == jobStatus.PENDING }) }
+        verify { kafkaListener.processJob(any(), testJobId) }
+        verify { jobStatusService.markJobAsFailed(testJobId, any(), "Processing failed again") }
     }
 
     @Test
-    fun `onMessage should acknowledge even when job is null`() {
+    fun `onMessage should skip job that is already PROCESSING`() {
         // Arrange
         val kafkaMessage = """
             {
@@ -325,10 +322,9 @@ class KafkaListenerTest {
         every { jobRepository.findById(testJobId) } returns Optional.of(processedJob)
 
         // Act
-        kafkaListener.onMessage(kafkaMessage, acknowledgment)
+        kafkaListener.onMessage(kafkaMessage)
 
-        // Assert
-        verify { acknowledgment.acknowledge() }
+        // Assert: PROCESSING is neither PENDING nor FAILED, so it is skipped (not reprocessed).
         verify(exactly = 0) { kafkaListener.processJob(any(), any()) }
     }
 
@@ -364,10 +360,9 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<IllegalStateException> {
-            kafkaListener.onMessage(kafkaMessage, acknowledgment)
+            kafkaListener.onMessage(kafkaMessage)
         }
 
-        verify { acknowledgment.acknowledge() }
         verify { jobStatusService.markJobAsFailed(testJobId, any(), "AI returned incomplete metadata") }
     }
 
@@ -406,11 +401,122 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<RuntimeException> {
-            kafkaListener.onMessage(kafkaMessage, acknowledgment)
+            kafkaListener.onMessage(kafkaMessage)
         }
 
-        verify { acknowledgment.acknowledge() }
         verify { jobStatusService.markJobAsFailed(testJobId, any(), "Unknown error") }
+    }
+
+    @Test
+    fun `processJob marks UNSUPPORTED and skips download for an unsupported content type`() {
+        // Arrange: a .dmg-style binary that the allow-list rejects.
+        val job = JobDTO(
+            id = testJobId,
+            fileId = testFileId,
+            version = 1L,
+            filename = "disk.dmg",
+            contentType = "application/x-apple-diskimage",
+            ownerUserId = testOwnerUserId,
+            fileVersionId = 1L,
+        )
+        every { jobStatusService.markJobAsUnsupported(any(), any(), any()) } just Runs
+
+        // Act
+        val result = kafkaListener.processJob(job, testJobId)
+
+        // Assert: marked UNSUPPORTED, no bytes downloaded, no metadata returned.
+        assertNull(result)
+        verify { jobStatusService.markJobAsUnsupported(testJobId, job, any()) }
+        verify(exactly = 0) { kafkaListener.downloadFile(any(), any()) }
+    }
+
+    @Test
+    fun `handleDlt is log-only and does not throw (terminal dead-lettering happens on user exhaustion)`() {
+        // Automatic Kafka exhaustion is NOT terminal for file analysis: the job stays FAILED for the
+        // user to retry, so handleDlt only logs — it must not throw and writes no audit row here.
+        kafkaListener.handleDlt(
+            "payload-json",
+            "java.lang.IllegalStateException".toByteArray(),
+            "boom".toByteArray(),
+        )
+    }
+
+    @Test
+    fun `onMessage dead-letters the job once the user retry budget is exhausted`() {
+        val kafkaMessage = """
+            {
+                "event_type": "FILE_INSERTED",
+                "id": "$testJobId",
+                "payload": "{\"id\":\"$testJobId\",\"fileId\":\"$testFileId\",\"version\":1,\"filename\":\"test.txt\",\"contentType\":\"text/plain\",\"ownerUserId\":\"$testOwnerUserId\",\"fileVersionId\":1}"
+            }
+        """.trimIndent()
+
+        // attempts == cap (maxUserRetries = 4): the user has spent all retries, so the next failure
+        // is terminal and must dead-letter rather than mark FAILED.
+        val exhaustedJob = Job(
+            jobid = testJobId,
+            fileid = testFileId,
+            version = 1,
+            type = "FILE_ANALYSIS",
+            attempts = 4u,
+            payload = mapOf("error" to "prior failure"),
+            status = jobStatus.PENDING,
+        )
+        every { jobRepository.findById(testJobId) } returns Optional.of(exhaustedJob)
+        every { jobRepository.save(any<Job>()) } returns exhaustedJob
+        every { kafkaListener.createJobIfNotExists(any()) } returns testJobId
+        every { kafkaListener.processJob(any(), any()) } throws RuntimeException("Processing failed")
+        every { jobStatusService.markJobAsDeadLettered(any(), any(), any(), any()) } just Runs
+
+        assertFailsWith<RuntimeException> { kafkaListener.onMessage(kafkaMessage) }
+
+        verify { jobStatusService.markJobAsDeadLettered(testJobId, any(), "Processing failed", any()) }
+        verify(exactly = 0) { jobStatusService.markJobAsFailed(any(), any(), any()) }
+    }
+
+    @Test
+    fun `first analysis runs the full backoff loop, a previously-failed job runs a single attempt`() {
+        // The processor is built with analysisBackoffBaseMs = 0, so the backoff loop runs its full
+        // iteration count without any real sleep — no need to mock java.lang.Thread (doing so
+        // destabilizes the JVM instrumentation agent and hangs the worker).
+        // simulateLlmOffline makes every attempt fail before the AI client is touched, so the
+        // count of stream.reset() calls (only on attempts after the first) reveals the loop count.
+        val processor = spyk(buildProcessor(simulateLlmOffline = true), recordPrivateCalls = true)
+        val job = JobDTO(
+            id = testJobId,
+            fileId = testFileId,
+            version = 1L,
+            filename = "n.txt",
+            contentType = "text/plain",
+            ownerUserId = testOwnerUserId,
+            fileVersionId = 1L,
+        )
+
+        // Fresh upload (no "error" in payload) → 3 attempts → reset() between them (2x).
+        val freshStream = mockk<InputStream>(relaxed = true)
+        every { freshStream.markSupported() } returns true
+        every { processor.downloadFile(testFileId, 1L) } returns freshStream
+        every { jobRepository.findById(testJobId) } returns Optional.of(
+            Job(
+                jobid = testJobId, fileid = testFileId, version = 1, type = "FILE_ANALYSIS",
+                attempts = 0u, payload = emptyMap(), status = jobStatus.PENDING,
+            ),
+        )
+        assertFailsWith<RuntimeException> { processor.processJob(job, testJobId) }
+        verify(exactly = 2) { freshStream.reset() }
+
+        // Previously failed (payload carries "error") → single immediate attempt → no reset.
+        val retryStream = mockk<InputStream>(relaxed = true)
+        every { retryStream.markSupported() } returns true
+        every { processor.downloadFile(testFileId, 1L) } returns retryStream
+        every { jobRepository.findById(testJobId) } returns Optional.of(
+            Job(
+                jobid = testJobId, fileid = testFileId, version = 1, type = "FILE_ANALYSIS",
+                attempts = 1u, payload = mapOf("error" to "prior"), status = jobStatus.PENDING,
+            ),
+        )
+        assertFailsWith<RuntimeException> { processor.processJob(job, testJobId) }
+        verify(exactly = 0) { retryStream.reset() }
     }
 
     @Test

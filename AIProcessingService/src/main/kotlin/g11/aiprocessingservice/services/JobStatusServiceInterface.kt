@@ -23,5 +23,12 @@ interface JobStatusServiceInterface {
      * Creates an ANALYSIS_FAILED outbox event.
      */
     fun markJobAsFailed(jobId: UUID, job: JobDTO, errorMessage: String)
+
+    /**
+     * Terminal "given up" transition: the automatic Kafka retry and all the user's manual retries
+     * have failed. Sets the job to DEAD_LETTERED (kept, but excluded from the retryable failed list)
+     * and writes a dead_letter_events audit row.
+     */
+    fun markJobAsDeadLettered(jobId: UUID, job: JobDTO, errorMessage: String, exceptionType: String?)
 }
 

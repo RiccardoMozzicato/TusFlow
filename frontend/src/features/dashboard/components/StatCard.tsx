@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import Icon from '@/components/Icon'
 import type { StatCard as StatCardData } from '../types'
 
@@ -9,9 +10,17 @@ export default function StatCard({
   icon,
   iconClassName,
   progress,
+  to,
 }: StatCardData) {
-  return (
-    <div className="relative flex flex-col gap-4 overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-5 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.02)]">
+  // A linked card gets affordances (hover ring + cursor); plain cards stay static.
+  const base =
+    'relative flex flex-col gap-4 overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-5 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.02)]'
+  const className = to
+    ? `${base} cursor-pointer transition-shadow hover:border-ds-primary/40 hover:shadow-md`
+    : base
+
+  const body = (
+    <>
       {progress !== undefined ? (
         <div className="absolute bottom-0 left-0 h-1 w-full bg-ds-surface-variant">
           <div
@@ -48,6 +57,14 @@ export default function StatCard({
           </span>
         ) : null}
       </div>
-    </div>
+    </>
+  )
+
+  return to ? (
+    <Link to={to} className={className}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
   )
 }

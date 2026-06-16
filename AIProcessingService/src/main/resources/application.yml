@@ -57,8 +57,14 @@ spring:
 # AI Document Processing Configuration
 ai:
   retry:
-    max-automatic-retries: 5
+    # Internal exponential-backoff attempts on the FIRST upload analysis. A retry (Kafka redelivery
+    # or a user retry) runs a single immediate attempt instead — see MetadataProcessor.
+    max-automatic-retries: 3
+    # Manual retries the user may trigger after the automatic phase is exhausted.
     max-user-retries: 4
+    # Kafka @RetryableTopic: 2 deliveries (original + 1 redelivery), with no backoff between them.
+    kafka-attempts: 2
+    kafka-delay-ms: 30000
     simulate-llm-offline: false
 
   # Model for general chat (default AI interactions)
@@ -72,6 +78,12 @@ ai:
   # Llama 4 Scout supports image input via Groq's OpenAI-compatible API
   image:
     model: ${IMAGE_MODEL:meta-llama/llama-4-scout-17b-16e-instruct}
+    # Vision analysis always targets Groq, independent of spring.ai.openai.* — so it keeps
+    # working when a profile (e.g. `local`) points chat/pdf at a non-vision self-hosted model.
+    base-url: ${IMAGE_BASE_URL:${GROQ_BASE_URL}}
+    api-key: ${IMAGE_API_KEY:${GROQ_API_KEY}}
+    connect-timeout-ms: 10000
+    read-timeout-ms: 60000
 
   document:
     # Maximum characters to send to AI (to avoid token limits)
@@ -84,6 +96,23 @@ ai:
 
     # When using "beginning-end", percentage to take from beginning
     beginning-percentage: 70
+
+  analysis:
+    # Content types accepted for AI analysis. Anything else is marked UNSUPPORTED:
+    # the file is still stored and downloadable, it just isn't analyzed.
+    supported-content-types:
+      prefixes:        # MIME family prefixes
+        - text/
+        - image/
+      types:           # exact MIME types (base type, charset ignored)
+        - application/pdf
+        - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        - application/json
+        - application/xml
+        - application/xhtml+xml
+        - application/yaml
+        - application/x-yaml
+        - application/csv
 
 keycloak:
   client-id: ai-client
