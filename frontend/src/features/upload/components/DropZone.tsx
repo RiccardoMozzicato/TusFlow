@@ -28,6 +28,7 @@ export default function DropZone({ onFiles }: DropZoneProps) {
   return (
     <div className="mb-8">
       <div
+        data-tour="upload-dropzone"
         role="button"
         tabIndex={0}
         onClick={() => inputRef.current?.click()}

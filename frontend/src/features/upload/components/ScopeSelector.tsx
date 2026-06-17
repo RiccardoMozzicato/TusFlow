@@ -16,7 +16,7 @@ export default function ScopeSelector({
   scopes = ALL_SCOPE_OPTIONS,
 }: ScopeSelectorProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div data-tour="upload-scope" className="flex items-center gap-2">
       <span className="font-ds-label text-ds-label-sm text-ds-on-surface-variant">
         Sharing scope
       </span>

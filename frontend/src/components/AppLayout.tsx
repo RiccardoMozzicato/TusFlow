@@ -2,11 +2,16 @@ import { Outlet } from 'react-router-dom'
 import { useAppSelector } from '@/app/hooks'
 import { selectSidebarCollapsed } from '@/features/ui/uiSlice'
 import ChatWidget from '@/features/chat/components/ChatWidget'
+import OnboardingTour from '@/features/onboarding/components/OnboardingTour'
+import HelpMenu from '@/features/onboarding/components/HelpMenu'
+import { useOnboarding } from '@/features/onboarding/useOnboarding'
 import Sidebar from './layout/Sidebar'
 
 // Authenticated app shell: fixed (collapsible) sidebar, page content in <Outlet>.
 export default function AppLayout() {
   const collapsed = useAppSelector(selectSidebarCollapsed)
+  // Auto-start the welcome tour on first access (login is excluded by construction).
+  useOnboarding()
 
   return (
     <div className="flex h-screen overflow-hidden bg-ds-background font-ds-body text-ds-body-md text-ds-on-surface antialiased">
@@ -21,6 +26,8 @@ export default function AppLayout() {
         </main>
       </div>
       <ChatWidget />
+      <HelpMenu />
+      <OnboardingTour />
     </div>
   )
 }

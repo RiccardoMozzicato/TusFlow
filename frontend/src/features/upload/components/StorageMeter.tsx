@@ -15,7 +15,10 @@ export default function StorageMeter({ summary, hasError }: StorageMeterProps) {
   if (hasError) return null
 
   return (
-    <div className="flex w-64 flex-col gap-2 rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest px-4 py-3">
+    <div
+      data-tour="upload-storage"
+      className="flex w-64 flex-col gap-2 rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest px-4 py-3"
+    >
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 font-ds-label text-ds-label-sm uppercase tracking-wider text-ds-on-surface-variant">
           <Icon name="cloud" filled={false} className="text-[16px]" />

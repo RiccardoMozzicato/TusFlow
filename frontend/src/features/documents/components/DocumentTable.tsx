@@ -113,7 +113,7 @@ export default function DocumentTable({
             </tr>
           </thead>
           <tbody>
-            {documents.map((doc) => {
+            {documents.map((doc, rowIndex) => {
               const fileType = FILE_TYPE_STYLES[doc.fileType]
               const favorited = isFavorited?.(doc) ?? false
               return (
@@ -158,7 +158,10 @@ export default function DocumentTable({
                   >
                     {doc.createdRelative}
                   </td>
-                  <td className="px-3 py-3">
+                  <td
+                    className="px-3 py-3"
+                    data-tour={rowIndex === 0 ? 'library-row-actions' : undefined}
+                  >
                     <div className="flex items-center justify-end gap-1">
                       {onToggleFavorite ? (
                         <button

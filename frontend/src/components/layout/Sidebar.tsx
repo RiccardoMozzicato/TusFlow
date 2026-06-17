@@ -12,6 +12,8 @@ interface NavItem {
   icon: string
   /** Real route target. Omit (placeholder) until the page exists. */
   to?: string
+  /** Anchor id for the onboarding tour. */
+  dataTour?: string
 }
 
 // TODO: point `to` at real routes as those pages are built. Items without a
@@ -29,6 +31,7 @@ const ADMIN_NAV_ITEM: NavItem = {
   label: 'Admin',
   icon: 'admin_panel_settings',
   to: '/admin',
+  dataTour: 'nav-admin',
 }
 
 const BASE_LINK_CLASS =
@@ -52,6 +55,7 @@ function renderNavItem(item: NavItem, collapsed: boolean) {
       to={item.to}
       end={item.to === '/'}
       title={item.label}
+      data-tour={item.dataTour}
       className={({ isActive }) => navLinkClass(isActive, collapsed)}
     >
       {({ isActive }) => (
@@ -62,7 +66,13 @@ function renderNavItem(item: NavItem, collapsed: boolean) {
       )}
     </NavLink>
   ) : (
-    <a key={item.label} href="#" title={item.label} className={navLinkClass(false, collapsed)}>
+    <a
+      key={item.label}
+      href="#"
+      title={item.label}
+      data-tour={item.dataTour}
+      className={navLinkClass(false, collapsed)}
+    >
       <Icon name={item.icon} filled={false} />
       {!collapsed && <span>{item.label}</span>}
     </a>
@@ -121,7 +131,7 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div data-tour="nav" className="flex flex-col gap-2">
         {NAV_ITEMS.map((item) => renderNavItem(item, collapsed))}
       </div>
 
@@ -131,6 +141,7 @@ export default function Sidebar() {
           <div className="flex flex-col items-center gap-3">
             <Link
               to="/profile"
+              data-tour="sidebar-profile"
               title={`${displayName} — view profile`}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-ds-full bg-ds-primary font-ds-label text-ds-label-md font-bold text-ds-on-primary transition-opacity hover:opacity-80"
             >
@@ -150,6 +161,7 @@ export default function Sidebar() {
           <div className="flex items-center gap-3 rounded-ds-xl border border-ds-outline-variant/30 bg-ds-surface-container-low p-4">
             <Link
               to="/profile"
+              data-tour="sidebar-profile"
               className="flex min-w-0 flex-grow items-center gap-3 rounded-ds-lg transition-colors hover:opacity-80"
               title="View profile"
             >

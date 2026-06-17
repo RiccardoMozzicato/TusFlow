@@ -18,6 +18,7 @@ export default function ChatWidget() {
       {isOpen ? <ChatPanel /> : null}
       <button
         type="button"
+        data-tour="chat-launcher"
         onClick={() => dispatch(toggleChat())}
         aria-label={isOpen ? 'Close assistant' : 'Open assistant'}
         aria-expanded={isOpen}

@@ -268,7 +268,7 @@ export default function DocumentDetailsPage() {
           scrolls: the preview adapts to the available height and the right rail
           scrolls internally if its cards exceed it. */}
       <div className="grid flex-1 grid-cols-1 gap-6 lg:min-h-0 lg:grid-cols-12 lg:grid-rows-1">
-        <div className="flex min-h-0 flex-col lg:col-span-7">
+        <div data-tour="details-preview" className="flex min-h-0 flex-col lg:col-span-7">
           <DocumentPreview
             fileId={detail.id}
             onDownload={() => void handleDownload()}
@@ -288,7 +288,7 @@ export default function DocumentDetailsPage() {
               date={detail.date}
             />
           </div>
-          <div className="lg:col-span-2">
+          <div data-tour="details-ai" className="lg:col-span-2">
             <AiMetadataPanel
               analysisStatus={detail.aiAnalysisStatus}
               summary={detail.aiSummary}
@@ -310,13 +310,15 @@ export default function DocumentDetailsPage() {
             />
           </div>
           <ProcessingTimeline steps={detail.processing} />
-          <VersionHistory
-            versions={detail.versions}
-            fileId={detail.id}
-            scope={detail.sharingScope}
-            onUploaded={() => id && void dispatch(loadDocumentDetail(id))}
-          />
-          <div className="lg:col-span-2">
+          <div data-tour="details-versions">
+            <VersionHistory
+              versions={detail.versions}
+              fileId={detail.id}
+              scope={detail.sharingScope}
+              onUploaded={() => id && void dispatch(loadDocumentDetail(id))}
+            />
+          </div>
+          <div data-tour="details-share" className="lg:col-span-2">
             <SharingPanel
               shares={shares}
               isLoadingShares={sharesStatus === 'loading'}

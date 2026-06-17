@@ -3,6 +3,7 @@ import authReducer from '@/features/auth/authSlice'
 import chatReducer from '@/features/chat/chatSlice'
 import documentsReducer from '@/features/documents/documentsSlice'
 import documentDetailsReducer from '@/features/documents/documentDetailsSlice'
+import onboardingReducer from '@/features/onboarding/onboardingSlice'
 import uiReducer from '@/features/ui/uiSlice'
 
 export const store = configureStore({
@@ -11,6 +12,7 @@ export const store = configureStore({
     chat: chatReducer,
     documents: documentsReducer,
     documentDetails: documentDetailsReducer,
+    onboarding: onboardingReducer,
     ui: uiReducer,
     // feature slices get registered here as the app grows
   },

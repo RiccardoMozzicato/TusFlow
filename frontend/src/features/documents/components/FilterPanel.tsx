@@ -69,7 +69,10 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
   }
 
   return (
-    <aside className="flex w-full flex-col gap-6 self-start rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6 lg:sticky lg:top-0 lg:w-64 lg:shrink-0">
+    <aside
+      data-tour="library-filters"
+      className="flex w-full flex-col gap-6 self-start rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6 lg:sticky lg:top-0 lg:w-64 lg:shrink-0"
+    >
       <div className="flex items-center justify-between border-b border-ds-outline-variant pb-3">
         <h3 className="font-ds-label text-ds-label-md uppercase tracking-widest text-ds-primary">
           Filters
@@ -160,6 +163,7 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
         ))}
       </FilterGroup>
 
+      <div data-tour="library-ownership">
       <FilterGroup title="Ownership">
         {OWNERSHIP_OPTIONS.map(({ value, label }) => (
           <label key={value} className="group flex cursor-pointer items-center gap-3">
@@ -175,6 +179,7 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
           </label>
         ))}
       </FilterGroup>
+      </div>
 
       <FilterGroup title="Sort">
         <select

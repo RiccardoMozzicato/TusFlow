@@ -12,7 +12,10 @@ const CARD_COUNT = 4
 
 export default function StatsGrid({ stats }: { stats: StatCardModel[] | null }) {
   return (
-    <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+    <div
+      data-tour="dashboard-stats"
+      className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4"
+    >
       {stats === null
         ? Array.from({ length: CARD_COUNT }, (_, index) => <SkeletonCard key={index} />)
         : stats.map((stat) => <StatCard key={stat.label} {...stat} />)}
