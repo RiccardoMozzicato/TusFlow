@@ -690,9 +690,14 @@ Analyze the document and extract:
 {document}
 ```
 
-### Retry Logic with Exponential Backoff
+### Retry Logic with Equal jitter Exponential Backoff
 
-AI analysis includes robust retry mechanism (max 5 attempts):
+AI analysis includes robust retry mechanism (max 3 attempts by default):
+For each attempt there is a sleep delay before the next attempt. The delay is both exponential and jittered:
+- **Exponential**: per each attempt the delay time increases according to the formula 
+```val exponentialBackoff = (analysisBackoffBaseMs * (1L shl (attempt - 1))).coerceAtMost(analysisBackoffCapMs)``` 
+- **Equal jitter**: given the `exponentialBackoff`, the final delay is evaluated as a random in the interval [exponentialBackoff/2, exponentialBackoff], 
+in order to remove the short waiting time.
 
 ```kotlin
 private fun analyzeUploadWithRetry(
@@ -720,10 +725,20 @@ private fun analyzeUploadWithRetry(
             return result  // ✅ Success
             
         } catch (e: Exception) {
-            if (attempt < maxRetries) {
-                // Exponential backoff: 1s, 2s, 3s, 4s, 5s
-                val delayMs = (1000L * attempt).coerceAtMost(5000L)
-                Thread.sleep(delayMs)
+            if (attempt < maxAttempts) {
+                val exponentialBackoff = (analysisBackoffBaseMs * (1L shl (attempt - 1))).coerceAtMost(analysisBackoffCapMs)
+
+                val equalJitter = if(exponentialBackoff > 0) {
+                    val half = exponentialBackoff/2
+                    half + Random.nextLong(half)
+                } else {
+                    0L
+                }
+
+                if (equalJitter > 0) {
+                    log.info("Retrying in {}ms...", equalJitter)
+                    Thread.sleep(equalJitter)
+                }
             }
         }
     }
