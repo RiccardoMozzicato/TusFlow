@@ -43,7 +43,7 @@ dependencies {
     //LAB 2 - JPA Dependency - Docker - MinIO
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("io.minio:minio-admin:8.5.7")
-    //developmentOnly("org.springframework.boot:spring-boot-docker-compose")
+    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.apache.tika:tika-core:2.9.2")
 
