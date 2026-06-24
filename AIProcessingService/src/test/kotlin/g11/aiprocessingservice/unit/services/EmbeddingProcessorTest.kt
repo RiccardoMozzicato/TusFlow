@@ -48,6 +48,7 @@ class EmbeddingProcessorTest {
             tracer = mockk(relaxed = true),
             supportedContentTypes = supportedContentTypes,
             deadLetterService = deadLetterService,
+            pipelineTracing = mockk(relaxed = true),
         )
     }
 

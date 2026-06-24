@@ -42,6 +42,33 @@ function navLinkClass(isActive: boolean, collapsed: boolean): string {
   return `${BASE_LINK_CLASS} ${layout} ${isActive ? ACTIVE_CLASS : INACTIVE_CLASS}`
 }
 
+// Renders one nav entry: a real NavLink (with active styling) when it has a route,
+// or a non-navigating placeholder otherwise. Shared by the main list and the
+// bottom-pinned Admin entry so they look and behave identically.
+function renderNavItem(item: NavItem, collapsed: boolean) {
+  return item.to ? (
+    <NavLink
+      key={item.label}
+      to={item.to}
+      end={item.to === '/'}
+      title={item.label}
+      className={({ isActive }) => navLinkClass(isActive, collapsed)}
+    >
+      {({ isActive }) => (
+        <>
+          <Icon name={item.icon} filled={isActive} />
+          {!collapsed && <span>{item.label}</span>}
+        </>
+      )}
+    </NavLink>
+  ) : (
+    <a key={item.label} href="#" title={item.label} className={navLinkClass(false, collapsed)}>
+      <Icon name={item.icon} filled={false} />
+      {!collapsed && <span>{item.label}</span>}
+    </a>
+  )
+}
+
 export default function Sidebar() {
   const dispatch = useAppDispatch()
   const collapsed = useAppSelector(selectSidebarCollapsed)
@@ -50,7 +77,6 @@ export default function Sidebar() {
   // Show the most-privileged role the user holds, not whatever Keycloak happens
   // to list first (which could read "manager" for an admin).
   const role = ROLE_LABELS[highestRole(user?.roles)]
-  const navItems = isAdmin(user?.roles) ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS
 
   function handleLogout() {
     window.location.href = LOGOUT_URL
@@ -96,37 +122,11 @@ export default function Sidebar() {
       </div>
 
       <div className="flex flex-col gap-2">
-        {navItems.map((item) =>
-          item.to ? (
-            <NavLink
-              key={item.label}
-              to={item.to}
-              end={item.to === '/'}
-              title={item.label}
-              className={({ isActive }) => navLinkClass(isActive, collapsed)}
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon name={item.icon} filled={isActive} />
-                  {!collapsed && <span>{item.label}</span>}
-                </>
-              )}
-            </NavLink>
-          ) : (
-            <a
-              key={item.label}
-              href="#"
-              title={item.label}
-              className={navLinkClass(false, collapsed)}
-            >
-              <Icon name={item.icon} filled={false} />
-              {!collapsed && <span>{item.label}</span>}
-            </a>
-          ),
-        )}
+        {NAV_ITEMS.map((item) => renderNavItem(item, collapsed))}
       </div>
 
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-3">
+        {isAdmin(user?.roles) && renderNavItem(ADMIN_NAV_ITEM, collapsed)}
         {collapsed ? (
           <div className="flex flex-col items-center gap-3">
             <Link

@@ -36,4 +36,5 @@ export const API = {
   uploads: '/api/v1/uploads',
   users: '/api/v1/users',
   jobs: '/api/v1/jobs',
+  rag: '/api/rag',
 } as const

@@ -4,6 +4,8 @@
 ARCH := "linux/arm64"
 ACT_IMAGE := "catthehacker/ubuntu:act-latest"
 
+docker:
+    docker compose up -d
 # Register Debezium connectors (run once after docker compose up)
 debezium:
     docker compose --profile setup up --wait setup-connector setup-job-outbox-connector

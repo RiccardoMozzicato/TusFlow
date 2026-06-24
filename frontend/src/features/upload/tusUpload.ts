@@ -33,6 +33,11 @@ export interface CreateUploadOptions {
   scope: SharingScope
   /** User-provided key/value metadata, merged into the tus `Upload-Metadata` header. */
   metadata?: Record<string, string>
+  /**
+   * Create the upload paused (a restored upload that was paused before reload): the
+   * transfer doesn't start until `resume()` is called. Defaults to false.
+   */
+  startPaused?: boolean
   /** Reports bytes flushed to the socket (optimistic, includes the in-flight chunk). */
   onProgress?: (bytesUploaded: number, bytesTotal: number) => void
   /**
@@ -51,14 +56,15 @@ export function createUpload({
   fileId,
   scope,
   metadata,
+  startPaused = false,
   onProgress,
   onChunkComplete,
   onSuccess,
   onError,
 }: CreateUploadOptions): UploadController {
   // Distinguish user-initiated pause/abort from real transport errors so we
-  // don't surface them as upload failures.
-  let isPausedIntentionally = false
+  // don't surface them as upload failures. A restored-paused upload starts paused.
+  let isPausedIntentionally = startPaused
   let isAbortedIntentionally = false
 
   const params = new URLSearchParams({ fileId, sharingScope: scope })
@@ -70,13 +76,16 @@ export function createUpload({
     endpoint,
     chunkSize: CHUNK_SIZE,
     retryDelays: RETRY_DELAYS,
-    // Don't persist upload URLs in localStorage. The default fingerprint is
-    // content-based (name+type+size), so re-uploading the same file would try to
-    // resume a prior upload's URL — whose server-side resource is gone once that
-    // upload finished — yielding a 404 "Resource does not exists". Each upload here
-    // gets a fresh server-side fileId anyway, and in-session pause/resume works off
-    // this in-memory Upload instance, so cross-reload resume isn't needed.
-    storeFingerprintForResuming: false,
+    // Persist the upload URL in localStorage so an upload can be resumed after a
+    // full page reload (e.g. logout → login). The default fingerprint is
+    // content-based (name+type+size), which would make re-uploading the same file
+    // resume a prior, finished upload's URL — whose server resource is gone — and
+    // 404. We avoid that by keying the fingerprint on this upload's fresh fileId,
+    // so each upload owns a unique, stable storage entry that we recreate verbatim
+    // when restoring from IndexedDB. The entry is auto-removed on success.
+    storeFingerprintForResuming: true,
+    removeFingerprintOnSuccess: true,
+    fingerprint: () => Promise.resolve(`tus-${fileId}`),
     // Retry only transient failures; permanent rejections (e.g. 413 when the
     // file exceeds the user's storage quota) fail immediately.
     onShouldRetry: (error) => {
@@ -120,7 +129,20 @@ export function createUpload({
     },
   })
 
-  upload.start()
+  // Start (or resume) the transfer. Resume from a stored URL if one exists for this
+  // fileId (set after a reload by recreating the upload from its persisted bytes);
+  // otherwise findPreviousUploads returns nothing and we start fresh with a POST.
+  // Bails if the upload was paused or aborted while the async lookup was in flight.
+  const beginTransfer = () => {
+    void upload.findPreviousUploads().then((previous) => {
+      if (isAbortedIntentionally || isPausedIntentionally) return
+      if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0])
+      upload.start()
+    })
+  }
+
+  // A restored-paused upload waits for resume(); everything else starts now.
+  if (!startPaused) beginTransfer()
 
   return {
     pause: () => {
@@ -129,7 +151,9 @@ export function createUpload({
     },
     resume: () => {
       isPausedIntentionally = false
-      void upload.start()
+      // Resume-aware so a restored-paused upload (never started) continues from the
+      // server offset instead of POSTing a fresh upload.
+      beginTransfer()
     },
     abort: () => {
       isAbortedIntentionally = true

@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
 import Icon from '@/components/Icon'
 import { JobStatus } from '../jobsApi'
-import type { DocumentScope, DocumentStatus, FileType, LibraryDocument } from '../types'
+import type { DocumentActionKind, DocumentStatus, LibraryDocument } from '../types'
+import { AiIndicator, FILE_TYPE_STYLES, ScopeIndicator } from './documentIndicators'
+import DocumentActionsMenu from './DocumentActionsMenu'
 
 // Status badge styling, keyed by status. Mirrors the dashboard's STATUS_STYLES
 // pattern. Routine lifecycle states (ready, processing) are intentionally
@@ -20,38 +22,6 @@ const STATUS_STYLES: Partial<
   },
 }
 
-// File-type icon chip styling, keyed by file type.
-const FILE_TYPE_STYLES: Record<FileType, { icon: string; chipClassName: string }> = {
-  pdf: { icon: 'picture_as_pdf', chipClassName: 'bg-ds-error-container text-ds-on-error-container' },
-  docx: { icon: 'description', chipClassName: 'bg-ds-primary-fixed text-ds-primary' },
-  txt: { icon: 'article', chipClassName: 'bg-ds-surface-container-high text-ds-secondary' },
-  image: { icon: 'image', chipClassName: 'bg-ds-secondary-fixed text-ds-secondary' },
-  video: { icon: 'movie', chipClassName: 'bg-ds-surface-container-high text-ds-secondary' },
-  file: { icon: 'insert_drive_file', chipClassName: 'bg-ds-surface-container-high text-ds-secondary' },
-}
-
-// Visibility-scope indicator shown next to the title: one person for personal,
-// a group for department, a building for organization.
-const SCOPE_STYLES: Record<DocumentScope, { icon: string; label: string }> = {
-  personal: { icon: 'person', label: 'Personal' },
-  department: { icon: 'groups', label: 'Department' },
-  organization: { icon: 'apartment', label: 'Organization' },
-}
-
-function ScopeIndicator({ scope }: { scope: DocumentScope }) {
-  const { icon, label } = SCOPE_STYLES[scope]
-  return (
-    <span
-      title={`${label} file`}
-      aria-label={`${label} file`}
-      className="inline-flex shrink-0 self-start items-center gap-1 rounded-ds-full border border-ds-outline-variant/50 bg-ds-surface-container px-2 py-0.5 font-ds-label text-ds-label-sm text-ds-on-surface-variant"
-    >
-      <Icon name={icon} className="text-[14px]" />
-      {label}
-    </span>
-  )
-}
-
 function StatusBadge({ status }: { status: DocumentStatus }) {
   const style = STATUS_STYLES[status]
   if (!style) return null
@@ -65,37 +35,6 @@ function StatusBadge({ status }: { status: DocumentStatus }) {
       {label}
     </span>
   )
-}
-
-// AI-job indicator shown by the version badge: a sparkle once metadata is ready,
-// a spinner while it's still being generated. Other statuses (failed, unsupported,
-// or no job) render nothing.
-function AiIndicator({ status }: { status?: LibraryDocument['aiStatus'] }) {
-  if (status === JobStatus.COMPLETED) {
-    return (
-      <span
-        title="AI-generated metadata"
-        aria-label="AI-generated metadata"
-        className="flex items-center rounded-ds-full bg-ds-tertiary-fixed p-1 text-ds-on-tertiary-fixed-variant"
-      >
-        <Icon name="auto_awesome" className="text-[14px]" />
-      </span>
-    )
-  }
-
-  if (status === JobStatus.PENDING || status === JobStatus.PROCESSING) {
-    return (
-      <span
-        title="AI processing"
-        aria-label="AI processing"
-        className="flex items-center rounded-ds-full bg-ds-surface-container-high p-1 text-ds-on-surface-variant"
-      >
-        <Icon name="progress_activity" className="animate-spin text-[14px]" />
-      </span>
-    )
-  }
-
-  return null
 }
 
 // Star toggle for the document's current version. A favorited star stays
@@ -138,9 +77,20 @@ interface DocumentCardProps {
   isFavorited?: boolean
   /** Toggles the favorite on the doc's current version; omit to hide the star. */
   onToggleFavorite?: () => void
+  /** Opens a card action (share/new version/delete); omit to hide the actions menu. */
+  onAction?: (doc: LibraryDocument, kind: DocumentActionKind) => void
 }
 
-export default function DocumentCard({ doc, isFavorited = false, onToggleFavorite }: DocumentCardProps) {
+// Right padding that keeps the title clear of the corner cluster, widening with
+// each extra item beyond the always-present version badge.
+const TITLE_PADDING_BY_EXTRAS = ['pr-10', 'pr-20', 'pr-28', 'pr-36'] as const
+
+export default function DocumentCard({
+  doc,
+  isFavorited = false,
+  onToggleFavorite,
+  onAction,
+}: DocumentCardProps) {
   const fileType = FILE_TYPE_STYLES[doc.fileType]
   const isFailed = doc.status === 'scan_failed'
   const hasAiIndicator =
@@ -148,13 +98,10 @@ export default function DocumentCard({ doc, isFavorited = false, onToggleFavorit
     doc.aiStatus === JobStatus.PENDING ||
     doc.aiStatus === JobStatus.PROCESSING
   const hasFavoriteButton = Boolean(onToggleFavorite)
-  // Keep the title clear of the corner cluster (star + AI indicator + version badge).
-  const titleRightPadding =
-    hasAiIndicator && hasFavoriteButton
-      ? 'pr-28'
-      : hasAiIndicator || hasFavoriteButton
-        ? 'pr-20'
-        : 'pr-10'
+  const hasMenu = Boolean(onAction && doc.isWritable)
+  // Keep the title clear of the corner cluster (star + AI indicator + menu + version badge).
+  const cornerExtras = Number(hasAiIndicator) + Number(hasFavoriteButton) + Number(hasMenu)
+  const titleRightPadding = TITLE_PADDING_BY_EXTRAS[cornerExtras]
 
   return (
     <Link
@@ -177,6 +124,13 @@ export default function DocumentCard({ doc, isFavorited = false, onToggleFavorit
         <span className="rounded-ds-full border border-ds-outline-variant/50 bg-ds-surface-container px-2 py-0.5 font-ds-label text-ds-label-sm text-ds-on-surface-variant">
           {doc.version}
         </span>
+        {hasMenu && onAction ? (
+          <DocumentActionsMenu
+            onShare={() => onAction(doc, 'share')}
+            onNewVersion={() => onAction(doc, 'newVersion')}
+            onDelete={() => onAction(doc, 'delete')}
+          />
+        ) : null}
       </div>
 
       <div className={`flex items-start gap-3 ${titleRightPadding}`}>
@@ -184,7 +138,7 @@ export default function DocumentCard({ doc, isFavorited = false, onToggleFavorit
           <Icon name={fileType.icon} />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
-          <h3 className="line-clamp-2 font-ds-heading text-ds-headline-sm text-ds-on-surface transition-colors group-hover:text-ds-primary">
+          <h3 className="line-clamp-2 break-words font-ds-heading text-ds-headline-sm text-ds-on-surface transition-colors group-hover:text-ds-primary">
             {doc.title}
           </h3>
           <ScopeIndicator scope={doc.scope} />

@@ -3,7 +3,12 @@ import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import FilterPanel from '@/features/documents/components/FilterPanel'
 import LibraryToolbar from '@/features/documents/components/LibraryToolbar'
 import DocumentGrid from '@/features/documents/components/DocumentGrid'
+import DocumentTable from '@/features/documents/components/DocumentTable'
 import LibraryPager from '@/features/documents/components/LibraryPager'
+import ShareDialog from '@/features/documents/components/ShareDialog'
+import NewVersionDialog from '@/features/documents/components/NewVersionDialog'
+import FileInfoDialog from '@/features/documents/components/FileInfoDialog'
+import ConfirmDialog from '@/components/ConfirmDialog'
 import {
   loadDocuments,
   resetFilters,
@@ -14,17 +19,27 @@ import {
   selectDocumentsStatus,
   setFilters,
 } from '@/features/documents/documentsSlice'
+import {
+  deleteDocument,
+  selectDeleteFileError,
+  selectIsDeletingFile,
+} from '@/features/documents/documentDetailsSlice'
 import { useLibraryFavorites } from '@/features/documents/useLibraryFavorites'
-import type { ViewMode } from '@/features/documents/types'
+import type { DocumentActionKind, LibraryDocument, ViewMode } from '@/features/documents/types'
 import Icon from '@/components/Icon'
+
+// Which action modal is open, and for which document.
+type ActiveDialog = { kind: DocumentActionKind; doc: LibraryDocument } | null
 
 // Document Library: filter rail + a canvas with a toolbar and a card grid.
 // Files come from the gateway-routed file service (getFiles), one page at a time.
 // The filter rail drives the server-side query; the toolbar search narrows the
 // currently-loaded page client-side.
 export default function DocumentLibraryPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  // Row layout is the default; the card grid is opt-in via the toolbar toggle.
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [searchQuery, setSearchQuery] = useState('')
+  const [dialog, setDialog] = useState<ActiveDialog>(null)
   const dispatch = useAppDispatch()
 
   const documents = useAppSelector(selectDocuments)
@@ -35,16 +50,38 @@ export default function DocumentLibraryPage() {
     selectDocumentsPageInfo,
   )
   const { isFavorited, error: favoriteError, toggle: toggleFavorite } = useLibraryFavorites()
+  const isDeleting = useAppSelector(selectIsDeletingFile)
+  const deleteError = useAppSelector(selectDeleteFileError)
 
-  const { contentType, dateFrom, dateTo, sort, sharingScope } = filters
-  // Stable primitive key so the effect re-runs when the scope set changes.
+  const { contentType, excludeContentTypes, dateFrom, dateTo, sort, sharingScope, ownership } =
+    filters
+  // Stable primitive keys so the effect re-runs when a set/array filter changes.
   const scopesKey = sharingScope.join(',')
+  const excludeKey = excludeContentTypes?.join(',') ?? ''
 
   // Reload from page 0 on mount and whenever a server-side filter changes.
   // Pagination Prev/Next dispatch directly below (they don't touch filters).
   useEffect(() => {
     void dispatch(loadDocuments({ page: 0 }))
-  }, [dispatch, contentType, dateFrom, dateTo, sort, scopesKey])
+  }, [dispatch, contentType, excludeKey, dateFrom, dateTo, sort, scopesKey, ownership])
+
+  // Reloads the current page after a mutating action (delete / new version).
+  function refresh() {
+    void dispatch(loadDocuments({ page }))
+  }
+
+  function handleConfirmDelete() {
+    if (dialog?.kind !== 'delete') return
+    void dispatch(deleteDocument({ id: dialog.doc.id }))
+      .unwrap()
+      .then(() => {
+        setDialog(null)
+        refresh()
+      })
+      .catch(() => {
+        // Error is surfaced via deleteError in the dialog.
+      })
+  }
 
   const isInitialLoading = status === 'loading' && documents.length === 0
 
@@ -69,7 +106,7 @@ export default function DocumentLibraryPage() {
         </p>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
         <FilterPanel
           filters={filters}
           onChange={(partial) => dispatch(setFilters(partial))}
@@ -84,7 +121,7 @@ export default function DocumentLibraryPage() {
             viewMode={viewMode}
             onViewModeChange={setViewMode}
           />
-          <div className="p-6">
+          <div className="min-w-0 p-6">
             {isInitialLoading ? (
               <p className="py-12 text-center font-ds-body text-ds-body-sm text-ds-secondary">
                 Loading documents…
@@ -110,12 +147,21 @@ export default function DocumentLibraryPage() {
                     {favoriteError}
                   </p>
                 ) : null}
-                <DocumentGrid
-                  documents={visibleDocuments}
-                  viewMode={viewMode}
-                  isFavorited={(doc) => isFavorited(doc.id, doc.versionNumber)}
-                  onToggleFavorite={(doc) => toggleFavorite(doc.id, doc.versionNumber)}
-                />
+                {viewMode === 'list' ? (
+                  <DocumentTable
+                    documents={visibleDocuments}
+                    isFavorited={(doc) => isFavorited(doc.id, doc.versionNumber)}
+                    onToggleFavorite={(doc) => toggleFavorite(doc.id, doc.versionNumber)}
+                    onAction={(doc, kind) => setDialog({ kind, doc })}
+                  />
+                ) : (
+                  <DocumentGrid
+                    documents={visibleDocuments}
+                    isFavorited={(doc) => isFavorited(doc.id, doc.versionNumber)}
+                    onToggleFavorite={(doc) => toggleFavorite(doc.id, doc.versionNumber)}
+                    onAction={(doc, kind) => setDialog({ kind, doc })}
+                  />
+                )}
                 <LibraryPager
                   pageNumber={page}
                   totalPages={totalPages}
@@ -129,6 +175,37 @@ export default function DocumentLibraryPage() {
           </div>
         </section>
       </div>
+
+      {dialog?.kind === 'info' ? (
+        <FileInfoDialog doc={dialog.doc} onClose={() => setDialog(null)} />
+      ) : null}
+
+      {dialog?.kind === 'share' ? (
+        <ShareDialog doc={dialog.doc} onClose={() => setDialog(null)} />
+      ) : null}
+
+      {dialog?.kind === 'newVersion' ? (
+        <NewVersionDialog
+          doc={dialog.doc}
+          onClose={() => setDialog(null)}
+          onUploaded={refresh}
+        />
+      ) : null}
+
+      {dialog?.kind === 'delete' ? (
+        <ConfirmDialog
+          title="Delete file"
+          message={
+            deleteError ??
+            `Permanently delete "${dialog.doc.title}" and all its versions? This cannot be undone.`
+          }
+          confirmLabel="Delete"
+          destructive
+          isBusy={isDeleting}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDialog(null)}
+        />
+      ) : null}
     </div>
   )
 }

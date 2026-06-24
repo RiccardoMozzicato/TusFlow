@@ -7,16 +7,23 @@ function values(roles: string[] | undefined) {
 }
 
 describe('allowedUploadScopes', () => {
-  it('hides Organization for staff and managers', () => {
-    expect(values(['staff'])).toEqual([SharingScope.PERSONAL, SharingScope.DEPARTMENT])
+  it('limits staff to Personal only', () => {
+    expect(values(['staff'])).toEqual([SharingScope.PERSONAL])
+  })
+
+  it('allows managers Personal and Department but not Organization', () => {
     expect(values(['manager'])).toEqual([SharingScope.PERSONAL, SharingScope.DEPARTMENT])
   })
 
-  it('allows Organization only for admins', () => {
-    expect(values(['admin'])).toContain(SharingScope.ORGANIZATION)
+  it('allows admins every scope', () => {
+    expect(values(['admin'])).toEqual([
+      SharingScope.PERSONAL,
+      SharingScope.DEPARTMENT,
+      SharingScope.ORGANIZATION,
+    ])
   })
 
   it('defaults to the staff-safe set when roles are missing', () => {
-    expect(values(undefined)).toEqual([SharingScope.PERSONAL, SharingScope.DEPARTMENT])
+    expect(values(undefined)).toEqual([SharingScope.PERSONAL])
   })
 })

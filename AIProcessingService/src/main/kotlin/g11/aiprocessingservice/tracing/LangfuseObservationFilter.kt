@@ -1,4 +1,4 @@
-package g11.aiprocessingservice.conf
+package g11.aiprocessingservice.tracing
 
 import io.micrometer.common.KeyValue
 import io.micrometer.observation.Observation

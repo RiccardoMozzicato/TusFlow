@@ -22,12 +22,14 @@ spring:
         completions-path: /chat/completions
         options:
           model: ${OPENWEBUI_MODEL:Qwen/Qwen3.5-122B-A10B-FP8}
-    # Embeddings stay on local Ollama (inherited from application.yml).
-    # Override here only if OpenWebUI also serves your embedding model.
+      embedding:
+        # base-url already ends in /api, so the endpoint resolves to /api/embeddings
+        embeddings-path: /embeddings
+        options:
+          # Native 2560-dim output (no MRL truncation) to match the migrated store.
+          model: ${OPENWEBUI_EMBEDDING_MODEL:Qwen/Qwen3-Embedding-4B}
 
-# Point every document-processing task at the same self-hosted model.
-# OpenWebUI typically fronts a single (or few) model(s), so we don't assume
-# separate powerful/vision variants like the Groq defaults do.
+
 ai:
   # The self-hosted reasoning model thinks for tens of seconds before answering,
   # which blows past AiConfig's 20s default. Give it generous headroom.
@@ -45,6 +47,31 @@ ai:
   image:
     model: ${IMAGE_MODEL:meta-llama/llama-4-scout-17b-16e-instruct}
   document:
-    # Qwen has a large context window, so send the whole document untruncated.
-    # 0 disables truncation (see MetadataProcessor.truncateContent).
-    max-content-chars: 0
+    # Cap document content at 128K *characters* before sending to the model. Note this is a
+    # character cap, not a token cap: truncateContent slices the raw string, while the model's
+    # limit is 131072 *tokens*. 128K chars ~= 30-45K tokens, which leaves ample headroom for the
+    # analysis prompt template and prevents the "maximum context length 131072 tokens" 400 errors
+    # that occurred with truncation disabled (was 0). Raise toward ~400000 to use more of the
+    # window, but leave margin — token density varies and overflow returns near the limit.
+    max-content-chars: 131072
+
+# Send RAG eval scores to the self-hosted Langfuse (docker-compose). Pinned here (not via
+# env) so the local profile works without IDE/.env env-var loading. Uses the auto-provisioned
+# local-dev key pair (docker-compose LANGFUSE_INIT_*). Override via env in other environments.
+app:
+  rag:
+    scoring:
+      langfuse-base-url: http://localhost:3001
+      langfuse-auth-header: "Basic cGstbGYtbG9jYWwtZGV2OnNrLWxmLWxvY2FsLWRldg=="
+
+# Export OpenTelemetry traces to the self-hosted Langfuse OTLP endpoint. Hardcoded for the
+# local profile so it does not depend on LANGFUSE_OTLP_ENDPOINT / LANGFUSE_AUTH_HEADER being
+# present in the run environment (the base application.yml still uses those env vars, defaulting
+# to the local LGTM stack on :4318). x-langfuse-ingestion-version carries over from the base.
+management:
+  otlp:
+    tracing:
+      endpoint: http://localhost:3001/api/public/otel/v1/traces
+      headers:
+        Authorization: "Basic cGstbGYtbG9jYWwtZGV2OnNrLWxmLWxvY2FsLWRldg=="
+        x-langfuse-ingestion-version: "4"

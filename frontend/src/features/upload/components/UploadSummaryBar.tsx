@@ -20,8 +20,8 @@ const DISABLED = 'cursor-not-allowed opacity-40'
 
 // Pinned to the bottom of the content column. Its left edge tracks the sidebar
 // width (collapsed rail vs full), matching AppLayout's `ml-20`/`ml-72`, so the
-// bar spans from the sidebar edge to the viewport's right. The main scroll area
-// reserves space via its `pb-24`.
+// bar spans from the sidebar edge to the viewport's right. The upload page
+// reserves space via its `pb-24` so content never scrolls underneath this bar.
 export default function UploadSummaryBar({
   summary,
   onPauseAll,

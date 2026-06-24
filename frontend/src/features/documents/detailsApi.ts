@@ -87,6 +87,15 @@ export function downloadUrl(id: string): string {
 }
 
 /**
+ * Absolute URL of a document's details PAGE (not the API), for "Copy link".
+ * Honors the app's base path (Vite `base` / router basename, e.g. `/ui/`) so the
+ * link resolves through the gateway — `import.meta.env.BASE_URL` is `/ui/`.
+ */
+export function documentPageUrl(id: string): string {
+  return `${window.location.origin}${import.meta.env.BASE_URL}documents/${id}`
+}
+
+/**
  * Fetches the file's bytes for inline preview. We pull them via the authed
  * client and render from an object URL rather than pointing an iframe at the
  * preview URL directly — the gateway's default X-Frame-Options: DENY blocks

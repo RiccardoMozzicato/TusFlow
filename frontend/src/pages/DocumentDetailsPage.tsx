@@ -4,6 +4,7 @@ import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import Icon from '@/components/Icon'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import {
+  documentPageUrl,
   getDownloadBlob,
   type Permission,
   type SensitivityLevel,
@@ -327,6 +328,7 @@ export default function DocumentDetailsPage() {
               mutationError={shareMutationError}
               onRemoveShare={handleRemoveShare}
               onUpdatePermission={handleUpdatePermission}
+              linkUrl={documentPageUrl(detail.id)}
             />
           </div>
 

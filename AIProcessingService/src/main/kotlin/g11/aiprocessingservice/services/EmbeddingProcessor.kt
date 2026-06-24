@@ -38,6 +38,7 @@ class EmbeddingProcessor(
     private val tracer: Tracer,
     private val supportedContentTypes: SupportedContentTypes,
     private val deadLetterService: DeadLetterService,
+    private val pipelineTracing: g11.aiprocessingservice.tracing.PipelineTracing,
 ) {
     private val log = LoggerFactory.getLogger(EmbeddingProcessor::class.java)
 
@@ -109,6 +110,8 @@ class EmbeddingProcessor(
             val batchSize = 5
             val batches = chunks.chunked(batchSize)
 
+            pipelineTracing.tagEmbeddingPreparation(event.ownerUserId, event.fileId, event.contentType, chunks.size, batches.size)
+
             val traceparentHeader: ByteArray? = tracer.currentSpan()?.context()?.let {
                 "00-${it.traceId()}-${it.spanId()}-01".toByteArray(Charsets.UTF_8)
             }
@@ -131,9 +134,13 @@ class EmbeddingProcessor(
                 val headers = RecordHeaders().apply {
                     traceparentHeader?.let { add("traceparent", it) }
                 }
+                // Null key: spread this file's batches across partitions so EmbeddingGenerator
+                // embeds them in parallel. Ordering is irrelevant — chunks dedupe by chunkIndex
+                // and the fileVersionId travels inside the payload. Keying by fileVersionId would
+                // pin every batch to one partition → one consumer thread → sequential embedding.
                 kafkaTemplate.send(ProducerRecord(
                     "embeddings-batch", null,
-                    event.fileVersionId.toString(),
+                    null as String?,
                     objectMapper.writeValueAsString(batchEvent),
                     headers
                 ))

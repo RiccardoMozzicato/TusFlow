@@ -17,6 +17,10 @@ data class FileDTO (
     val owner: UUID? = null,
     val ownerName: String? = null,
     val sharingScope: SharingScope? = null,
+    /** Organization that owns the file. */
+    val organization: String? = null,
+    /** Department the file belongs to; null for organization-wide or personal files. */
+    val department: String? = null,
     /** Status of the current version: AVAILABLE when ready, MERGE_PENDING while still processing. */
     val status: FileStatus? = null,
     /** Caller's permission on this file; only set when listing files shared *with* the caller. */
@@ -29,4 +33,14 @@ enum class SharingScope{
     PERSONAL,
     DEPARTMENT,
     ORGANIZATION
+}
+
+/**
+ * Ownership filter for the file listing, applied as a partition of the files already
+ * visible to the caller: OWNED keeps only files the caller owns, SHARED keeps only files
+ * owned by someone else. Absent means no ownership restriction.
+ */
+enum class Ownership {
+    OWNED,
+    SHARED
 }

@@ -7,6 +7,8 @@ import g11.tusuploaderservice.dto.FileVersionDTO
 import g11.tusuploaderservice.dto.FileVersionFavoriteDTO
 import g11.tusuploaderservice.dto.FiltersDTO
 import g11.tusuploaderservice.dto.MetadataAIDTO
+import g11.tusuploaderservice.dto.Ownership
+import g11.tusuploaderservice.dto.PendingUploadDTO
 import g11.tusuploaderservice.dto.RagQueryRequest
 import g11.tusuploaderservice.dto.RagQueryResponse
 import g11.tusuploaderservice.dto.SharingScope
@@ -107,6 +109,7 @@ class FileController(
         parameters = [
             Parameter(name = "sharingScope", description = "Sharing scopes to include, comma-separated (PERSONAL, DEPARTMENT, ORGANIZATION)", schema = Schema(type = "string", example = "PERSONAL,DEPARTMENT")),
             Parameter(name = "contentType", description = "Filter by content type", schema = Schema(type = "string", example = "application/pdf")),
+            Parameter(name = "excludeContentTypes", description = "Keep only files whose content type matches none of these tokens (repeatable); used for the 'Other' file-type bucket", schema = Schema(type = "string", example = "application/pdf")),
             Parameter(name = "dateFrom", description = "Filter files created from this date (ISO format)", schema = Schema(type = "string", example = "2024-01-01T00:00:00Z")),
             Parameter(name = "dateTo", description = "Filter files created until this date (ISO format)", schema = Schema(type = "string", example = "2024-12-31T23:59:59Z")),
             Parameter(name = "sort", description = "Sort field and direction (e.g., 'createdAt,desc')", schema = Schema(type = "string", example = "createdAt,desc")),
@@ -190,16 +193,18 @@ class FileController(
         @RequestParam(defaultValue = "0") page: UInt,
         @RequestParam(defaultValue = "10") size: UInt,
         @RequestParam(defaultValue = "PERSONAL") sharingScope: Set<SharingScope>,
+        @RequestParam(required = false) ownership: Ownership?,
+        @RequestParam(required = false) excludeContentTypes: List<String>?,
     ): ResponseEntity<Page<FileDTO>> {
 
         log.debug("API GET /api/v1/files userOwnerId={}", currentUserOwnerId())
-        log.debug("Requested file metadata: contentType={}, dateFrom={}, dateTo={}, sort={}, page={}, size={}, sharingScope={}", contentType, dateFrom, dateTo, sort, page, size, sharingScope)
+        log.debug("Requested file metadata: contentType={}, excludeContentTypes={}, dateFrom={}, dateTo={}, sort={}, page={}, size={}, sharingScope={}, ownership={}", contentType, excludeContentTypes, dateFrom, dateTo, sort, page, size, sharingScope, ownership)
         // Parse sort parameter
         val sortParts = sort.split(",")
         val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "createdAt"
         val sortDirection = if (sortParts.getOrNull(1)?.lowercase() == "asc") Sort.Direction.ASC else Sort.Direction.DESC
 
-        val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope)
+        val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope, ownership, excludeContentTypes)
 
         val files = fileService.getFiles(filtersDTO)
         log.debug("Retrieved {} files with applied filters", files.totalElements)
@@ -908,14 +913,59 @@ class FileController(
    //endregion
    @GetMapping("/my-shared")
    fun getFilesSharedWithUser(
+       @RequestParam(required = false) contentType: String?,
+       @RequestParam(required = false) dateFrom: String?,
+       @RequestParam(required = false) dateTo: String?,
+       @RequestParam(defaultValue = "createdAt,desc") sort: String,
        @RequestParam(defaultValue = "0") page: UInt,
-       @RequestParam(defaultValue = "10") size: UInt
+       @RequestParam(defaultValue = "10") size: UInt,
+       @RequestParam(required = false) permission: PERMISSION_LEVEL?,
+       @RequestParam(required = false) ownerId: UUID?,
+       @RequestParam(required = false) excludeContentTypes: List<String>?,
    ): ResponseEntity<Page<FileDTO>> {
-       log.debug("API GET /api/v1/files/my-shared userOwnerId={}", currentUserOwnerId())
+       log.debug(
+           "API GET /api/v1/files/my-shared userOwnerId={} contentType={} excludeContentTypes={} dateFrom={} dateTo={} sort={} permission={} ownerId={}",
+           currentUserOwnerId(), contentType, excludeContentTypes, dateFrom, dateTo, sort, permission, ownerId,
+       )
 
-       val sharedFiles = fileService.getFilesSharedWithCurrentUser(PageRequest.of(page.toInt(), size.toInt()))
+       // Parse sort; the shared listing is rooted at FileShare, so the sortable
+       // fields live on the joined file (e.g. createdAt -> file.createdAt).
+       val sortParts = sort.split(",")
+       val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "createdAt"
+       val mappedField = if (sortField.contains(".")) sortField else "file.$sortField"
+       val sortDirection = if (sortParts.getOrNull(1)?.lowercase() == "asc") Sort.Direction.ASC else Sort.Direction.DESC
+       val pageable = PageRequest.of(page.toInt(), size.toInt(), Sort.by(sortDirection, mappedField))
+
+       val sharedFiles = fileService.getFilesSharedWithCurrentUser(
+           ownerId = ownerId,
+           permission = permission,
+           contentType = contentType,
+           dateFrom = dateFrom,
+           dateTo = dateTo,
+           excludeContentTypes = excludeContentTypes,
+           pageable = pageable,
+       )
        log.debug("Retrieved {} shared files for current user", sharedFiles.totalElements)
        return ResponseEntity.ok(sharedFiles)
+   }
+
+   //region Swagger Documentation
+   @Operation(
+       tags = ["File Management"],
+       summary = "List the current user's resumable uploads",
+       description = "Returns the in-flight uploads owned by the current user that can still be " +
+           "resumed (status PENDING or UPLOADING, not expired). The client uses this to decide " +
+           "which locally-persisted uploads to resume after a reload. No offset is returned: the " +
+           "tus HEAD on /api/v1/uploads/{fileId} remains the authority on the current offset.",
+   )
+   @ApiResponse(responseCode = "200", description = "The caller's resumable uploads")
+   //endregion
+   @GetMapping("/my-uploads")
+   fun getMyPendingUploads(): ResponseEntity<List<PendingUploadDTO>> {
+       log.debug("API GET /api/v1/files/my-uploads userOwnerId={}", currentUserOwnerId())
+       val uploads = fileService.getMyPendingUploads()
+       log.debug("Retrieved {} resumable uploads for current user", uploads.size)
+       return ResponseEntity.ok(uploads)
    }
 
    //region Swagger Documentation

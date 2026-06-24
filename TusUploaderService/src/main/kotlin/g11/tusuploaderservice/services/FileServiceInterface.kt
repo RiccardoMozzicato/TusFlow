@@ -7,6 +7,7 @@ import g11.tusuploaderservice.dto.FileVersionDTO
 import g11.tusuploaderservice.dto.FileVersionFavoriteDTO
 import g11.tusuploaderservice.dto.FiltersDTO
 import g11.tusuploaderservice.dto.MetadataAIDTO
+import g11.tusuploaderservice.dto.PendingUploadDTO
 import g11.tusuploaderservice.dto.UserDTO
 import g11.tusuploaderservice.entities.File
 import g11.tusuploaderservice.entities.FileVersion
@@ -34,7 +35,18 @@ interface FileServiceInterface {
     fun existsFileOrThrow(fileId: UUID)
     fun getFileShares(fileId: UUID, pageable: Pageable): Page<FileShareDTO>
     fun createFileShare(fileShareDTO: FileShareDTO): FileShareDTO
-    fun getFilesSharedWithCurrentUser( pageable: Pageable): Page<FileDTO>
+    /** The current user's resumable in-flight uploads (no offset; see [PendingUploadDTO]). */
+    fun getMyPendingUploads(): List<PendingUploadDTO>
+
+    fun getFilesSharedWithCurrentUser(
+        ownerId: UUID? = null,
+        permission: PERMISSION_LEVEL? = null,
+        contentType: String? = null,
+        dateFrom: String? = null,
+        dateTo: String? = null,
+        excludeContentTypes: Collection<String>? = null,
+        pageable: Pageable,
+    ): Page<FileDTO>
     fun deleteFileShare(fileId: UUID, shareId: Long)
     fun updateFileSharePermission(fileId: UUID, shareId: Long, permission: PERMISSION_LEVEL): FileShareDTO
     fun composeObject(upload: Upload)

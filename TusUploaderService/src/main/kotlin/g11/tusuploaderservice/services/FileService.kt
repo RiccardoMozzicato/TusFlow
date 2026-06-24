@@ -12,6 +12,7 @@ import g11.tusuploaderservice.repositories.FileShareRepository
 import g11.tusuploaderservice.repositories.FileVersionFavoriteRepository
 import g11.tusuploaderservice.repositories.FileVersionRepository
 import g11.tusuploaderservice.repositories.TusRepository
+import g11.tusuploaderservice.specs.FileShareSpecifications
 import g11.tusuploaderservice.specs.FileSpecifications
 import g11.tusuploaderservice.utils.getUserIdFromJwt
 import g11.tusuploaderservice.utils.mergeByteArrays
@@ -148,7 +149,9 @@ class FileService(
             userId = userDetails.id,
             organization = userDetails.organization,
             department = userDetails.department,
-            isAdmin = userDetails.role == UserRole.ROLE_admin
+            isAdmin = userDetails.role == UserRole.ROLE_admin,
+            ownership = filtersDTO.ownership,
+            excludeContentTypes = filtersDTO.excludeContentTypes,
         )
 
         val files = fileRepository.findAll(spec, pageable)
@@ -719,14 +722,34 @@ class FileService(
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun getFilesSharedWithCurrentUser(pageable: Pageable): Page<FileDTO> {
-        log.debug("Retrieving files shared with current user - page: {}, size: {}", pageable.pageNumber, pageable.pageSize)
+    override fun getFilesSharedWithCurrentUser(
+        ownerId: UUID?,
+        permission: PERMISSION_LEVEL?,
+        contentType: String?,
+        dateFrom: String?,
+        dateTo: String?,
+        excludeContentTypes: Collection<String>?,
+        pageable: Pageable,
+    ): Page<FileDTO> {
+        log.debug(
+            "Retrieving files shared with current user - page: {}, size: {}, ownerId: {}, permission: {}, contentType: {}, excludeContentTypes: {}, dateFrom: {}, dateTo: {}",
+            pageable.pageNumber, pageable.pageSize, ownerId, permission, contentType, excludeContentTypes, dateFrom, dateTo,
+        )
 
         // Get user ID directly from JWT in SecurityContext
         val userId = getUserIdFromJwt()
         log.debug("Current user ID: {}", userId)
 
-        val filesPage = fileShareRepository.findByUserID(userId, pageable)
+        val spec = FileShareSpecifications.build(
+            recipientId = userId,
+            ownerId = ownerId,
+            permission = permission,
+            contentType = contentType,
+            dateFrom = dateFrom,
+            dateTo = dateTo,
+            excludeContentTypes = excludeContentTypes,
+        )
+        val filesPage = fileShareRepository.findAll(spec, pageable)
         log.debug("Found {} shared files for user: {}", filesPage.totalElements, userId)
 
         // Raccoglie tutti gli owner ID distinti
@@ -743,6 +766,34 @@ class FileService(
             share.file.toDTO(ownerName).copy(
                 permission = share.permission,
                 sharedAt = g11.tusuploaderservice.utils.RFC9110(share.timestamp.toInstant()),
+            )
+        }
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun getMyPendingUploads(): List<g11.tusuploaderservice.dto.PendingUploadDTO> {
+        val userId = getUserIdFromJwt()
+        // Resumable = the client still has bytes to send (PENDING/UPLOADING); exclude
+        // MERGE_PENDING (server assembling) and DELETED. Skip expired partials.
+        val resumableStatuses = listOf(
+            g11.tusuploaderservice.entities.UploadStatus.PENDING,
+            g11.tusuploaderservice.entities.UploadStatus.UPLOADING,
+        )
+        val uploads = tusRepository.findByOwnerIdAndStatusInAndExpiresAtAfter(
+            userId,
+            resumableStatuses,
+            Date.from(Instant.now()),
+        )
+        log.debug("Found {} resumable uploads for user {}", uploads.size, userId)
+
+        return uploads.map { upload ->
+            g11.tusuploaderservice.dto.PendingUploadDTO(
+                fileId = upload.fileId,
+                filename = upload.filename,
+                contentType = upload.contentType,
+                size = upload.size,
+                status = upload.status,
+                createdAt = g11.tusuploaderservice.utils.RFC9110(upload.createdAt.toInstant()),
             )
         }
     }

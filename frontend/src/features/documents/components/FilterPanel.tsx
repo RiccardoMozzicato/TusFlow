@@ -1,8 +1,7 @@
-import { FILE_TYPE_OPTIONS } from '../mockData'
-import { FILE_TYPE_CONTENT_TYPE } from '../mappers'
-import { SharingScope } from '../documentsApi'
+import { SORT_NEWEST, SORT_OLDEST, isoToDateInput } from '../filterOptions'
+import { Ownership, SharingScope } from '../documentsApi'
 import type { DocumentFilters } from '../documentsSlice'
-import Icon from '@/components/Icon'
+import FileTypeFilter from './FileTypeFilter'
 
 interface FilterPanelProps {
   filters: DocumentFilters
@@ -10,28 +9,18 @@ interface FilterPanelProps {
   onClear: () => void
 }
 
-// Only file types that map to a single exact MIME the backend can match on are
-// offered as filters (the `contentType` param is an exact equality check).
-const SELECTABLE_FILE_TYPES = FILE_TYPE_OPTIONS.filter(
-  (option) => option.type in FILE_TYPE_CONTENT_TYPE,
-)
-
-const SORT_NEWEST = 'createdAt,desc'
-const SORT_OLDEST = 'createdAt,asc'
-
 const SHARING_SCOPE_OPTIONS: { scope: SharingScope; label: string }[] = [
   { scope: SharingScope.PERSONAL, label: 'Personal' },
   { scope: SharingScope.DEPARTMENT, label: 'Department' },
   { scope: SharingScope.ORGANIZATION, label: 'Organization' },
 ]
 
-// Converts an ISO-8601 timestamp to the `YYYY-MM-DD` value an <input type=date>
-// expects, and back. Empty/invalid input clears the bound filter.
-function isoToDateInput(iso?: string): string {
-  if (!iso) return ''
-  const parsed = new Date(iso)
-  return Number.isNaN(parsed.getTime()) ? '' : iso.slice(0, 10)
-}
+// Ownership is a mutually-exclusive partition (a file is either yours or not), so
+// the two checkboxes act like a clearable radio: re-clicking the active one clears it.
+const OWNERSHIP_OPTIONS: { value: Ownership; label: string }[] = [
+  { value: Ownership.OWNED, label: 'Owned by you' },
+  { value: Ownership.SHARED, label: 'Shared with you' },
+]
 
 // Small section wrapper to keep the panel's groups visually consistent.
 function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
@@ -46,10 +35,6 @@ function FilterGroup({ title, children }: { title: string; children: React.React
 // Left filter rail. Controlled by the documents slice's filter state — every
 // change bubbles up via onChange, and the page re-fetches page 0.
 export default function FilterPanel({ filters, onChange, onClear }: FilterPanelProps) {
-  const activeFileType = SELECTABLE_FILE_TYPES.find(
-    (option) => FILE_TYPE_CONTENT_TYPE[option.type] === filters.contentType,
-  )?.type
-
   const toggleScope = (scope: SharingScope) => {
     const next = filters.sharingScope.includes(scope)
       ? filters.sharingScope.filter((s) => s !== scope)
@@ -57,8 +42,12 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
     onChange({ sharingScope: next })
   }
 
+  const toggleOwnership = (value: Ownership) => {
+    onChange({ ownership: filters.ownership === value ? undefined : value })
+  }
+
   return (
-    <aside className="sticky top-0 flex w-64 shrink-0 flex-col gap-6 self-start rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6">
+    <aside className="flex w-full flex-col gap-6 self-start rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest p-6 lg:sticky lg:top-0 lg:w-64 lg:shrink-0">
       <div className="flex items-center justify-between border-b border-ds-outline-variant pb-3">
         <h3 className="font-ds-label text-ds-label-md uppercase tracking-widest text-ds-primary">
           Filters
@@ -73,33 +62,13 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
       </div>
 
       <FilterGroup title="File Type">
-        <div className="grid grid-cols-2 gap-3">
-          {SELECTABLE_FILE_TYPES.map((option) => {
-            const isActive = activeFileType === option.type
-            return (
-              <button
-                key={option.type}
-                type="button"
-                aria-pressed={isActive}
-                onClick={() =>
-                  onChange({
-                    contentType: isActive ? undefined : FILE_TYPE_CONTENT_TYPE[option.type],
-                  })
-                }
-                className={`flex cursor-pointer items-center gap-1 rounded-ds border px-2 py-1.5 transition-colors ${
-                  isActive
-                    ? 'border-ds-primary bg-ds-primary-fixed'
-                    : 'border-transparent bg-ds-surface-container hover:border-ds-outline-variant'
-                }`}
-              >
-                <Icon name={option.icon} className={`text-[16px] ${option.iconClassName}`} />
-                <span className="font-ds-label text-ds-label-sm text-ds-on-surface">
-                  {option.label}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+        <FileTypeFilter
+          value={{
+            contentType: filters.contentType,
+            excludeContentTypes: filters.excludeContentTypes,
+          }}
+          onChange={onChange}
+        />
       </FilterGroup>
 
       <FilterGroup title="Created Date">
@@ -140,6 +109,22 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
               type="checkbox"
               checked={filters.sharingScope.includes(scope)}
               onChange={() => toggleScope(scope)}
+              className="h-4 w-4 rounded border-ds-outline-variant bg-ds-surface text-ds-primary focus:ring-ds-primary"
+            />
+            <span className="font-ds-body text-ds-body-sm text-ds-secondary transition-colors group-hover:text-ds-on-surface">
+              {label}
+            </span>
+          </label>
+        ))}
+      </FilterGroup>
+
+      <FilterGroup title="Ownership">
+        {OWNERSHIP_OPTIONS.map(({ value, label }) => (
+          <label key={value} className="group flex cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              checked={filters.ownership === value}
+              onChange={() => toggleOwnership(value)}
               className="h-4 w-4 rounded border-ds-outline-variant bg-ds-surface text-ds-primary focus:ring-ds-primary"
             />
             <span className="font-ds-body text-ds-body-sm text-ds-secondary transition-colors group-hover:text-ds-on-surface">

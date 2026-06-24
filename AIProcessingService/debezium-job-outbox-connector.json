@@ -8,12 +8,21 @@
     "database.user": "myuser",
     "database.password": "secret",
     "database.dbname": "aireqdb",
-    "database.server.name": "aiprocessing-server",
     "table.include.list": "public.job_outbox",
-    "topic.prefix": "aiprocessing",
-    "transforms": "unwrap",
+    "publication.autocreate.mode": "filtered",
+    "topic.prefix": "aiService",
+    "transforms": "unwrap,filter,router",
     "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
     "transforms.unwrap.drop.tombstones": "true",
+    "transforms.unwrap.add.fields": "op",
+    "transforms.filter.type": "io.debezium.transforms.Filter",
+    "transforms.filter.language": "jsr223.groovy",
+    "transforms.filter.condition": "value.__op != 'u'",
+    "transforms.router.type": "io.debezium.transforms.ByLogicalTableRouter",
+    "transforms.router.topic.regex": ".*",
+    "transforms.router.topic.replacement": "job-outbox",
+    "topic.creation.default.partitions": "3",
+    "topic.creation.default.replication.factor": "1",
     "key.converter.schemas.enable": "false",
     "value.converter.schemas.enable": "false",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
@@ -21,4 +30,3 @@
     "snapshot.mode": "initial"
   }
 }
-

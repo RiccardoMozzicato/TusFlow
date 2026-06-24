@@ -92,6 +92,7 @@ class KafkaListenerTest {
                     types = listOf("application/pdf"),
                 ),
             ),
+            pipelineTracing = mockk(relaxed = true),
         )
 
     @Test

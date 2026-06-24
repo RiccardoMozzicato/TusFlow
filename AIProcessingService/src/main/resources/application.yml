@@ -1,6 +1,12 @@
 spring:
   application:
     name: AIProcessingService
+  reactor:
+    # Bridge thread-local trace/baggage context into Reactor so the streaming RAG path
+    # (RagService.streamQuery) keeps one trace and carries langfuse.user.id / session onto
+    # the Spring AI ChatModel generation span. Without this, streamed chats produce a
+    # fragmented, user-less trace in Langfuse.
+    context-propagation: auto
   profiles:
     active: dev
   datasource:
@@ -10,8 +16,19 @@ spring:
   ai:
     chat:
       observations:
-        include-prompt: true
-        include-completion: true
+        # Prompt/completion CONTENT is surfaced onto generation spans by
+        # tracing/LangfuseObservationFilter (gen_ai.prompt / gen_ai.completion) — it reads
+        # the observation context directly, so it works regardless of the flags below.
+        # Spring AI 1.1.x renamed the content flags to log-prompt/log-completion (the old
+        # include-prompt/include-completion were silently ignored); enabling them is
+        # redundant with the filter and logs a startup security warning, so we leave them off
+        # and only enable error capture for failed generations.
+        include-error-logging: true
+      memory:
+        repository:
+          jdbc:
+            # Schema owned by Flyway (V11__create_chat_memory.sql), not the framework.
+            initialize-schema: never
     retry:
       max-attempts: 1
       on-client-errors: false
@@ -19,7 +36,7 @@ spring:
       pgvector:
         index-type: hnsw
         distance-type: cosine_distance
-        dimensions: 768  # nomic-embed-text usa 768 dimensioni (non 1536)
+        dimensions: 2560  # Qwen3-Embedding-4B native dimensionality
         initialize-schema: false  # Gestito da Flyway migrations
         table-name: vector_store
     openai:
@@ -32,7 +49,9 @@ spring:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       embedding:
         options:
-          model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+          # Qwen3-Embedding 4B → 2560 dims (must match pgvector dimensions + the
+          # vector_store column). Use the :4b tag; :0.6b is 1024 and :8b is 4096.
+          model: ${OLLAMA_EMBEDDING_MODEL:qwen3-embedding:4b}
   jpa:
     hibernate:
       ddl-auto: none
@@ -114,6 +133,45 @@ ai:
         - application/x-yaml
         - application/csv
 
+# Embedding metadata stored alongside each vector (informational) + the local-profile
+# provider toggle read by EmbeddingConfig. Keep these in sync with the active model:
+# Qwen3-Embedding-4B → 2560 dims (both the Ollama and OpenWebUI backends).
+app:
+  embedding:
+    model: ${EMBEDDING_MODEL_NAME:qwen3-embedding-4b}
+    dimensions: ${EMBEDDING_DIMENSIONS:2560}
+    # local profile only: 'ollama' (default) or 'openai'/'openwebui'.
+    provider: ${APP_EMBEDDING_PROVIDER:ollama}
+    # Kafka consumer threads embedding batches in parallel — each thread = 1 concurrent
+    # call to the model backend. Capped by the partition count of `embeddings-batch`.
+    # Lower to 1-2 when running a single self-hosted GPU (e.g. the 4B model on a Mac).
+    concurrency: ${EMBEDDING_CONCURRENCY:3}
+
+  # Retrieval-Augmented Generation. The model retrieves on demand via the content-search tool
+  # (DocumentSearchService); top-k/similarity-threshold tune that search.
+  # similarity-threshold is 0.0 (off) by default so retrieval doesn't regress before the score
+  # distribution of the active embedding model is known; raise it (e.g. 0.5) once Langfuse traces
+  # show typical similarity scores.
+  rag:
+    retrieval:
+      top-k: ${RAG_TOP_K:5}
+      similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.0}
+    memory:
+      # Conversation window kept per chat; older turns drop off.
+      max-messages: ${RAG_MEMORY_MAX_MESSAGES:20}
+    streaming:
+      # POST /api/rag/query/stream pushes the answer over STOMP (/user/queue/rag).
+      enabled: ${RAG_STREAMING_ENABLED:true}
+    scoring:
+      # Langfuse evaluation scores on RAG query traces (off by default; all best-effort/async).
+      # relevance is cheap (mean source similarity); groundedness adds one LLM-judge call per query.
+      # Reuses the OTLP Basic auth header; base-url is the Langfuse host (no /api path).
+      enabled: ${RAG_SCORING_ENABLED:true}
+      relevance: ${RAG_SCORING_RELEVANCE:true}
+      groundedness: ${RAG_SCORING_GROUNDEDNESS:true}
+      langfuse-base-url: ${LANGFUSE_BASE_URL:https://cloud.langfuse.com}
+      langfuse-auth-header: ${LANGFUSE_AUTH_HEADER:}
+
 keycloak:
   client-id: ai-client
   client-secret: f9n2EePzamfcR3gieGYidhBjNjY3Jxr9
@@ -130,10 +188,15 @@ kafka:
     key-serializer: org.apache.kafka.common.serialization.StringSerializer
     value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-#logging:
-#  level:
+logging:
+  level:
+    # Silence PDFBox/FontBox per-glyph noise on PDFs with subsetted math fonts (e.g. CambriaMath):
+    # "No Unicode mapping for ..." / "Format 14 cmap table is not supported". Harmless during text
+    # extraction — those math glyphs just aren't mapped. ERROR still surfaces real parse failures.
+    org.apache.pdfbox: ERROR
+    org.apache.fontbox: ERROR
 #    g11:
-#      aiprocessingservice: INFO
+#      aiprocessingservice: DEBUG
 #    org:
 #      springframework:
 #        ai:
@@ -149,6 +212,18 @@ management:
   tracing:
     sampling:
       probability: 1.0
+    baggage:
+      # Propagate the Langfuse trace-level ids to EVERY span in a trace (not just the root),
+      # so per-observation filtering by user/session is reliable in Langfuse. RagTracing sets
+      # these as baggage around the query; tag-fields copies them onto each child span, and
+      # remote-fields also carries them across services via the W3C `baggage` header.
+      # Field names must equal the Langfuse attribute keys.
+      remote-fields:
+        - langfuse.user.id
+        - langfuse.session.id
+      tag-fields:
+        - langfuse.user.id
+        - langfuse.session.id
   otlp:
     tracing:
       # Set LANGFUSE_OTLP_ENDPOINT=https://cloud.langfuse.com/api/public/otel/v1/traces

@@ -97,6 +97,8 @@ open class File(
             owner = this.ownerId,
             ownerName = ownerName,
             sharingScope = this.sharingScope,
+            organization = this.organization,
+            department = this.department,
             status = currentVersionEntity?.status
         )
 

@@ -11,6 +11,11 @@ group = "it.polito.wa2"
 version = "0.0.1-SNAPSHOT"
 description = "UserDetailService"
 
+// Pin Spring Framework to 6.2.15+. Boot 3.5.8 ships 6.2.14, which has a ConcurrentReferenceHashMap /
+// AnnotationTypeMappings deadlock (spring-projects/spring-framework#35944) that can wedge every
+// Tomcat worker under concurrent first-requests and hang the whole service. Fixed in 6.2.15.
+extra["spring-framework.version"] = "6.2.15"
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)

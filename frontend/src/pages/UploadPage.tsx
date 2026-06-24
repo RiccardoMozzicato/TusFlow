@@ -7,7 +7,7 @@ import StorageMeter from '@/features/upload/components/StorageMeter'
 import TransferQueue from '@/features/upload/components/TransferQueue'
 import UploadSummaryBar from '@/features/upload/components/UploadSummaryBar'
 import type { RowActionKind } from '@/features/upload/components/TransferQueueRow'
-import { useUploadQueue } from '@/features/upload/useUploadQueue'
+import { useUploadQueueContext } from '@/features/upload/UploadQueueProvider'
 import { allowedUploadScopes } from '@/features/upload/uploadScopes'
 import { useStorageInfo } from '@/features/users/useStorageInfo'
 import { useAppSelector } from '@/app/hooks'
@@ -32,11 +32,12 @@ export default function UploadPage() {
     pause,
     resume,
     cancel,
+    dismiss,
     retry,
     pauseAll,
     resumeAll,
     clearCompleted,
-  } = useUploadQueue()
+  } = useUploadQueueContext()
   const storage = useStorageInfo()
 
   // Guard against a selected scope the user isn't allowed to use (e.g. role
@@ -64,6 +65,8 @@ export default function UploadPage() {
         return retry(id)
       case 'cancel':
         return cancel(id)
+      case 'dismiss':
+        return dismiss(id)
       // The client-generated fileId is the backend file UUID, so it doubles as
       // the Document Details route param.
       case 'open':
@@ -76,7 +79,9 @@ export default function UploadPage() {
   const hasCompleted = items.some((item) => item.status === 'completed')
 
   return (
-    <>
+    // pb-24 reserves room for the fixed UploadSummaryBar so the staged list,
+    // transfer queue, and dropzone never scroll underneath it (and stay clickable).
+    <div className="pb-24">
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="mb-1 font-ds-heading text-ds-headline-md text-ds-on-surface">
@@ -115,6 +120,6 @@ export default function UploadPage() {
         canResume={hasPaused}
         canClear={hasCompleted}
       />
-    </>
+    </div>
   )
 }

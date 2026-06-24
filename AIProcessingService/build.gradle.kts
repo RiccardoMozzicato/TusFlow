@@ -44,6 +44,10 @@ dependencies {
     implementation("org.springframework.ai:spring-ai-starter-model-ollama")
     implementation("org.springframework.ai:spring-ai-advisors-vector-store")
     implementation("org.springframework.ai:spring-ai-starter-vector-store-pgvector")
+    // Modular RAG (RetrievalAugmentationAdvisor + query transformers/retrievers/augmenters)
+    implementation("org.springframework.ai:spring-ai-rag")
+    // JDBC-backed conversational chat memory (SPRING_AI_CHAT_MEMORY); schema owned by Flyway
+    implementation("org.springframework.ai:spring-ai-starter-model-chat-memory-repository-jdbc")
 
     // PDF Processing
     implementation("org.apache.pdfbox:pdfbox:2.0.31")

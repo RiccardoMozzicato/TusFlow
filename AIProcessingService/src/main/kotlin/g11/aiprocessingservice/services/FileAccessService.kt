@@ -27,6 +27,7 @@ class FileAccessService(
      */
     fun getAccessibleFileIds(userId: UUID, userToken: String): Set<String> {
         try {
+            //TODO: Check if the files in department, organization are checked maybe create getReadableFiles
             val ownedFileIds = getOwnedFileIds(userId, userToken)
             val sharedFileIds = getSharedFileIds(userId, userToken)
 

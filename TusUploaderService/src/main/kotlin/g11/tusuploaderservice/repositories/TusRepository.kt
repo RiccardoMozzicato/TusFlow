@@ -25,6 +25,17 @@ interface TusRepository: JpaRepository<Upload, UUID>, JpaSpecificationExecutor<U
 
     fun findAllByExpiresAtBeforeAndStatusNot(now: Date, uploadStatus: UploadStatus): List<Upload>
 
+    /**
+     * The caller's resumable uploads: owned by [ownerId], still in one of the given
+     * [statuses] (PENDING/UPLOADING — the client still has bytes to send), and not yet
+     * expired ([expiresAt] strictly after [now]). Drives GET /api/v1/files/my-uploads.
+     */
+    fun findByOwnerIdAndStatusInAndExpiresAtAfter(
+        ownerId: UUID,
+        statuses: Collection<UploadStatus>,
+        now: Date,
+    ): List<Upload>
+
     fun findByStatus(
         status: UploadStatus,
     ): MutableList<Upload>

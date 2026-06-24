@@ -19,6 +19,8 @@ interface SharingPanelProps {
   mutationError: string | null
   onRemoveShare: (shareId: number) => void
   onUpdatePermission: (shareId: number, permission: Permission) => void
+  /** URL copied by "Copy Link"; defaults to the current page URL. */
+  linkUrl?: string
 }
 
 const COPIED_RESET_MS = 2000
@@ -48,6 +50,7 @@ export default function SharingPanel({
   mutationError,
   onRemoveShare,
   onUpdatePermission,
+  linkUrl,
 }: SharingPanelProps) {
   const [target, setTarget] = useState<ShareTarget | null>(null)
   const [permission, setPermission] = useState<Permission>(Permission.READ_ONLY)
@@ -79,7 +82,7 @@ export default function SharingPanel({
 
   async function handleCopyLink() {
     try {
-      await navigator.clipboard.writeText(window.location.href)
+      await navigator.clipboard.writeText(linkUrl ?? window.location.href)
       setCopied(true)
       window.setTimeout(() => setCopied(false), COPIED_RESET_MS)
     } catch {
@@ -198,11 +201,16 @@ export default function SharingPanel({
         <button
           type="button"
           onClick={handleCopyLink}
+          title="Copy a direct link to this document — only people with access can open it"
+          aria-label="Copy a direct link to this document — only people with access can open it"
           className="flex w-full items-center justify-center gap-2 rounded-ds-md border border-ds-outline-variant bg-ds-surface-container py-2 font-ds-label text-ds-label-md text-ds-on-surface-variant transition-colors hover:bg-ds-surface-variant"
         >
           <Icon name={copied ? 'check' : 'link'} filled={false} className="text-[18px]" />
-          {copied ? 'Link Copied' : 'Copy Link'}
+          {copied ? 'Link copied' : 'Copy document link'}
         </button>
+        <p className="text-center font-ds-label text-ds-label-sm text-ds-secondary">
+          Anyone with access can open this link.
+        </p>
       </div>
     </DetailSection>
   )

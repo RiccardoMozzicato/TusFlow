@@ -16,4 +16,6 @@ data class FiltersDTO(
     val pageNumber: UInt = 0u,
     val pageSize: UInt = 10u,
     val sharingScopes: Set<SharingScope> = setOf(SharingScope.PERSONAL),
+    val ownership: Ownership? = null,
+    val excludeContentTypes: List<String>? = null,
 )

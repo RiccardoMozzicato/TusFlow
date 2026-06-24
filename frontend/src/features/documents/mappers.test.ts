@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   formatDate,
   formatDateTime,
+  formatRelativeTime,
   mapContentTypeToFileType,
   mapFileToDocument,
   mapSharingScopeToScope,
@@ -92,6 +93,40 @@ describe('formatDateTime', () => {
   })
 })
 
+describe('formatRelativeTime', () => {
+  const now = new Date('2023-10-20T12:00:00Z')
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reads very recent timestamps as "Just now"', () => {
+    expect(formatRelativeTime('2023-10-20T11:59:30Z')).toBe('Just now')
+  })
+
+  it('reads the previous day as "Yesterday"', () => {
+    expect(formatRelativeTime('2023-10-19T12:00:00Z')).toBe('Yesterday')
+  })
+
+  it('reads several days back as "N days ago"', () => {
+    expect(formatRelativeTime('2023-10-17T12:00:00Z')).toBe('3 days ago')
+  })
+
+  it('reads weeks back as "N weeks ago"', () => {
+    expect(formatRelativeTime('2023-10-06T12:00:00Z')).toBe('2 weeks ago')
+  })
+
+  it('returns a dash for missing or unparseable input', () => {
+    expect(formatRelativeTime(undefined)).toBe('—')
+    expect(formatRelativeTime('not-a-date')).toBe('—')
+  })
+})
+
 describe('mapFileToDocument', () => {
   it('maps a fully populated DTO', () => {
     const dto: FileDTO = {
@@ -165,6 +200,36 @@ describe('mapFileToDocument', () => {
     expect(
       mapFileToDocument({ id: 'x', createdAt: '2023-10-20T09:00:00Z' }).size,
     ).toBe('—')
+  })
+
+  it('flags the file as owned when its owner matches the current user', () => {
+    const dto: FileDTO = { id: 'x', createdAt: '2023-10-20T09:00:00Z', owner: 'uuid-me' }
+    expect(mapFileToDocument(dto, undefined, 'uuid-me').isOwnedByMe).toBe(true)
+    expect(mapFileToDocument(dto, undefined, 'uuid-other').isOwnedByMe).toBe(false)
+    // No current user id known → never flagged as owned.
+    expect(mapFileToDocument(dto).isOwnedByMe).toBe(false)
+  })
+
+  it('populates the relative creation time', () => {
+    const doc = mapFileToDocument({ id: 'x', createdAt: '2023-10-20T09:00:00Z' })
+    expect(doc.createdRelative).not.toBe('—')
+    expect(typeof doc.createdRelative).toBe('string')
+  })
+
+  it('carries the raw sharing scope, defaulting to PERSONAL', () => {
+    expect(
+      mapFileToDocument({ id: 'x', createdAt: '2023-10-20T09:00:00Z', sharingScope: 'DEPARTMENT' })
+        .sharingScope,
+    ).toBe('DEPARTMENT')
+    expect(
+      mapFileToDocument({ id: 'x', createdAt: '2023-10-20T09:00:00Z' }).sharingScope,
+    ).toBe('PERSONAL')
+  })
+
+  it('flags writability from the 4th argument, defaulting to false', () => {
+    const dto: FileDTO = { id: 'x', createdAt: '2023-10-20T09:00:00Z' }
+    expect(mapFileToDocument(dto, undefined, undefined, true).isWritable).toBe(true)
+    expect(mapFileToDocument(dto).isWritable).toBe(false)
   })
 
   it('carries the AI status passed in, leaving it undefined when omitted', () => {

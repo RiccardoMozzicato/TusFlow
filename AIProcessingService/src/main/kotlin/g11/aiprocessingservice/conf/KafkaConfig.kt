@@ -90,6 +90,24 @@ class KafkaConfig (
             .build()
     }
 
+    /**
+     * Declares the embeddings-batch topic with multiple partitions so EmbeddingGenerator can
+     * consume it with concurrency > 1 and embed several batches in parallel. Without this the
+     * topic auto-creates with the broker default (1 partition), which caps the listener at a
+     * single active thread regardless of its configured concurrency. EmbeddingProcessor sends
+     * these records with a null key so a single file's batches spread across partitions — safe
+     * because embedding batches have no ordering requirement (chunks dedupe by chunkIndex).
+     * KafkaAdmin creates it if missing and raises an existing topic to this partition count on
+     * startup (it can only increase, never decrease).
+     */
+    @Bean
+    fun embeddingsBatchTopic(): NewTopic {
+        return TopicBuilder.name("embeddings-batch")
+            .partitions(EMBEDDINGS_BATCH_PARTITIONS)
+            .replicas(1)
+            .build()
+    }
+
     @Bean
     fun consumerFactory(): ConsumerFactory<String, String> {
         val props = hashMapOf<String, Any>(
@@ -206,5 +224,8 @@ class KafkaConfig (
     companion object {
         /** Partition count for the file-outbox topic; also the upper bound on listener concurrency. */
         const val FILE_OUTBOX_PARTITIONS = 3
+
+        /** Partition count for the embeddings-batch topic; the upper bound on EmbeddingGenerator concurrency. */
+        const val EMBEDDINGS_BATCH_PARTITIONS = 3
     }
 }

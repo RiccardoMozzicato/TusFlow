@@ -12,6 +12,14 @@ group = "G11"
 version = "0.0.1-SNAPSHOT"
 description = "TusUploaderService"
 
+// Pin Spring Framework to 6.2.15+. Boot 3.5.8 ships 6.2.14, which has a ConcurrentReferenceHashMap /
+// AnnotationTypeMappings deadlock (spring-projects/spring-framework#35944): the cache's mapping
+// function re-enters computeIfAbsent while holding a segment lock, so two concurrent first-requests
+// can deadlock (ABBA) during per-request handler annotation scanning. That wedges every Tomcat
+// worker and the whole service stops responding (even /actuator/health) until restart. Fixed in
+// 6.2.15. Safe with Boot 3.5.8 (a patch bump). Drop this once Boot is raised to 3.5.9+.
+extra["spring-framework.version"] = "6.2.15"
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)

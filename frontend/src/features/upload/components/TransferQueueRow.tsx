@@ -5,7 +5,7 @@ import type { UploadItem, UploadStatus } from '../types'
 export const ROW_GRID = 'grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-6'
 
 // The imperative actions a row button can trigger, handled by the queue hook.
-export type RowActionKind = 'pause' | 'resume' | 'cancel' | 'retry' | 'open'
+export type RowActionKind = 'pause' | 'resume' | 'cancel' | 'dismiss' | 'retry' | 'open'
 
 interface RowAction {
   kind: RowActionKind
@@ -50,7 +50,7 @@ const ACTIONS: Record<UploadStatus, RowAction[]> = {
       className: 'text-ds-primary hover:bg-ds-primary-container',
     },
     {
-      kind: 'cancel',
+      kind: 'dismiss',
       icon: 'close',
       title: 'Remove from list',
       className: 'text-ds-outline hover:bg-ds-surface-variant hover:text-ds-on-surface',

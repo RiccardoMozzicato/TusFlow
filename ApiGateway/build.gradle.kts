@@ -21,6 +21,12 @@ repositories {
 
 extra["springCloudVersion"] = "2024.0.2"
 
+// Pin Spring Framework to 6.2.15+. The managed 6.2.14 has a ConcurrentReferenceHashMap /
+// AnnotationTypeMappings deadlock (spring-projects/spring-framework#35944): two concurrent
+// first-requests can deadlock (ABBA) during handler annotation scanning and wedge every Tomcat
+// worker, hanging the whole service (even /actuator/health) until restart. Fixed in 6.2.15.
+extra["spring-framework.version"] = "6.2.15"
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-security")

@@ -11,9 +11,8 @@
     <property name="LOG_LOGGER" value="%clr(%logger{30}){cyan}"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>INFO</level>
-        </filter>
+        <!-- No threshold here: the console honors the active profile's logger
+             levels, so the dev profile (root=DEBUG) prints DEBUG to the console. -->
         <encoder>
             <pattern>
                 ${LOG_DATE} ${LOG_THREAD} ${LOG_LEVEL} ${LOG_LOGGER} %clr([%mdc{traceId:-} %mdc{spanId:-}]){faint}
@@ -25,6 +24,11 @@
     <!-- Loki appender (LGTM stack) -->
     <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="TusUploaderService"/>
     <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <!-- Ship only INFO+ to Loki to stay under its ingestion rate limit. The
+             console already filters to INFO, so DEBUG was being sent to Loki only. -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
         <http>
             <url>http://localhost:3100/loki/api/v1/push</url>
         </http>
@@ -42,6 +46,9 @@
         <logger name="org.hibernate.SQL" level="DEBUG"/>
         <logger name="org.hibernate.orm.jdbc.bind" level="WARN"/>
         <logger name="org.hibernate.type.descriptor.sql" level="WARN"/>
+        <!-- Hibernate Validator logs its script-evaluator setup at DEBUG on
+             startup; keep it at INFO to suppress that boot-time noise. -->
+        <logger name="org.hibernate.validator" level="INFO"/>
 
         <logger name="org.springframework" level="INFO"/>
         <logger name="org.springframework.web" level="INFO"/>
@@ -51,6 +58,10 @@
         <logger name="org.apache.catalina" level="WARN"/>
         <logger name="org.apache.coyote" level="WARN"/>
         <logger name="org.apache.tomcat" level="WARN"/>
+
+        <!-- Kafka client polls the broker every ~500ms and logs each FETCH at
+             DEBUG; keep it at INFO so it doesn't drown the console in dev. -->
+        <logger name="org.apache.kafka" level="INFO"/>
 
         <logger name="it.polito.wa2.tusuploaderservice" level="DEBUG"/>
 

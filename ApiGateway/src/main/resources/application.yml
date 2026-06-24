@@ -30,6 +30,17 @@ spring:
   cloud:
     gateway:
       mvc:
+        # The AI-job / RAG live channel is STOMP-over-SockJS. Since the servlet gateway can't
+        # proxy a raw WebSocket upgrade, SockJS falls back to HTTP *streaming* transports whose
+        # response never completes (eventsource, xhr_streaming). By default Spring Cloud Gateway
+        # MVC buffers every proxied response to EOF (streaming-media-types is empty), so the
+        # receive channel delivers no bytes, the browser's EventSource/xhr_streaming aborts on
+        # the SockJS transport timeout, and STOMP never connects — no live updates anywhere.
+        # Listing these content types switches them to incremental, flushing copy.
+        # Match is exact (List.contains -> MediaType.equals), so the charset MUST be included.
+        streaming-media-types:
+          - "text/event-stream;charset=UTF-8"
+          - "application/javascript;charset=UTF-8"
         routes:
           - id: file-service
             uri: http://localhost:8081
@@ -49,6 +60,13 @@ spring:
             uri: http://localhost:8083
             predicates:
               - Path=/api/v1/jobs/**
+            filters:
+              - TokenRelay
+
+          - id: ai-rag-service
+            uri: http://localhost:8083
+            predicates:
+              - Path=/api/rag/**
             filters:
               - TokenRelay
 

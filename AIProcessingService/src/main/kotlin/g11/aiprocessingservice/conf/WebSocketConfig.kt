@@ -38,5 +38,11 @@ class WebSocketConfig(
         // In-memory broker: per-user destinations only (clients subscribe, never publish).
         registry.enableSimpleBroker("/queue")
         registry.setUserDestinationPrefix("/user")
+        // Preserve per-session publish order. The clientOutboundChannel is a multi-threaded executor
+        // that otherwise may deliver messages out of order — harmless for sparse job-status pushes,
+        // but the RAG stream fires many SOURCES/TOKEN frames back-to-back, so without this the answer
+        // chunks arrive scrambled on the client. This serializes delivery per session (small
+        // throughput cost) so frames land in the order they were published.
+        registry.setPreservePublishOrder(true)
     }
 }

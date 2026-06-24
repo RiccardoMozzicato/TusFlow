@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import authReducer from '@/features/auth/authSlice'
 import documentsReducer from '@/features/documents/documentsSlice'
+import documentDetailsReducer from '@/features/documents/documentDetailsSlice'
 import {
   getFiles,
   SharingScope,
@@ -60,7 +61,11 @@ function makePage(content: FileDTO[], overrides: Partial<PageResponse<FileDTO>> 
 
 function renderPage() {
   const store = configureStore({
-    reducer: { auth: authReducer, documents: documentsReducer },
+    reducer: {
+      auth: authReducer,
+      documents: documentsReducer,
+      documentDetails: documentDetailsReducer,
+    },
   })
   render(
     <Provider store={store}>

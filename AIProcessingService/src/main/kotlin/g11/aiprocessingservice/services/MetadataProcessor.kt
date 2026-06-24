@@ -66,6 +66,7 @@ class MetadataProcessor(
     private val retryJobService: RetryJobService,
     private val textExtractionService: TextExtractionService,
     private val supportedContentTypes: SupportedContentTypes,
+    private val pipelineTracing: g11.aiprocessingservice.tracing.PipelineTracing,
 ) : KafkaInterface {
     private val log = LoggerFactory.getLogger(g11.aiprocessingservice.services.MetadataProcessor::class.java)
     private val objectMapper = jacksonObjectMapper()
@@ -308,12 +309,18 @@ class MetadataProcessor(
 
         // Determine which AI client to use based on content type
         val clientToUse = selectAIClient(job.contentType)
-        val clientName = when (clientToUse) {
-            pdfAnalysisChatClient -> "PDF-specific ($pdfModelName)"
-            imageChatClient       -> "Image/Video-specific ($imageModelName)"
-            else                  -> "Generic ($chatModelName)"
+        val modelName = when (clientToUse) {
+            pdfAnalysisChatClient -> pdfModelName
+            imageChatClient       -> imageModelName
+            else                  -> chatModelName
         }
-        log.info("Processing job {} with {} client for contentType: {}", jobId, clientName, job.contentType)
+        val clientName = when (clientToUse) {
+            pdfAnalysisChatClient -> "pdf"
+            imageChatClient       -> "image"
+            else                  -> "generic"
+        }
+        log.info("Processing job {} with {} client ({}) for contentType: {}", jobId, clientName, modelName, job.contentType)
+        pipelineTracing.tagUploadAnalysis(job.ownerUserId, job.fileId, job.filename, job.contentType, modelName, clientName)
 
         try {
             log.debug("First attempt / Kafka attempt / User attempt")
@@ -501,6 +508,7 @@ class MetadataProcessor(
         val fileContent = textExtractionService.extract(inputStream, contentType).content
 
         val truncatedContent = truncateContent(fileContent, maxContentChars)
+        pipelineTracing.tagAnalysisContent(truncatedContent.length)
         val prompt = promptTemplate.inputStream.bufferedReader().use { it.readText() }
             .replace("{document}", truncatedContent)
 

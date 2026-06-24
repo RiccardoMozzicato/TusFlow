@@ -7,6 +7,7 @@ import g11.aiprocessingservice.repositories.FileVersionEmbeddingRepository
 import org.slf4j.LoggerFactory
 import org.springframework.ai.document.Document
 import org.springframework.ai.vectorstore.VectorStore
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.kafka.annotation.DltHandler
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.annotation.RetryableTopic
@@ -25,6 +26,9 @@ class EmbeddingGenerator(
     private val embeddingRepository: FileVersionEmbeddingRepository,
     private val objectMapper: ObjectMapper,
     private val deadLetterService: DeadLetterService,
+    private val pipelineTracing: g11.aiprocessingservice.tracing.PipelineTracing,
+    @Value("\${app.embedding.model:qwen3-embedding-4b}") private val embeddingModelName: String,
+    @Value("\${app.embedding.dimensions:2560}") private val embeddingDimensions: String,
 ) {
     private val log = LoggerFactory.getLogger(EmbeddingGenerator::class.java)
 
@@ -54,7 +58,9 @@ class EmbeddingGenerator(
         topics = ["embeddings-batch"],
         groupId = "embedding-generator",
         containerFactory = "embeddingKafkaListenerContainerFactory",
-        concurrency = "3"  // 3 consumer in parallelo
+        // Consumer threads embedding batches in parallel (each = 1 concurrent call to the model
+        // backend). Configurable so a single self-hosted GPU can be throttled to 1-2.
+        concurrency = "\${app.embedding.concurrency:3}"
     )
     @Transactional
     fun generateEmbeddings(message: String) {
@@ -62,6 +68,14 @@ class EmbeddingGenerator(
 
         log.info("Generating embeddings for batch ${batch.batchNumber}/${batch.totalBatches} " +
                 "of fileVersion ${batch.fileVersionId}")
+
+        // The batch event carries no owner field, but every chunk's metadata does (set in
+        // EmbeddingProcessor's baseMetadata) — read it so the embedding observation groups by user.
+        val ownerUserId = batch.chunks.firstOrNull()?.metadata?.get("ownerUserId")
+        pipelineTracing.tagEmbeddingBatch(
+            ownerUserId, batch.fileVersionId, batch.batchNumber, batch.totalBatches,
+            batch.chunks.size, embeddingModelName, embeddingDimensions,
+        )
 
         batch.chunks.forEach { chunk ->
             try {
@@ -85,8 +99,8 @@ class EmbeddingGenerator(
                     documentId.toString(),
                     chunk.content,
                     chunk.metadata + mapOf(
-                        "embeddingModel" to "nomic-embed-text",
-                        "embeddingDimensions" to "768",
+                        "embeddingModel" to embeddingModelName,
+                        "embeddingDimensions" to embeddingDimensions,
                         "processedAt" to Instant.now().toString()
                     )
                 )

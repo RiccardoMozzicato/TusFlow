@@ -2,14 +2,20 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SharedWithMePage from './SharedWithMePage'
-import type { SharedDocument } from '@/features/shared/types'
+import type { SharedDocument, SharePermission } from '@/features/shared/types'
+import type { SharedFilters } from '@/features/shared/useSharedFiles'
 
 const downloadMock = vi.fn()
+const setFiltersMock = vi.fn()
+const resetFiltersMock = vi.fn()
+
+const DEFAULT_FILTERS: SharedFilters = { sort: 'createdAt,desc', permissions: ['edit', 'view'] }
 
 let sharedState: {
   documents: SharedDocument[]
   status: 'loading' | 'succeeded' | 'failed'
   error: string | null
+  filters: SharedFilters
   pageInfo: {
     page: number
     totalElements: number
@@ -20,14 +26,25 @@ let sharedState: {
 }
 
 vi.mock('@/features/shared/useSharedFiles', () => ({
-  useSharedFiles: () => ({ ...sharedState, goToPage: vi.fn(), reload: vi.fn() }),
+  useSharedFiles: () => ({
+    ...sharedState,
+    setFilters: setFiltersMock,
+    resetFilters: resetFiltersMock,
+    goToPage: vi.fn(),
+    reload: vi.fn(),
+  }),
 }))
 
 vi.mock('@/features/shared/useSharedDownload', () => ({
   useSharedDownload: () => ({ downloadingId: null, error: null, download: downloadMock }),
 }))
 
-function doc(id: string, title: string, permission: 'edit' | 'view'): SharedDocument {
+// The owner filter lazily loads org users; stub it so the page renders offline.
+vi.mock('@/features/users/useOrgUsers', () => ({
+  useOrgUsers: () => ({ users: [], isLoading: false, error: null, load: vi.fn() }),
+}))
+
+function doc(id: string, title: string, permission: SharePermission): SharedDocument {
   return {
     id,
     title,
@@ -57,10 +74,13 @@ function renderPage() {
 describe('SharedWithMePage', () => {
   beforeEach(() => {
     downloadMock.mockClear()
+    setFiltersMock.mockClear()
+    resetFiltersMock.mockClear()
     sharedState = {
       documents: DOCS,
       status: 'succeeded',
       error: null,
+      filters: DEFAULT_FILTERS,
       pageInfo: { page: 0, totalElements: 3, totalPages: 1, isFirst: true, isLast: true },
     }
   })
@@ -73,12 +93,19 @@ describe('SharedWithMePage', () => {
     expect(screen.getByText('Showing 3 of 3 shared documents')).toBeInTheDocument()
   })
 
-  it('filters to editable documents via the Can Edit chip', () => {
+  it('narrows to editable shares when only Can edit is left checked', () => {
     renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'Can Edit' }))
-    expect(screen.getByText('Q4 Projections')).toBeInTheDocument()
-    expect(screen.getByText('Roadmap')).toBeInTheDocument()
-    expect(screen.queryByText('Strategy')).not.toBeInTheDocument()
+    // Both boxes start checked (= any). Unchecking "Can view" leaves just edit.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Can view' }))
+    expect(setFiltersMock).toHaveBeenCalledWith({ permissions: ['edit'] })
+  })
+
+  it('allows unchecking both permission boxes (empty set)', () => {
+    sharedState.filters = { sort: 'createdAt,desc', permissions: ['edit'] }
+    renderPage()
+    // Only "Can edit" is checked; unchecking it must leave an empty set, not snap back.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Can edit' }))
+    expect(setFiltersMock).toHaveBeenCalledWith({ permissions: [] })
   })
 
   it('filters by the search box', () => {
@@ -95,6 +122,7 @@ describe('SharedWithMePage', () => {
       documents: [],
       status: 'succeeded',
       error: null,
+      filters: DEFAULT_FILTERS,
       pageInfo: { page: 0, totalElements: 0, totalPages: 0, isFirst: true, isLast: true },
     }
     renderPage()
