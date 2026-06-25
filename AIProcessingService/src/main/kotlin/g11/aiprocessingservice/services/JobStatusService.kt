@@ -47,6 +47,16 @@ class JobStatusService(
 
         jobRepository.save(jobEntity)
 
+        // Only the AI-analysis outputs are sent downstream as file metadata; job-internal fields
+        // (ownerUserId, fileVersionId, contentType, filename) stay in the job payload and must not
+        // pollute the file's persisted metadata. analysisStatus is omitted on success: the presence
+        // of summary/tags already signals completion, and it is only carried for failed/unsupported.
+        val analysisMetadata = mapOf(
+            "summary" to metadata.summary!!,
+            "tags" to metadata.tags!!,
+            "sensitivity" to metadata.sensitivity!!.name,
+        )
+
         // Create outbox event in the same transaction
         createOutboxEvent(
             event_type = "ANALYSIS_COMPLETED",
@@ -54,7 +64,7 @@ class JobStatusService(
                 "fileid" to job.fileId,
                 "version" to job.version,
                 "status" to jobStatus.COMPLETED.name,
-                "metadata" to updatedPayload
+                "metadata" to analysisMetadata
             )
         )
 
@@ -81,6 +91,12 @@ class JobStatusService(
 
         jobRepository.save(jobEntity)
 
+        // Only the analysis status is sent downstream as file metadata; job-internal fields stay in
+        // the job payload and must not pollute the file's persisted metadata.
+        val analysisMetadata = mapOf(
+            "analysisStatus" to "UNSUPPORTED",
+        )
+
         // Create outbox event in the same transaction
         createOutboxEvent(
             event_type = "ANALYSIS_UNSUPPORTED",
@@ -88,7 +104,7 @@ class JobStatusService(
                 "fileid" to job.fileId,
                 "version" to job.version,
                 "status" to jobStatus.UNSUPPORTED.name,
-                "metadata" to updatedPayload,
+                "metadata" to analysisMetadata,
                 "reason" to (reason ?: "AI analysis failed after multiple attempts")
             )
         )

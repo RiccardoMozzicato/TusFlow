@@ -65,11 +65,13 @@ object FileSpecifications {
         }
 
         /**
-         * Build specification per i file visibili all'utente nei sharingScope richiesti (in OR):
-         * - PERSONAL: file dove l'utente è owner O è presente nei fileShare
-         * - DEPARTMENT: file del department dell'utente; l'admin vede tutti i department
-         *   dell'organization, un non-admin senza department non vede alcun file DEPARTMENT
-         * - ORGANIZATION: file dell'organization dell'utente
+         * Build specification per i file visibili all'utente nei sharingScope richiesti (in OR).
+         * In ogni scope la membership è messa in OR con uno share esplicito sul file: se un file
+         * di un certo scope è condiviso con l'utente, rientra quando quello scope è richiesto.
+         * - PERSONAL: file dove l'utente è owner O è condiviso con lui (fileShare)
+         * - DEPARTMENT: file del department dell'utente (l'admin vede tutti i department
+         *   dell'organization) O file DEPARTMENT condivisi con l'utente
+         * - ORGANIZATION: file dell'organization dell'utente O file ORGANIZATION condivisi con lui
          * Restituisce solo file la cui versione corrente è AVAILABLE.
          *
          * [ownership] partiziona l'insieme già visibile: OWNED tiene solo i file di cui
@@ -134,41 +136,50 @@ object FileSpecifications {
                     predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), toDate))
                 }
 
-                // Un predicato per ogni scope richiesto, combinati in OR
+                // Un singolo LEFT JOIN su shares, riusato da ogni scope: uno share esplicito
+                // dà visibilità sul file dentro il suo scope, a prescindere dalla membership.
+                // Così richiedendo DEPARTMENT si vede anche un file DEPARTMENT condiviso con
+                // l'utente che non appartiene a quel department (idem ORGANIZATION).
+                val shares = root.join<File, FileShare>("shares", JoinType.LEFT)
+                val sharedWithUser = cb.equal(shares.get<UUID>("userID"), userId)
+
+                // Un predicato per ogni scope richiesto, combinati in OR. In ciascuno la regola
+                // di accesso "per ruolo/membership" è messa in OR con lo share esplicito.
                 val scopeField = root.get<SharingScope>("sharingScope")
                 val scopePredicates = sharingScopes.map { scope ->
                     when (scope) {
-                        SharingScope.PERSONAL -> {
-                            // Owner O shared with user (usando LEFT JOIN)
-                            val shares = root.join<File, FileShare>("shares", JoinType.LEFT)
-                            cb.and(
-                                cb.equal(scopeField, SharingScope.PERSONAL),
-                                cb.or(
-                                    cb.equal(root.get<UUID>("ownerId"), userId),
-                                    cb.equal(shares.get<UUID>("userID"), userId)
-                                )
+                        SharingScope.PERSONAL -> cb.and(
+                            cb.equal(scopeField, SharingScope.PERSONAL),
+                            cb.or(
+                                cb.equal(root.get<UUID>("ownerId"), userId),
+                                sharedWithUser
                             )
-                        }
+                        )
 
                         SharingScope.DEPARTMENT -> {
-                            val deptPredicates = mutableListOf(
-                                cb.equal(scopeField, SharingScope.DEPARTMENT),
-                                cb.equal(root.get<String>("organization"), organization)
+                            // Membership: stessa organization e (admin: qualunque department;
+                            // non-admin con department: solo il proprio; non-admin senza
+                            // department: nessun file via membership).
+                            val deptMembership = cb.and(
+                                cb.equal(root.get<String>("organization"), organization),
+                                when {
+                                    isAdmin -> cb.conjunction()
+                                    department != null -> cb.equal(root.get<String>("department"), department)
+                                    else -> cb.disjunction()
+                                }
                             )
-                            when {
-                                // Admin: vede i file DEPARTMENT di tutti i department dell'organization
-                                isAdmin -> {}
-                                department != null ->
-                                    deptPredicates.add(cb.equal(root.get<String>("department"), department))
-                                // Non-admin senza department: nessun file DEPARTMENT
-                                else -> deptPredicates.add(cb.disjunction())
-                            }
-                            cb.and(*deptPredicates.toTypedArray())
+                            cb.and(
+                                cb.equal(scopeField, SharingScope.DEPARTMENT),
+                                cb.or(deptMembership, sharedWithUser)
+                            )
                         }
 
                         SharingScope.ORGANIZATION -> cb.and(
                             cb.equal(scopeField, SharingScope.ORGANIZATION),
-                            cb.equal(root.get<String>("organization"), organization)
+                            cb.or(
+                                cb.equal(root.get<String>("organization"), organization),
+                                sharedWithUser
+                            )
                         )
                     }
                 }

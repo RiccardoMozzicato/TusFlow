@@ -124,4 +124,28 @@ class FileScopesOwnershipSpecTest @Autowired constructor(
 
         assertEquals(setOf(ownedPersonal, sharedPersonal, otherOrg), visibleFor(null))
     }
+
+    @Test
+    fun `a shared file is visible within its scope even without membership`() {
+        // DEPARTMENT file of a different department, shared with me: visible via the share,
+        // although I'm a non-admin whose department is "Sales".
+        val sharedDept = persistFile(
+            owner = other,
+            scope = SharingScope.DEPARTMENT,
+            department = "Engineering",
+            share = me to PERMISSION_LEVEL.READ_ONLY,
+        )
+        // ORGANIZATION file of a different organization, shared with me: visible via the share.
+        val sharedOrg = persistFile(
+            owner = other,
+            scope = SharingScope.ORGANIZATION,
+            organization = "org-${UUID.randomUUID()}",
+            share = me to PERMISSION_LEVEL.READ_ONLY,
+        )
+        // Same shape but NOT shared with me: stays invisible (no membership, no share).
+        persistFile(owner = other, scope = SharingScope.DEPARTMENT, department = "Engineering")
+        persistFile(owner = other, scope = SharingScope.ORGANIZATION, organization = "org-${UUID.randomUUID()}")
+
+        assertEquals(setOf(sharedDept, sharedOrg), visibleFor(null))
+    }
 }

@@ -87,7 +87,7 @@ class KafkaConsumer(
                     log.info("Successfully updated metadata for file: {} with event type: {}", fileId, eventType)
                 }
                 "ANALYSIS_FAILED" -> {
-                    val failedMetadata = metadata.withFailureStatus(payloadNode.get("error")?.asText())
+                    val failedMetadata = metadata.withFailureStatus()
                     fileService.updateFileMetadata(fileId, version, failedMetadata)
                     log.info("AI analysis failed for file: {} version: {}. Persisted failure metadata.", fileId, version)
                 }
@@ -95,7 +95,7 @@ class KafkaConsumer(
                     // Terminal: every automatic and manual retry was exhausted. Persist the failure
                     // on the file (same as a normal failure). The live notification to the browser is
                     // pushed directly by AIProcessingService over STOMP, not from here.
-                    val failedMetadata = metadata.withFailureStatus(payloadNode.get("error")?.asText())
+                    val failedMetadata = metadata.withFailureStatus()
                     fileService.updateFileMetadata(fileId, version, failedMetadata)
                     log.warn("AI analysis dead-lettered for file: {} version: {}. Retries exhausted.", fileId, version)
                 }
@@ -117,13 +117,9 @@ class KafkaConsumer(
     } catch (_: Exception) { null }
 
 
-    private fun Map<String, String>.withFailureStatus(error: String?): Map<String, String> {
-        val failureDetails = mapOf("error" to (error ?: "AI analysis failed"))
+    private fun Map<String, String>.withFailureStatus(): Map<String, String> {
         return this.toMutableMap().apply {
-            put("summary", "AI analysis failed")
-            put("tags", "failed")
             put("analysisStatus", "FAILED")
-            put("metadata", objectMapper.writeValueAsString(failureDetails))
         }
     }
 }

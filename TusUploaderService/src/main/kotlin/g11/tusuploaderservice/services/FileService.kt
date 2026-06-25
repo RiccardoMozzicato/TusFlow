@@ -267,7 +267,7 @@ class FileService(
             ownerUserId = file.ownerId.toString(),
             sensitivity = aiMetadata["sensitivity"],
             fileVersionId = fileVersion.id?.toString(),
-            analysisStatus = fileVersion.metadata?.get("analysisStatus"),
+            analysisStatus = fileVersion.aiMetadata?.get("analysisStatus"),
             status = fileVersion.status
         )
     }
@@ -367,8 +367,9 @@ class FileService(
             // Filter out fileName from metadata map for the metadata field update
             var metadataToUpdate = metadata - "filename"
 
-            // Split AI-related metadata keys from the general metadata map
-            val aiMetadataKeys = AiMetadataField.entries.map { it.key }.toSet()
+            // AI-analysis outputs live in the dedicated aiMetadata map: the user-facing fields
+            // (summary, tags, sensitivity) plus the analysisStatus a failed/unsupported analysis sets.
+            val aiMetadataKeys = AiMetadataField.entries.map { it.key }.toSet() + "analysisStatus"
             val aiMetadataToUpdate = metadataToUpdate.filterKeys { it in aiMetadataKeys }
             metadataToUpdate = metadataToUpdate - aiMetadataKeys
 

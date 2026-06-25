@@ -44,7 +44,7 @@ spring:
       base-url: ${GROQ_BASE_URL}
       chat:
         options:
-          model: ${GROQ_MODEL}
+          model: ${GROQ_MODEL:qwen/qwen3.6-27b}
     ollama:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       embedding:
@@ -88,15 +88,15 @@ ai:
 
   # Model for general chat (default AI interactions)
   chat:
-    model: ${CHAT_MODEL:llama-3.1-8b-instant}
+    model: ${CHAT_MODEL:qwen/qwen3.6-27b}
   # Model for PDF analysis (using a more powerful Groq model)
   # Llama 3.3 70B is the current powerful model for complex document analysis
   pdf:
-    model: ${PDF_MODEL:llama-3.3-70b-versatile}
+    model: ${PDF_MODEL:qwen/qwen3.6-27b}
   # Model for image analysis (must be a vision-capable model)
   # Llama 4 Scout supports image input via Groq's OpenAI-compatible API
   image:
-    model: ${IMAGE_MODEL:meta-llama/llama-4-scout-17b-16e-instruct}
+    model: ${IMAGE_MODEL:qwen/qwen3.6-27b}
     # Vision analysis always targets Groq, independent of spring.ai.openai.* — so it keeps
     # working when a profile (e.g. `local`) points chat/pdf at a non-vision self-hosted model.
     base-url: ${IMAGE_BASE_URL:${GROQ_BASE_URL}}

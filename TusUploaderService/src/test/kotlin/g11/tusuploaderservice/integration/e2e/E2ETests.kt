@@ -393,6 +393,116 @@ class E2ETests : IntegrationTest() {
         println("✅ Test passed! File metadata filtered by content type")
     }
 
+    /**
+     * Persists an AVAILABLE file (current version) for the readable-scopes test, optionally
+     * sharing it with [sharedWith]. Mirrors the file shape created in [setupMocks].
+     */
+    private fun persistReadableTestFile(
+        owner: UUID,
+        scope: SharingScope,
+        organization: String = "Test Organization",
+        department: String? = "Test Department",
+        sharedWith: UUID? = null,
+    ): UUID {
+        val id = UUID.randomUUID()
+        val now = Date.from(Instant.now())
+        val file = File(
+            uuid = id,
+            createdAt = now,
+            lastUpdateAt = now,
+            lastFilename = "f.pdf",
+            currentVersion = 1L,
+            ownerId = owner,
+            organization = organization,
+            department = department,
+            sharingScope = scope,
+        )
+        file.versions.add(
+            FileVersion(
+                id = null,
+                version = 1L,
+                status = FileStatus.AVAILABLE,
+                file = file,
+                filename = "f.pdf",
+                size = 1024L,
+                metadata = null,
+                checksum = "chk",
+                contentType = "application/pdf",
+                createdAt = now,
+                lastUpdateAt = now,
+                objectKey = id.toString(),
+            )
+        )
+        val saved = fileRepository.save(file)
+        // File.shares has no cascade, so the share row is persisted explicitly.
+        sharedWith?.let {
+            fileShareRepository.save(
+                g11.tusuploaderservice.entities.FileShare(
+                    userID = it,
+                    permission = g11.tusuploaderservice.entities.PERMISSION_LEVEL.READ_ONLY,
+                    timestamp = now,
+                    file = saved,
+                )
+            )
+        }
+        return id
+    }
+
+    @Test
+    fun `getFiles returns all readable files including department organization and shared`() {
+        // The user-service mock makes the caller testadmin (ROLE_admin, org "Test Organization").
+        val userToken = getKeycloakAccessToken("testadmin", "test")
+        val otherUser = UUID.randomUUID()
+
+        // Owned PERSONAL file already created in setupMocks() as testFileId.
+        // DEPARTMENT / ORGANIZATION files in the caller's org: visible by role (admin).
+        val deptFile = persistReadableTestFile(owner = otherUser, scope = SharingScope.DEPARTMENT)
+        val orgFile = persistReadableTestFile(owner = otherUser, scope = SharingScope.ORGANIZATION)
+        // PERSONAL file owned by someone else but shared with the caller: visible via the share.
+        val sharedPersonal = persistReadableTestFile(
+            owner = otherUser, scope = SharingScope.PERSONAL, sharedWith = testUserId,
+        )
+        // ORGANIZATION file of a DIFFERENT organization, shared with the caller: visible ONLY
+        // via the share (the caller has no membership in that org). Locks in the cross-scope
+        // share behaviour added to buildFilesByScopes.
+        val sharedForeignOrg = persistReadableTestFile(
+            owner = otherUser, scope = SharingScope.ORGANIZATION,
+            organization = "Other Organization", sharedWith = testUserId,
+        )
+        // Negatives: not shared and outside the caller's visibility → must NOT appear.
+        val hiddenPersonal = persistReadableTestFile(owner = otherUser, scope = SharingScope.PERSONAL)
+        val hiddenForeignOrg = persistReadableTestFile(
+            owner = otherUser, scope = SharingScope.ORGANIZATION, organization = "Other Organization",
+        )
+
+        val headers = HttpHeaders().apply { setBearerAuth(userToken) }
+        val request = HttpEntity<String>(null, headers)
+        val response = restTemplate.exchange(
+            "/api/v1/files?sharingScope=PERSONAL,DEPARTMENT,ORGANIZATION&page=0&size=100",
+            HttpMethod.GET,
+            request,
+            object : ParameterizedTypeReference<RestResponsePage<FileDTO>>() {}
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertNotNull(response.body)
+        val ids = response.body!!.content.map { it.id }.toSet()
+
+        assertTrue(ids.contains(testFileId), "owned PERSONAL file should be readable")
+        assertTrue(ids.contains(deptFile), "DEPARTMENT file in the caller's org should be readable")
+        assertTrue(ids.contains(orgFile), "ORGANIZATION file in the caller's org should be readable")
+        assertTrue(ids.contains(sharedPersonal), "PERSONAL file shared with the caller should be readable")
+        assertTrue(
+            ids.contains(sharedForeignOrg),
+            "ORGANIZATION file shared with the caller should be readable even outside their org",
+        )
+
+        assertFalse(ids.contains(hiddenPersonal), "unshared PERSONAL file of another user must not be readable")
+        assertFalse(ids.contains(hiddenForeignOrg), "unshared ORGANIZATION file of another org must not be readable")
+
+        println("✅ Test passed! getFiles returns owned, department, organization and shared files")
+    }
+
     @Test
     fun `getFileById returns file details with Keycloak auth`() {
         val userToken = getKeycloakAccessToken("testadmin", "test")
