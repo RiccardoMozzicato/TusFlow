@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.verify
 import it.polito.wa2.userdetailservice.controllers.UserController
+import it.polito.wa2.userdetailservice.dto.DepartmentDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
@@ -118,6 +119,43 @@ class UserControllerTest {
             .andExpect(jsonPath("$.number").value(1))
 
         verify(exactly = 1) { userService.getUsers(FiltersDTO(1, 5, null, "fullName")) }
+    }
+
+    // GET /api/v1/users/departments tests
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getDepartments - returns the department list`() {
+        // arrange
+        every { userService.getDepartments(null) } returns listOf(
+            DepartmentDTO("IT", 2),
+            DepartmentDTO("Engineering", 1),
+        )
+
+        // act & assert
+        mockMvc.perform(get("/api/v1/users/departments"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$").isArray)
+            .andExpect(jsonPath("$.length()").value(2))
+            .andExpect(jsonPath("$[0].name").value("IT"))
+            .andExpect(jsonPath("$[0].userCount").value(2))
+            .andExpect(jsonPath("$[1].name").value("Engineering"))
+
+        verify(exactly = 1) { userService.getDepartments(null) }
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getDepartments - forwards the search param`() {
+        // arrange
+        every { userService.getDepartments("eng") } returns listOf(DepartmentDTO("Engineering", 1))
+
+        // act & assert
+        mockMvc.perform(get("/api/v1/users/departments").param("search", "eng"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].name").value("Engineering"))
+
+        verify(exactly = 1) { userService.getDepartments("eng") }
     }
 
     @Test

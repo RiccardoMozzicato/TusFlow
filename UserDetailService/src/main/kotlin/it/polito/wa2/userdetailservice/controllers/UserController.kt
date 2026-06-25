@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.ExampleObject
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import it.polito.wa2.userdetailservice.dto.DepartmentDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
@@ -130,6 +131,76 @@ class UserController(
         val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() }
         val sortDirection = if (sortParts.getOrNull(1)?.lowercase() == "desc") Sort.Direction.DESC else Sort.Direction.ASC
         return userService.getUsers(FiltersDTO(page.toInt(), size.toInt(), search, sortField, sortDirection))
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = [ "User Handling" ],
+        summary = "Search the departments in the organization",
+        description = "Returns the distinct departments in use within the caller's organization, " +
+            "each with its member count, ordered by member count (desc) then name (asc). " +
+            "Departments are derived from users; null/blank departments are excluded.",
+        parameters = [
+            Parameter(
+                name = "search",
+                description = "Optional case-insensitive substring filter on the department name",
+                required = false,
+                example = "eng",
+                schema = Schema(type = "string")
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "OK",
+        content = [
+            Content(
+                mediaType = "application/json",
+                array = io.swagger.v3.oas.annotations.media.ArraySchema(
+                    schema = Schema(implementation = DepartmentDTO::class)
+                ),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        [
+                            { "name": "Engineering", "userCount": 5 },
+                            { "name": "Finance", "userCount": 3 }
+                        ]
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "500",
+        description = "Internal Server Error",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ErrorDetails::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "timestamp": "2024-01-01T12:00:00Z",
+                            "error": "Internal Server Error",
+                            "message": "An unexpected error occurred"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    //endregion
+    @GetMapping("/departments")
+    @ResponseStatus(HttpStatus.OK)
+    fun getDepartments(
+        @RequestParam(required = false) search: String?
+    ): List<DepartmentDTO> {
+        log.debug("API GET /api/v1/users/departments userOwnerId={} search={}", currentUserOwnerId(), search)
+        return userService.getDepartments(search)
     }
 
     //region Swagger Documentation

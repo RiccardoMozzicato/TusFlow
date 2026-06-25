@@ -29,6 +29,27 @@ export interface UserCreationPayload {
   storageQuota?: number | null
 }
 
+// A distinct department in use within the org, with its member count
+// (GET /api/v1/users/departments — UserDetailService DepartmentDTO).
+export interface DepartmentDTO {
+  name: string
+  userCount: number
+}
+
+/**
+ * Fetches the distinct departments in use in the caller's organization (the
+ * backend scopes by the authenticated user's org), optionally filtered by a
+ * case-insensitive substring `search`. Blank `search` is omitted so the backend
+ * returns the full list. Used to power the department autocomplete.
+ */
+export async function getDepartments(search?: string): Promise<DepartmentDTO[]> {
+  const trimmed = search?.trim()
+  const { data } = await http.get<DepartmentDTO[]>(API.departments, {
+    params: trimmed ? { search: trimmed } : {},
+  })
+  return data
+}
+
 /**
  * Fetches the authenticated user's profile, including live storage usage.
  * Errors propagate to the caller; the shared axios interceptor handles 401.

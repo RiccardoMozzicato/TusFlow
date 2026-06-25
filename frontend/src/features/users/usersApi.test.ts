@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { http } from '@/api/axios'
 import { API } from '@/config'
-import { createUser, deleteUser, getUsers, updateUser, type UserDTO } from './usersApi'
+import {
+  createUser,
+  deleteUser,
+  getDepartments,
+  getUsers,
+  updateUser,
+  type UserDTO,
+} from './usersApi'
 
 vi.mock('@/api/axios', () => ({
   http: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -42,6 +49,32 @@ describe('getUsers', () => {
     mockedGet.mockResolvedValue({ data: { content: [] } })
     await getUsers({ page: 0, size: 10, search: '', sort: '' })
     expect(mockedGet).toHaveBeenCalledWith(API.users, { params: { page: 0, size: 10 } })
+  })
+})
+
+describe('getDepartments', () => {
+  it('requests the departments endpoint without params when no search', async () => {
+    mockedGet.mockResolvedValue({ data: [] })
+    await getDepartments()
+    expect(mockedGet).toHaveBeenCalledWith(API.departments, { params: {} })
+  })
+
+  it('forwards a trimmed search term', async () => {
+    mockedGet.mockResolvedValue({ data: [] })
+    await getDepartments('  eng  ')
+    expect(mockedGet).toHaveBeenCalledWith(API.departments, { params: { search: 'eng' } })
+  })
+
+  it('omits a blank search term', async () => {
+    mockedGet.mockResolvedValue({ data: [] })
+    await getDepartments('   ')
+    expect(mockedGet).toHaveBeenCalledWith(API.departments, { params: {} })
+  })
+
+  it('returns the department list', async () => {
+    mockedGet.mockResolvedValue({ data: [{ name: 'IT', userCount: 2 }] })
+    const result = await getDepartments()
+    expect(result).toEqual([{ name: 'IT', userCount: 2 }])
   })
 })
 

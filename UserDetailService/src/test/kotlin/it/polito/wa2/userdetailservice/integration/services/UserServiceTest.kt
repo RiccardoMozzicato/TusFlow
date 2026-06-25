@@ -220,6 +220,49 @@ class UserServiceTest: IntegrationTest() {
     }
 
     @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getDepartments() - distinct departments with counts, org-scoped, ordered by count desc`() {
+        // arrange: admin is Riccardo in "Polytechnic University of Turin" (IT x2, Engineering x1)
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+
+        // act
+        val result = userService.getDepartments(null)
+
+        // assert: IT (2 members) ahead of Engineering (1); other orgs' departments excluded
+        Assertions.assertEquals(listOf("IT", "Engineering"), result.map { it.name })
+        Assertions.assertEquals(listOf(2L, 1L), result.map { it.userCount })
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getDepartments() - search filters case-insensitively within the org`() {
+        // arrange
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+
+        // act
+        val result = userService.getDepartments("ENG")
+
+        // assert
+        Assertions.assertEquals(1, result.size)
+        Assertions.assertEquals("Engineering", result[0].name)
+        Assertions.assertEquals(1L, result[0].userCount)
+    }
+
+    @Test
+    @WithMockUser(roles = ["serviceaccount-fileservice"])
+    fun `getDepartments() - service account sees departments across organizations`() {
+        // arrange: not org-scoped → IT spans 3 users across orgs
+        setupJwtAuthentication("service-account", listOf("serviceaccount-fileservice"))
+
+        // act
+        val result = userService.getDepartments(null)
+
+        // assert: IT(3) first, then the single-member departments by name asc
+        Assertions.assertEquals(listOf("IT", "Engineering", "Marketing", "Research"), result.map { it.name })
+        Assertions.assertEquals(3L, result.first { it.name == "IT" }.userCount)
+    }
+
+    @Test
     @WithMockUser(roles = ["staff", "manager"])
     fun `getUser() - successful for staff and manager`() {
         // arrange

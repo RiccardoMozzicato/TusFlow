@@ -5,6 +5,7 @@ import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import it.polito.wa2.userdetailservice.dto.DepartmentDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
@@ -216,6 +217,62 @@ class UserServiceTest {
         assertEquals(1, result.totalElements)
         assertEquals("Mary Smith", result.content[0].fullName)
         TestCase.assertTrue(specSlot.isCaptured)
+    }
+
+    @Test
+    fun `getDepartments() - org-scoped, delegates to repo with org and trimmed search`() {
+        // arrange — surrounding whitespace must be trimmed before reaching the repo
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+        every { userRepo.findDepartments("CloudFlare", "sec") } returns listOf(
+            DepartmentDTO("Security", 5),
+            DepartmentDTO("IT", 2),
+        )
+
+        // act
+        val result = userService.getDepartments("  sec  ")
+
+        // assert
+        assertEquals(2, result.size)
+        assertEquals("Security", result[0].name)
+        assertEquals(5, result[0].userCount)
+        verify { userRepo.findById(authenticatedUserId) }
+        verify { userRepo.findDepartments("CloudFlare", "sec") }
+    }
+
+    @Test
+    fun `getDepartments() - service account is not org-scoped`() {
+        // arrange: a service-account authority skips the org lookup (null org)
+        val authentication = mockk<Authentication>()
+        val securityContext = mockk<SecurityContext>()
+        every { securityContext.authentication } returns authentication
+        every { authentication.authorities } returns listOf(
+            org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_serviceaccount-fileservice"),
+        )
+        SecurityContextHolder.setContext(securityContext)
+        every { userRepo.findDepartments(null, any()) } returns listOf(DepartmentDTO("IT", 1))
+
+        // act — null search becomes "" (no filter)
+        val result = userService.getDepartments(null)
+
+        // assert
+        assertEquals(1, result.size)
+        verify(exactly = 0) { userRepo.findById(any()) }
+        verify { userRepo.findDepartments(null, "") }
+    }
+
+    @Test
+    fun `getDepartments() - blank search is normalized to empty no-filter`() {
+        // arrange
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+        every { userRepo.findDepartments(any(), "") } returns emptyList()
+
+        // act
+        userService.getDepartments("   ")
+
+        // assert — a blank term maps to the empty-string sentinel (LOWER(NULL) is illegal in Postgres)
+        verify { userRepo.findDepartments("CloudFlare", "") }
     }
 
     @Test

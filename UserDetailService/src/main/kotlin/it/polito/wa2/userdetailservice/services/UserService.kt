@@ -1,5 +1,6 @@
 package it.polito.wa2.userdetailservice.services
 
+import it.polito.wa2.userdetailservice.dto.DepartmentDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
@@ -54,6 +55,24 @@ class UserService(
         return UUID.fromString(jwt.subject)
     }
 
+    /**
+     * Resolves the organization the caller's queries should be scoped to.
+     * Service accounts have no row in [userRepo], so they see every organization
+     * (null = no restriction); any other caller is scoped to their own org.
+     */
+    private fun resolveOrganizationScope(): String? {
+        val isServiceAccount = SecurityContextHolder.getContext().authentication.authorities
+            .any { it.authority == "ROLE_serviceaccount-fileservice" }
+        if (isServiceAccount) return null
+
+        val authenticatedUserId = getAuthenticatedUserId()
+        val authenticatedUser = userRepo.findById(authenticatedUserId).orElseThrow {
+            log.warn("authenticated user {} not found", authenticatedUserId)
+            UserNotFoundException("The user with id $authenticatedUserId not found")
+        }
+        return authenticatedUser.organization
+    }
+
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_admin','ROLE_manager','ROLE_staff', 'ROLE_serviceaccount-fileservice')")
     override fun getUsers(filtersDTO: FiltersDTO): Page<UserDTO> {
@@ -67,19 +86,7 @@ class UserService(
         )
 
         // Service accounts have no row in userRepo, so they list every user (no org scope).
-        val isServiceAccount = SecurityContextHolder.getContext().authentication.authorities
-            .any { it.authority == "ROLE_serviceaccount-fileservice" }
-
-        val organization = if (isServiceAccount) {
-            null
-        } else {
-            val authenticatedUserId = getAuthenticatedUserId()
-            val authenticatedUser = userRepo.findById(authenticatedUserId).orElseThrow {
-                log.warn("authenticated user {} not found", authenticatedUserId)
-                UserNotFoundException("The user with id $authenticatedUserId not found")
-            }
-            authenticatedUser.organization
-        }
+        val organization = resolveOrganizationScope()
 
         log.debug(
             "returning users page: page={}, size={}, search={}, sort={},{}, orgScoped={}",
@@ -87,6 +94,16 @@ class UserService(
         )
         val spec = UserSpecifications.buildUsers(organization, filtersDTO.search)
         return userRepo.findAll(spec, pageable).map { it.toDTO() }
+    }
+
+    @Transactional
+    @PreAuthorize("hasAnyRole('ROLE_admin','ROLE_manager','ROLE_staff', 'ROLE_serviceaccount-fileservice')")
+    override fun getDepartments(search: String?): List<DepartmentDTO> {
+        val organization = resolveOrganizationScope()
+        // Empty string = "no filter"; the repo can't take a null search (Postgres LOWER(NULL)).
+        val normalizedSearch = search?.trim().orEmpty()
+        log.debug("returning departments search='{}' orgScoped={}", normalizedSearch, organization != null)
+        return userRepo.findDepartments(organization, normalizedSearch)
     }
 
     @Transactional

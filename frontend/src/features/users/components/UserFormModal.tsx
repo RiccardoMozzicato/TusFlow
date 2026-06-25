@@ -9,7 +9,9 @@ import {
 } from '../userQuota'
 import { USER_ROLES, userRoleLabel, type UserRole } from '../userRoles'
 import { hasErrors, validateNewUser, type NewUserFieldErrors } from '../userValidation'
+import { useDepartments } from '../useDepartments'
 import type { UserCreationPayload, UserDTO } from '../usersApi'
+import DepartmentCombobox from './DepartmentCombobox'
 
 interface UserFormModalProps {
   /** Present → edit that user; absent → create a new user. */
@@ -74,6 +76,10 @@ export default function UserFormModal({
   const [quotaUnit, setQuotaUnit] = useState<StorageUnit>(initialUnit)
   const [quotaValue, setQuotaValue] = useState(quotaToInput(user?.storageQuota, initialUnit))
   const [errors, setErrors] = useState<NewUserFieldErrors>({})
+
+  // Org departments for the autocomplete; loaded lazily on first field focus.
+  const { departments, isLoading: isLoadingDepartments, error: departmentsError, load: loadDepartments } =
+    useDepartments()
 
   // Close on Escape for keyboard users.
   useEffect(() => {
@@ -189,11 +195,16 @@ export default function UserFormModal({
           )}
 
           <Field label="Department (optional)">
-            <input
-              className={INPUT_CLASS}
+            <DepartmentCombobox
               value={department}
-              onChange={(e) => setDepartment(e.target.value)}
+              onChange={setDepartment}
+              departments={departments}
+              isLoading={isLoadingDepartments}
+              loadError={departmentsError}
               disabled={isSaving}
+              onFocusLoad={loadDepartments}
+              inputClassName={INPUT_CLASS}
+              placeholder="Search or type a department"
             />
           </Field>
 

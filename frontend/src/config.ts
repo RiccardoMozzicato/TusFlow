@@ -35,6 +35,7 @@ export const API = {
   files: '/api/v1/files',
   uploads: '/api/v1/uploads',
   users: '/api/v1/users',
+  departments: '/api/v1/users/departments',
   jobs: '/api/v1/jobs',
   rag: '/api/rag',
 } as const
