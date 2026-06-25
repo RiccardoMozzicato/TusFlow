@@ -1,6 +1,6 @@
 {
  "uid": "g11-services",
- "title": "G11 \u2014 Microservices & Document Pipeline",
+ "title": "G11 — Microservices & Document Pipeline",
  "tags": [
   "g11",
   "microservices",
@@ -362,7 +362,8 @@
        }
       ]
      },
-     "decimals": 0
+     "decimals": 0,
+     "noValue": "0"
     },
     "overrides": []
    },
@@ -458,7 +459,7 @@
   },
   {
    "type": "row",
-   "title": "HTTP \u2014 Rate \u00b7 Errors \u00b7 Duration",
+   "title": "HTTP — Rate · Errors · Duration",
    "collapsed": false,
    "gridPos": {
     "h": 1,
@@ -903,7 +904,7 @@
   },
   {
    "type": "row",
-   "title": "Document pipeline \u2014 end to end",
+   "title": "Document pipeline — end to end",
    "collapsed": false,
    "gridPos": {
     "h": 1,
@@ -1868,7 +1869,7 @@
      "legendFormat": "{{topic}}"
     }
    ],
-   "description": "Queue wait between stages: now \u2212 Kafka record timestamp, per topic."
+   "description": "Queue wait between stages: now − Kafka record timestamp, per topic."
   },
   {
    "type": "timeseries",
@@ -2071,7 +2072,7 @@
     "h": 8,
     "w": 8,
     "x": 0,
-    "y": 47
+    "y": 51
    },
    "id": 120,
    "fieldConfig": {
@@ -2206,7 +2207,7 @@
     "h": 8,
     "w": 8,
     "x": 8,
-    "y": 47
+    "y": 51
    },
    "id": 121,
    "fieldConfig": {
@@ -2508,7 +2509,7 @@
     "h": 8,
     "w": 8,
     "x": 16,
-    "y": 47
+    "y": 51
    },
    "id": 122,
    "fieldConfig": {
@@ -2612,7 +2613,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 55
+    "y": 59
    },
    "id": 4
   },
@@ -2627,7 +2628,7 @@
     "h": 8,
     "w": 8,
     "x": 0,
-    "y": 56
+    "y": 60
    },
    "id": 123,
    "fieldConfig": {
@@ -2734,7 +2735,7 @@
     "h": 8,
     "w": 8,
     "x": 8,
-    "y": 56
+    "y": 60
    },
    "id": 124,
    "fieldConfig": {
@@ -2861,7 +2862,7 @@
     "h": 8,
     "w": 8,
     "x": 16,
-    "y": 56
+    "y": 60
    },
    "id": 125,
    "fieldConfig": {
@@ -3160,7 +3161,7 @@
      "legendFormat": "terminated"
     }
    ],
-   "description": "Upload create \u2192 complete / terminate funnel."
+   "description": "Upload create → complete / terminate funnel."
   },
   {
    "type": "row",
@@ -3170,7 +3171,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 64
+    "y": 68
    },
    "id": 5
   },
@@ -3185,7 +3186,7 @@
     "h": 8,
     "w": 8,
     "x": 0,
-    "y": 65
+    "y": 69
    },
    "id": 126,
    "fieldConfig": {
@@ -3320,7 +3321,7 @@
     "h": 8,
     "w": 8,
     "x": 8,
-    "y": 65
+    "y": 69
    },
    "id": 127,
    "fieldConfig": {
@@ -3622,7 +3623,7 @@
     "h": 8,
     "w": 8,
     "x": 16,
-    "y": 65
+    "y": 69
    },
    "id": 128,
    "fieldConfig": {
@@ -3915,13 +3916,13 @@
   },
   {
    "type": "row",
-   "title": "Runtime resources (JVM \u00b7 DB \u00b7 logs)",
+   "title": "Runtime resources (JVM · DB · logs)",
    "collapsed": false,
    "gridPos": {
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 73
+    "y": 77
    },
    "id": 6
   },
@@ -3936,7 +3937,7 @@
     "h": 8,
     "w": 8,
     "x": 0,
-    "y": 74
+    "y": 78
    },
    "id": 129,
    "fieldConfig": {
@@ -4027,7 +4028,7 @@
     "h": 8,
     "w": 8,
     "x": 8,
-    "y": 74
+    "y": 78
    },
    "id": 130,
    "fieldConfig": {
@@ -4139,7 +4140,7 @@
     "h": 8,
     "w": 8,
     "x": 16,
-    "y": 74
+    "y": 78
    },
    "id": 131,
    "fieldConfig": {
@@ -4218,6 +4219,195 @@
     }
    ],
    "description": "Logback ERROR events per second per service."
+  },
+  {
+   "type": "stat",
+   "title": "DLT: file-outbox",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 8,
+    "x": 0,
+    "y": 47
+   },
+   "id": 132,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 0,
+     "noValue": "0"
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "textMode": "value",
+    "wideLayout": true,
+    "showPercentChange": false,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(ai_deadletter_total{topic=\"file-outbox\"})",
+     "legendFormat": "DLT: file-outbox"
+    }
+   ],
+   "description": "Records dead-lettered from the file-outbox pipeline after retries (all-time)."
+  },
+  {
+   "type": "stat",
+   "title": "DLT: file-analyzed",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 8,
+    "x": 8,
+    "y": 47
+   },
+   "id": 133,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 0,
+     "noValue": "0"
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "textMode": "value",
+    "wideLayout": true,
+    "showPercentChange": false,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(ai_deadletter_total{topic=\"file-analyzed\"})",
+     "legendFormat": "DLT: file-analyzed"
+    }
+   ],
+   "description": "Records dead-lettered from the file-analyzed pipeline after retries (all-time)."
+  },
+  {
+   "type": "stat",
+   "title": "DLT: embeddings-batch",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 8,
+    "x": 16,
+    "y": 47
+   },
+   "id": 134,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 0,
+     "noValue": "0"
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "textMode": "value",
+    "wideLayout": true,
+    "showPercentChange": false,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(ai_deadletter_total{topic=\"embeddings-batch\"})",
+     "legendFormat": "DLT: embeddings-batch"
+    }
+   ],
+   "description": "Records dead-lettered from the embeddings-batch pipeline after retries (all-time)."
   }
  ]
 }
