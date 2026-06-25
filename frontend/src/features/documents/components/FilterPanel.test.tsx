@@ -34,7 +34,6 @@ describe('FilterPanel', () => {
     expect(screen.getByText('Created Date')).toBeInTheDocument()
     expect(screen.getByText('Sharing Scope')).toBeInTheDocument()
     expect(screen.getByText('Ownership')).toBeInTheDocument()
-    expect(screen.getByText('Sort')).toBeInTheDocument()
   })
 
   it('sets ownership to OWNED when "Owned by you" is checked', async () => {

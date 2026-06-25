@@ -18,4 +18,6 @@ data class FiltersDTO(
     val sharingScopes: Set<SharingScope> = setOf(SharingScope.PERSONAL),
     val ownership: Ownership? = null,
     val excludeContentTypes: List<String>? = null,
+    /** Free-text query matched (case-insensitive, substring) against the file name; null/blank means no filter. */
+    val search: String? = null,
 )

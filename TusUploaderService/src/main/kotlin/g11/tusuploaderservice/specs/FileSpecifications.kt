@@ -10,6 +10,7 @@ import g11.tusuploaderservice.entities.FileVersion
 import g11.tusuploaderservice.entities.PERMISSION_LEVEL
 import jakarta.persistence.criteria.JoinType
 import jakarta.persistence.criteria.Predicate
+import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.domain.Specification
 import java.time.Instant
 import java.util.Date
@@ -76,6 +77,21 @@ object FileSpecifications {
          *
          * [ownership] partiziona l'insieme già visibile: OWNED tiene solo i file di cui
          * l'utente è owner, SHARED solo quelli con owner diverso, null nessun vincolo.
+         *
+         * [search] filtra (case-insensitive, substring) sul nome del file corrente
+         * (lastFilename), così la ricerca lato server combacia col titolo mostrato nella UI.
+         *
+         * [sortField]/[sortDirection] ordinano il risultato dentro lo specification
+         * (quando [sortField] non è null): "size" ordina per la dimensione della
+         * versione corrente (file_versions.size, NON sul root File) usando il join
+         * alla versione; "lastFilename" ordina case-insensitive (lower()) coerente
+         * con la ricerca; ogni altro campo ordina sulla colonna root omonima. L'uuid
+         * è chiave secondaria per una paginazione stabile a parità di valore.
+         *
+         * Nota: questa query NON usa `distinct`. Per evitare la moltiplicazione di righe
+         * che imporrebbe il distinct (incompatibile con l'ORDER BY su una colonna non
+         * selezionata in Postgres) la condizione "condiviso con me" dello scope PERSONAL
+         * usa un subquery EXISTS invece di un LEFT JOIN su file_shares.
          */
         fun buildFilesByScopes(
             contentType: String?,
@@ -88,12 +104,13 @@ object FileSpecifications {
             isAdmin: Boolean,
             ownership: Ownership? = null,
             excludeContentTypes: Collection<String>? = null,
+            search: String? = null,
+            sortField: String? = null,
+            sortDirection: Sort.Direction = Sort.Direction.DESC,
         ): Specification<File> {
             require(sharingScopes.isNotEmpty()) { "At least one sharing scope is required" }
 
             return Specification { root, query, cb ->
-                query?.distinct(true)
-
                 val predicates = mutableListOf<Predicate>()
 
                 // Join sulla versione corrente: mostriamo i file la cui versione
@@ -145,16 +162,47 @@ object FileSpecifications {
 
                 // Un predicato per ogni scope richiesto, combinati in OR. In ciascuno la regola
                 // di accesso "per ruolo/membership" è messa in OR con lo share esplicito.
+                // Ricerca free-text sul nome del file corrente (lastFilename): match
+                // case-insensitive di tipo "contains". Gli operatori LIKE (%, _, \) nel
+                // termine vengono escapati così l'input utente non altera il pattern.
+                if (!search.isNullOrBlank()) {
+                    val escaped = search.trim()
+                        .replace("\\", "\\\\")
+                        .replace("%", "\\%")
+                        .replace("_", "\\_")
+                    predicates.add(
+                        cb.like(
+                            cb.lower(root.get<String>("lastFilename")),
+                            "%${escaped.lowercase()}%",
+                            '\\',
+                        ),
+                    )
+                }
+
+                // Un predicato per ogni scope richiesto, combinati in OR
                 val scopeField = root.get<SharingScope>("sharingScope")
                 val scopePredicates = sharingScopes.map { scope ->
                     when (scope) {
-                        SharingScope.PERSONAL -> cb.and(
-                            cb.equal(scopeField, SharingScope.PERSONAL),
-                            cb.or(
-                                cb.equal(root.get<UUID>("ownerId"), userId),
-                                sharedWithUser
+                        SharingScope.PERSONAL -> {
+                            // Owner O condiviso con l'utente. La condivisione è espressa
+                            // con un EXISTS correlato (non un LEFT JOIN) così la query non
+                            // moltiplica le righe e può fare a meno del distinct.
+                            val sharedWithUser = query!!.subquery(Int::class.java).let { sub ->
+                                val share = sub.from(FileShare::class.java)
+                                sub.select(cb.literal(1)).where(
+                                    cb.equal(share.get<File>("file").get<UUID>("uuid"), root.get<UUID>("uuid")),
+                                    cb.equal(share.get<UUID>("userID"), userId),
+                                )
+                                cb.exists(sub)
+                            }
+                            cb.and(
+                                cb.equal(scopeField, SharingScope.PERSONAL),
+                                cb.or(
+                                    cb.equal(root.get<UUID>("ownerId"), userId),
+                                    sharedWithUser,
+                                )
                             )
-                        )
+                        }
 
                         SharingScope.DEPARTMENT -> {
                             // Membership: stessa organization e (admin: qualunque department;
@@ -190,6 +238,24 @@ object FileSpecifications {
                     Ownership.OWNED -> predicates.add(cb.equal(root.get<UUID>("ownerId"), userId))
                     Ownership.SHARED -> predicates.add(cb.notEqual(root.get<UUID>("ownerId"), userId))
                     null -> {}
+                }
+
+                // Ordinamento applicato qui (non via Pageable) per poter gestire i
+                // campi che non sono colonne dirette del root File: "size" sta su
+                // file_versions (join `currentVersion`), "lastFilename" va ordinato
+                // case-insensitive. Saltato sulla count query (resultType Long), dove
+                // l'ORDER BY non serve e non è ammesso. L'uuid è chiave secondaria per
+                // rendere stabile la paginazione a parità di valore.
+                if (sortField != null && query != null &&
+                    query.resultType != Long::class.javaObjectType
+                ) {
+                    val sortExpr = when (sortField) {
+                        "size" -> currentVersion.get<Long>("size")
+                        "lastFilename" -> cb.lower(root.get<String>("lastFilename"))
+                        else -> root.get<Any>(sortField)
+                    }
+                    val primary = if (sortDirection == Sort.Direction.ASC) cb.asc(sortExpr) else cb.desc(sortExpr)
+                    query.orderBy(primary, cb.asc(root.get<UUID>("uuid")))
                 }
 
                 cb.and(*predicates.toTypedArray())

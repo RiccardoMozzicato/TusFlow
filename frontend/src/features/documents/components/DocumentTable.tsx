@@ -16,6 +16,10 @@ interface DocumentTableProps {
   onToggleFavorite?: (doc: LibraryDocument) => void
   /** Opens a row action (share/new version/delete); omit to hide the actions menu. */
   onAction?: (doc: LibraryDocument, kind: DocumentActionKind) => void
+  /** Current backend sort spec ('field,dir'); drives the Size column sort indicator. */
+  sort?: string
+  /** Requests a new sort spec (e.g. clicking the Size header); omit to make headers static. */
+  onSortChange?: (sort: string) => void
 }
 
 // Secondary columns are dropped as the table's own width narrows so it always
@@ -31,13 +35,15 @@ const DATE_COL = 'hidden @3xl:table-cell'
 const OWNER_COL = 'hidden @5xl:table-cell'
 const STATUS_COL = '' // always visible — the AI status must never be hidden
 
-const COLUMNS: { label: string; className?: string }[] = [
-  { label: 'Document Name' },
+// `sortField` marks a column as click-to-sort; it maps to the backend `sort`
+// param's field (e.g. 'size' → file_versions.size, 'createdAt' → files.createdAt).
+const COLUMNS: { label: string; className?: string; sortField?: string }[] = [
+  { label: 'Document Name', sortField: 'lastFilename' },
   { label: 'Sharing', className: SHARING_COL },
   { label: 'Owner', className: OWNER_COL },
-  { label: 'Size', className: SIZE_COL },
+  { label: 'Size', className: SIZE_COL, sortField: 'size' },
   { label: 'Status', className: STATUS_COL },
-  { label: 'Date Created', className: DATE_COL },
+  { label: 'Date Created', className: DATE_COL, sortField: 'createdAt' },
 ]
 
 // Stops a row action (button/link) from also triggering the row's navigation.
@@ -71,10 +77,24 @@ export default function DocumentTable({
   isFavorited,
   onToggleFavorite,
   onAction,
+  sort,
+  onSortChange,
 }: DocumentTableProps) {
   const navigate = useNavigate()
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Active sort direction for a sortable column's field, or null when the table
+  // is sorted by something else. Clicking a header toggles asc/desc.
+  function sortDirFor(field: string): 'asc' | 'desc' | null {
+    if (!sort) return null
+    const [activeField, dir] = sort.split(',')
+    if (activeField !== field) return null
+    return dir === 'asc' ? 'asc' : 'desc'
+  }
+  function toggleSort(field: string) {
+    onSortChange?.(sortDirFor(field) === 'asc' ? `${field},desc` : `${field},asc`)
+  }
 
   async function handleDownload(doc: LibraryDocument) {
     setError(null)
@@ -109,11 +129,48 @@ export default function DocumentTable({
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-ds-outline-variant bg-ds-surface font-ds-label text-ds-label-md text-ds-on-surface-variant">
-              {COLUMNS.map((column) => (
-                <th key={column.label} className={`px-3 py-3 font-semibold ${column.className ?? ''}`}>
-                  {column.label}
-                </th>
-              ))}
+              {COLUMNS.map((column) => {
+                // Sortable headers are interactive: clicking toggles asc/desc on the
+                // server, with an arrow showing the active direction and a muted
+                // hint icon otherwise so the column reads as clickable.
+                if (column.sortField && onSortChange) {
+                  const dir = sortDirFor(column.sortField)
+                  const name = column.label.toLowerCase()
+                  return (
+                    <th key={column.label} className={`px-3 py-3 font-semibold ${column.className ?? ''}`}>
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(column.sortField!)}
+                        aria-label={dir === 'asc' ? `Sort by ${name}, descending` : `Sort by ${name}, ascending`}
+                        aria-pressed={dir !== null}
+                        className={`group/sort flex items-center gap-1 font-ds-label text-ds-label-md font-semibold transition-colors hover:text-ds-primary ${
+                          dir !== null ? 'text-ds-primary' : ''
+                        }`}
+                      >
+                        {column.label}
+                        {dir === null ? (
+                          <Icon
+                            name="unfold_more"
+                            aria-hidden
+                            className="text-[16px] text-ds-secondary transition-colors group-hover/sort:text-ds-primary"
+                          />
+                        ) : (
+                          <Icon
+                            name={dir === 'asc' ? 'arrow_drop_up' : 'arrow_drop_down'}
+                            aria-hidden
+                            className="text-[18px]"
+                          />
+                        )}
+                      </button>
+                    </th>
+                  )
+                }
+                return (
+                  <th key={column.label} className={`px-3 py-3 font-semibold ${column.className ?? ''}`}>
+                    {column.label}
+                  </th>
+                )
+              })}
               <th className="px-3 py-3 text-right font-semibold">Actions</th>
             </tr>
           </thead>

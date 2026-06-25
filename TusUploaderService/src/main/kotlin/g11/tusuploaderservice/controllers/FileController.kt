@@ -76,6 +76,7 @@ class FileController(
             Parameter(name = "dateFrom", description = "Filter files created from this date (ISO format)", schema = Schema(type = "string", example = "2024-01-01T00:00:00Z")),
             Parameter(name = "dateTo", description = "Filter files created until this date (ISO format)", schema = Schema(type = "string", example = "2024-12-31T23:59:59Z")),
             Parameter(name = "sort", description = "Sort field and direction (e.g., 'createdAt,desc')", schema = Schema(type = "string", example = "createdAt,desc")),
+            Parameter(name = "search", description = "Free-text query matched case-insensitively against the file name (substring)", schema = Schema(type = "string", example = "report")),
             Parameter(name = "page", description = "Page number (0-indexed)", schema = Schema(type = "integer", example = "0")),
             Parameter(name = "size", description = "Page size", schema = Schema(type = "integer", example = "10"))
         ]
@@ -158,16 +159,17 @@ class FileController(
         @RequestParam(defaultValue = "PERSONAL") sharingScope: Set<SharingScope>,
         @RequestParam(required = false) ownership: Ownership?,
         @RequestParam(required = false) excludeContentTypes: List<String>?,
+        @RequestParam(required = false) search: String?,
     ): ResponseEntity<Page<FileDTO>> {
 
         log.debug("API GET /api/v1/files userOwnerId={}", currentUserOwnerId())
-        log.debug("Requested file metadata: contentType={}, excludeContentTypes={}, dateFrom={}, dateTo={}, sort={}, page={}, size={}, sharingScope={}, ownership={}", contentType, excludeContentTypes, dateFrom, dateTo, sort, page, size, sharingScope, ownership)
+        log.debug("Requested file metadata: contentType={}, excludeContentTypes={}, dateFrom={}, dateTo={}, sort={}, page={}, size={}, sharingScope={}, ownership={}, search={}", contentType, excludeContentTypes, dateFrom, dateTo, sort, page, size, sharingScope, ownership, search)
         // Parse sort parameter
         val sortParts = sort.split(",")
         val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "createdAt"
         val sortDirection = if (sortParts.getOrNull(1)?.lowercase() == "asc") Sort.Direction.ASC else Sort.Direction.DESC
 
-        val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope, ownership, excludeContentTypes)
+        val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope, ownership, excludeContentTypes, search)
 
         val files = fileService.getFiles(filtersDTO)
         log.debug("Retrieved {} files with applied filters", files.totalElements)

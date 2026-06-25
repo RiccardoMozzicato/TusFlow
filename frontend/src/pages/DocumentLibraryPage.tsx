@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
+import { useDebouncedValue } from '@/lib/useDebouncedValue'
 import FilterPanel from '@/features/documents/components/FilterPanel'
 import LibraryToolbar from '@/features/documents/components/LibraryToolbar'
 import DocumentGrid from '@/features/documents/components/DocumentGrid'
@@ -31,14 +32,18 @@ import Icon from '@/components/Icon'
 // Which action modal is open, and for which document.
 type ActiveDialog = { kind: DocumentActionKind; doc: LibraryDocument } | null
 
+// How long the search box waits after the last keystroke before querying the
+// server, so a burst of typing results in a single request.
+const SEARCH_DEBOUNCE_MS = 350
+
 // Document Library: filter rail + a canvas with a toolbar and a card grid.
 // Files come from the gateway-routed file service (getFiles), one page at a time.
-// The filter rail drives the server-side query; the toolbar search narrows the
-// currently-loaded page client-side.
+// Both the filter rail and the toolbar search drive the server-side query: the
+// search box is debounced into the `search` filter, which re-runs the paginated
+// request from page 0.
 export default function DocumentLibraryPage() {
   // Row layout is the default; the card grid is opt-in via the toolbar toggle.
   const [viewMode, setViewMode] = useState<ViewMode>('list')
-  const [searchQuery, setSearchQuery] = useState('')
   const [dialog, setDialog] = useState<ActiveDialog>(null)
   const dispatch = useAppDispatch()
 
@@ -53,17 +58,29 @@ export default function DocumentLibraryPage() {
   const isDeleting = useAppSelector(selectIsDeletingFile)
   const deleteError = useAppSelector(selectDeleteFileError)
 
-  const { contentType, excludeContentTypes, dateFrom, dateTo, sort, sharingScope, ownership } =
+  const { contentType, excludeContentTypes, dateFrom, dateTo, sort, search, sharingScope, ownership } =
     filters
   // Stable primitive keys so the effect re-runs when a set/array filter changes.
   const scopesKey = sharingScope.join(',')
   const excludeKey = excludeContentTypes?.join(',') ?? ''
 
+  // The search box updates this local state immediately (responsive typing); the
+  // debounced value is pushed into the `search` filter, which drives the request.
+  const [searchInput, setSearchInput] = useState(search ?? '')
+  const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
+
+  // Commit the debounced query into the filters as a normalized value (trimmed,
+  // blank → undefined). Guarded so an unchanged query doesn't trigger a refetch.
+  useEffect(() => {
+    const next = debouncedSearch.trim() || undefined
+    if (next !== search) dispatch(setFilters({ search: next }))
+  }, [dispatch, debouncedSearch, search])
+
   // Reload from page 0 on mount and whenever a server-side filter changes.
   // Pagination Prev/Next dispatch directly below (they don't touch filters).
   useEffect(() => {
     void dispatch(loadDocuments({ page: 0 }))
-  }, [dispatch, contentType, excludeKey, dateFrom, dateTo, sort, scopesKey, ownership])
+  }, [dispatch, contentType, excludeKey, dateFrom, dateTo, sort, search, scopesKey, ownership])
 
   // Reloads the current page after a mutating action (delete / new version).
   function refresh() {
@@ -85,15 +102,15 @@ export default function DocumentLibraryPage() {
 
   const isInitialLoading = status === 'loading' && documents.length === 0
 
-  const visibleDocuments = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    if (!query) return documents
-    return documents.filter((doc) => doc.title.toLowerCase().includes(query))
-  }, [documents, searchQuery])
+  // Search is server-side, so the count is always the server's total result count.
+  const count = totalElements
 
-  // While searching, the count reflects the locally-filtered subset of the
-  // loaded page; otherwise it's the server's total result count.
-  const count = searchQuery.trim() ? visibleDocuments.length : totalElements
+  // Clears every filter including the search box (the box's local state lives
+  // here, so it must be reset alongside the Redux filters).
+  function handleClearFilters() {
+    setSearchInput('')
+    dispatch(resetFilters())
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -110,18 +127,20 @@ export default function DocumentLibraryPage() {
         <FilterPanel
           filters={filters}
           onChange={(partial) => dispatch(setFilters(partial))}
-          onClear={() => dispatch(resetFilters())}
+          onClear={handleClearFilters}
         />
 
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest">
           <LibraryToolbar
             count={count}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
+            searchQuery={searchInput}
+            onSearchChange={setSearchInput}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
           />
-          <div className="min-w-0 p-6">
+          {/* min-height keeps the canvas a consistent size whether it holds one
+              row or a full page, so the panel never collapses to a single line. */}
+          <div className="min-h-[28rem] min-w-0 p-6">
             {isInitialLoading ? (
               <p className="py-12 text-center font-ds-body text-ds-body-sm text-ds-secondary">
                 Loading documents…
@@ -149,14 +168,16 @@ export default function DocumentLibraryPage() {
                 ) : null}
                 {viewMode === 'list' ? (
                   <DocumentTable
-                    documents={visibleDocuments}
+                    documents={documents}
                     isFavorited={(doc) => isFavorited(doc.id, doc.versionNumber)}
                     onToggleFavorite={(doc) => toggleFavorite(doc.id, doc.versionNumber)}
                     onAction={(doc, kind) => setDialog({ kind, doc })}
+                    sort={sort}
+                    onSortChange={(next) => dispatch(setFilters({ sort: next }))}
                   />
                 ) : (
                   <DocumentGrid
-                    documents={visibleDocuments}
+                    documents={documents}
                     isFavorited={(doc) => isFavorited(doc.id, doc.versionNumber)}
                     onToggleFavorite={(doc) => toggleFavorite(doc.id, doc.versionNumber)}
                     onAction={(doc, kind) => setDialog({ kind, doc })}

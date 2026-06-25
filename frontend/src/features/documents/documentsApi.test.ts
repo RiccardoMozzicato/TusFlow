@@ -28,6 +28,17 @@ describe('getFiles', () => {
     })
   })
 
+  it('forwards the search query as a param', async () => {
+    mockedGet.mockResolvedValue({ data: { content: [] } })
+
+    await getFiles({ page: 0, size: 12, search: 'budget' })
+
+    expect(mockedGet).toHaveBeenCalledWith(API.files, {
+      params: { page: 0, size: 12, search: 'budget' },
+      paramsSerializer: { indexes: null },
+    })
+  })
+
   it('returns the response payload', async () => {
     const page = { content: [], totalElements: 0 }
     mockedGet.mockResolvedValue({ data: page })

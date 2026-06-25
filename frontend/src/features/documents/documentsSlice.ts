@@ -71,6 +71,8 @@ export interface DocumentFilters {
   dateTo?: string
   /** Sort spec, e.g. 'createdAt,desc'. */
   sort: string
+  /** Free-text query matched server-side against the file name; undefined/blank means no filter. */
+  search?: string
   /** Visibility scopes combined with OR; defaults to all three. */
   sharingScope: SharingScope[]
   /** Ownership partition; undefined means no ownership restriction (show all). */
@@ -156,6 +158,7 @@ export const loadDocuments = createAsyncThunk<
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
     sort: filters.sort,
+    search: filters.search,
     sharingScope: filters.sharingScope,
     ownership: filters.ownership,
   })

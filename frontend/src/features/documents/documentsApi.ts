@@ -68,6 +68,8 @@ export interface GetFilesParams {
   sort?: string
   page?: number
   size?: number
+  /** Free-text query matched case-insensitively against the file name (substring). */
+  search?: string
   /** One or more scopes; serialized as repeated `sharingScope=` query params. */
   sharingScope?: SharingScope[]
   /** Partition the visible set by ownership; omitted means no ownership restriction. */

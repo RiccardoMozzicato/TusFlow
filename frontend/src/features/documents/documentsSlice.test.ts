@@ -226,6 +226,18 @@ describe('filters', () => {
     })
   })
 
+  it('threads the search query into the getFiles call', async () => {
+    mockedGetFiles.mockResolvedValue(makePage([]))
+    const store = makeStore()
+    store.dispatch(setFilters({ search: 'budget' }))
+    await store.dispatch(loadDocuments({ page: 0 }))
+
+    expect(mockedGetFiles).toHaveBeenCalledWith({
+      ...defaultParams(0),
+      search: 'budget',
+    })
+  })
+
   it('resetFilters restores the defaults', () => {
     const store = makeStore()
     store.dispatch(setFilters({ contentType: 'application/pdf', sort: 'createdAt,asc' }))

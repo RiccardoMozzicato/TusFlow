@@ -2,9 +2,9 @@ import Icon from '@/components/Icon'
 import type { ViewMode } from '../types'
 
 interface LibraryToolbarProps {
-  /** Number of documents currently shown. */
+  /** Total number of matching documents (server-side result count). */
   count: number
-  /** Current client-side search query. */
+  /** Current search query (debounced into the server-side request by the page). */
   searchQuery: string
   onSearchChange: (query: string) => void
   viewMode: ViewMode
@@ -22,7 +22,8 @@ const VIEW_BUTTONS: ViewToggleButton[] = [
   { mode: 'list', icon: 'view_list', title: 'List View' },
 ]
 
-// Library toolbar: local search, result count, and grid/list view toggle.
+// Library toolbar: search box (debounced into the server query), result count,
+// and grid/list view toggle.
 export default function LibraryToolbar({
   count,
   searchQuery,

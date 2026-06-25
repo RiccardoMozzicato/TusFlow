@@ -4,6 +4,10 @@ import { FILE_TYPE_CONTENT_TYPE } from './mappers'
 // Sort specs accepted by the backend `sort` param (field,direction).
 export const SORT_NEWEST = 'createdAt,desc'
 export const SORT_OLDEST = 'createdAt,asc'
+// Sort by the current version's file size (smallest / largest first). The backend
+// orders these at the DB level so paging stays correct across the whole result set.
+export const SORT_SIZE_ASC = 'size,asc'
+export const SORT_SIZE_DESC = 'size,desc'
 
 // Only file types that map to a single exact MIME the backend can match on are
 // offered as filters (the `contentType` param is a case-insensitive contains).

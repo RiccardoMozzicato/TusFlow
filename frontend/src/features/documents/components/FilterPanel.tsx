@@ -1,4 +1,4 @@
-import { SORT_NEWEST, SORT_OLDEST, isoToDateInput } from '../filterOptions'
+import { isoToDateInput } from '../filterOptions'
 import { Ownership, SharingScope } from '../documentsApi'
 import type { DocumentFilters } from '../documentsSlice'
 import FileTypeFilter from './FileTypeFilter'
@@ -134,16 +134,6 @@ export default function FilterPanel({ filters, onChange, onClear }: FilterPanelP
         ))}
       </FilterGroup>
 
-      <FilterGroup title="Sort">
-        <select
-          value={filters.sort}
-          onChange={(event) => onChange({ sort: event.target.value })}
-          className="w-full rounded-ds-md border border-ds-outline-variant bg-ds-surface-container-lowest px-3 py-2 font-ds-body text-ds-body-sm outline-none focus:border-ds-primary focus:ring-1 focus:ring-ds-primary"
-        >
-          <option value={SORT_NEWEST}>Newest first</option>
-          <option value={SORT_OLDEST}>Oldest first</option>
-        </select>
-      </FilterGroup>
     </aside>
   )
 }

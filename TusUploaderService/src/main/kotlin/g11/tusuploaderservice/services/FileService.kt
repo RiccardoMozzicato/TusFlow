@@ -22,7 +22,6 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
-import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.context.SecurityContextHolder
@@ -135,11 +134,12 @@ class FileService(
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
-        val pageable = PageRequest.of(
-            filtersDTO.pageNumber.toInt(),
-            filtersDTO.pageSize.toInt(),
-            Sort.by(filtersDTO.sortDirection, filtersDTO.sortField)
-        )
+        // L'ordinamento è gestito interamente dallo specification (vedi
+        // buildFilesByScopes): alcuni campi ordinabili non sono colonne dirette del
+        // root File ("size" sta su file_versions, "lastFilename" va ordinato
+        // case-insensitive). Si passa quindi un Pageable senza Sort, così Spring non
+        // tenta di risolvere il campo sul root sovrascrivendo l'ORDER BY dello spec.
+        val pageable = PageRequest.of(filtersDTO.pageNumber.toInt(), filtersDTO.pageSize.toInt())
 
         val spec = FileSpecifications.buildFilesByScopes(
             contentType = filtersDTO.contentType,
@@ -152,6 +152,9 @@ class FileService(
             isAdmin = userDetails.role == UserRole.ROLE_admin,
             ownership = filtersDTO.ownership,
             excludeContentTypes = filtersDTO.excludeContentTypes,
+            search = filtersDTO.search,
+            sortField = filtersDTO.sortField,
+            sortDirection = filtersDTO.sortDirection,
         )
 
         val files = fileRepository.findAll(spec, pageable)

@@ -150,29 +150,38 @@ describe('DocumentLibraryPage', () => {
     )
   })
 
-  it('filters the loaded page client-side via search without re-fetching', async () => {
-    mockedGetFiles.mockResolvedValue(
-      makePage(
-        [
-          fileDto,
-          { ...fileDto, id: 'f2', fileName: 'Budget.docx', contentType: 'application/msword' },
-        ],
-        { totalElements: 2 },
-      ),
-    )
+  it('debounces the search box into a server-side query from page 0', async () => {
+    mockedGetFiles.mockResolvedValue(makePage([fileDto], { totalElements: 1 }))
     renderPage()
 
     await screen.findByText('Annual Report.pdf')
-    expect(screen.getByText('Budget.docx')).toBeInTheDocument()
-    const callsBefore = mockedGetFiles.mock.calls.length
 
     await userEvent.type(
       screen.getByPlaceholderText(/search within library/i),
       'budget',
     )
 
-    expect(screen.queryByText('Annual Report.pdf')).not.toBeInTheDocument()
-    expect(screen.getByText('Budget.docx')).toBeInTheDocument()
-    expect(mockedGetFiles.mock.calls.length).toBe(callsBefore)
+    // The query is debounced, so the eventual request carries the full term and
+    // re-fetches from page 0 (not a request per keystroke is asserted in the hook test).
+    await waitFor(() =>
+      expect(mockedGetFiles).toHaveBeenLastCalledWith({
+        ...defaultParams(0),
+        search: 'budget',
+      }),
+    )
+  })
+
+  it('clearing all filters also empties the search box', async () => {
+    mockedGetFiles.mockResolvedValue(makePage([fileDto], { totalElements: 1 }))
+    renderPage()
+
+    await screen.findByText('Annual Report.pdf')
+    const searchBox = screen.getByPlaceholderText(/search within library/i)
+    await userEvent.type(searchBox, 'budget')
+    await waitFor(() => expect(searchBox).toHaveValue('budget'))
+
+    await userEvent.click(screen.getByRole('button', { name: /clear/i }))
+
+    expect(searchBox).toHaveValue('')
   })
 })
