@@ -37,9 +37,9 @@ class StorageOutboxConsumer(
     fun onMessage(
         message: String,
         acknowledgment: Acknowledgment,
-        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long,
+        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long?,
     ) {
-        metrics.recordEventLag("file-outbox", receivedTimestamp)
+        receivedTimestamp?.let { metrics.recordEventLag("file-outbox", it) }
         metrics.recordProcessing { handleMessage(message, acknowledgment) }
     }
 
