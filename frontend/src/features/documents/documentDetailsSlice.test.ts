@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import authReducer from '@/features/auth/authSlice'
 import chatReducer from '@/features/chat/chatSlice'
 import documentsReducer from '@/features/documents/documentsSlice'
+import healthReducer from '@/features/health/healthSlice'
 import uiReducer from '@/features/ui/uiSlice'
 import documentDetailsReducer, {
   applyJobUpdate,
@@ -90,6 +91,7 @@ function makeStore() {
       chat: chatReducer,
       documents: documentsReducer,
       documentDetails: documentDetailsReducer,
+      health: healthReducer,
       ui: uiReducer,
     },
   })

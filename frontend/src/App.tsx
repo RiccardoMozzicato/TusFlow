@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAppDispatch } from '@/app/hooks'
 import { loadCurrentUser } from '@/features/auth/authSlice'
+import { useSessionHeartbeat } from '@/features/health/useSessionHeartbeat'
 import { useJobsRealtime } from '@/features/realtime/useJobsRealtime'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import RequireRole from '@/components/RequireRole'
@@ -25,6 +26,10 @@ export default function App() {
   useEffect(() => {
     void dispatch(loadCurrentUser())
   }, [dispatch])
+
+  // Periodically probe the gateway while authenticated: detects session expiry
+  // (→ redirect to login) and backend reachability (→ status indicator).
+  useSessionHeartbeat()
 
   // Open the live jobs socket once authenticated; mirrors AI outcomes onto the
   // documents slice so the Library updates without a refetch.
