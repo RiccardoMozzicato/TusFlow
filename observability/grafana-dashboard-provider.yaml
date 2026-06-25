@@ -1,0 +1,22 @@
+# Extra Grafana dashboard provider for the grafana/otel-lgtm dev stack.
+#
+# Mounted as a SECOND provider file alongside the image's bundled
+# /otel-lgtm/grafana/conf/provisioning/dashboards/grafana-dashboards.yaml (which ships the
+# RED Metrics + JVM dashboards). Mounting a single file here does not hide the others.
+#
+# Loads our curated dashboards, each mounted into the container under /otel-lgtm/:
+#   - grafana-dashboard-g11.json       → metrics (uid g11-services)
+#   - grafana-logs-dashboard-g11.json  → logs from Loki (uid g11-logs)
+apiVersion: 1
+
+providers:
+  - name: "G11 Dashboards"
+    type: file
+    options:
+      path: /otel-lgtm/grafana-dashboard-g11.json
+      foldersFromFilesStructure: false
+  - name: "G11 Logs"
+    type: file
+    options:
+      path: /otel-lgtm/grafana-logs-dashboard-g11.json
+      foldersFromFilesStructure: false

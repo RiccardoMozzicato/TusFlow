@@ -1,6 +1,7 @@
 package g11.apigateway.controllers
 
 import g11.apigateway.DTO.UserInfo
+import g11.apigateway.metrics.GatewayMetrics
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.ResponseEntity
@@ -16,7 +17,8 @@ import org.springframework.web.client.RestClientResponseException
 @RestController
 @RequestMapping("/api")
 class AuthController(
-    @Qualifier("userServiceClient") private val userServiceClient: RestClient
+    @Qualifier("userServiceClient") private val userServiceClient: RestClient,
+    private val gatewayMetrics: GatewayMetrics,
 ) {
     private val log = LoggerFactory.getLogger(AuthController::class.java)
 
@@ -27,8 +29,10 @@ class AuthController(
         if (user == null) {
             // Expected: the SPA polls this endpoint on load and treats 401 as "anonymous".
             log.debug("Requested user info for a non authenticated user")
+            gatewayMetrics.countAnonymous()
             return ResponseEntity.status(401).build()
         }
+        gatewayMetrics.countAuthenticated()
 
         // Estrai i realm roles da realm_access -> roles
         val realmRoles = user.claims["realm_access"]?.let { realmAccess ->

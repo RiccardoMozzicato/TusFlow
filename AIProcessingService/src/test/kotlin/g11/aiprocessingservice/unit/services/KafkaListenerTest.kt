@@ -4,8 +4,11 @@ import g11.aiprocessingservice.conf.SupportedContentTypeProperties
 import g11.aiprocessingservice.dto.JobDTO
 import g11.aiprocessingservice.dto.jobStatus
 import g11.aiprocessingservice.entities.Job
+import g11.aiprocessingservice.metrics.AnalysisMetrics
+import g11.aiprocessingservice.metrics.PipelineMetrics
 import g11.aiprocessingservice.repositories.JobRepository
 import g11.aiprocessingservice.services.*
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -93,6 +96,10 @@ class KafkaListenerTest {
                 ),
             ),
             pipelineTracing = mockk(relaxed = true),
+            // Real metric instances (not mocks): recordDownload/recordAnalysis wrap work in lambdas,
+            // so a relaxed mock would skip the block. A SimpleMeterRegistry keeps them in-memory.
+            analysisMetrics = AnalysisMetrics(SimpleMeterRegistry()),
+            pipelineMetrics = PipelineMetrics(SimpleMeterRegistry()),
         )
 
     @Test
@@ -116,7 +123,7 @@ class KafkaListenerTest {
         } returns null
 
         // Act
-        kafkaListener.onMessage(kafkaMessage)
+        kafkaListener.onMessage(kafkaMessage, 0L)
 
         // Assert
         verify { jobRepository.save(any<Job>()) }
@@ -147,7 +154,7 @@ class KafkaListenerTest {
         every { jobRepository.findById(testJobId) } returns Optional.of(existingJob)
 
         // Act
-        kafkaListener.onMessage(kafkaMessage)
+        kafkaListener.onMessage(kafkaMessage, 0L)
 
         // Assert
         verify(exactly = 0) { kafkaListener.processJob(any(), any()) }
@@ -179,7 +186,7 @@ class KafkaListenerTest {
         every { kafkaListener.processJob(any(), any()) } returns null
 
         // Act
-        kafkaListener.onMessage(kafkaMessage)
+        kafkaListener.onMessage(kafkaMessage, 0L)
 
         // Assert
         verify { kafkaListener.processJob(any(), testJobId) }
@@ -193,7 +200,7 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<Exception> {
-            kafkaListener.onMessage(invalidKafkaMessage)
+            kafkaListener.onMessage(invalidKafkaMessage, 0L)
         }
 
         verify(exactly = 0) { kafkaListener.processJob(any(), any()) }
@@ -214,7 +221,7 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<RuntimeException> {
-            kafkaListener.onMessage(kafkaMessage)
+            kafkaListener.onMessage(kafkaMessage, 0L)
         }
 
         verify(exactly = 0) { kafkaListener.processJob(any(), any()) }
@@ -252,7 +259,7 @@ class KafkaListenerTest {
 
         // Act & Assert: the exception propagates so @RetryableTopic can route it to the retry topic/DLT.
         assertFailsWith<RuntimeException> {
-            kafkaListener.onMessage(kafkaMessage)
+            kafkaListener.onMessage(kafkaMessage, 0L)
         }
 
         verify { jobStatusService.markJobAsFailed(testJobId, any(), "Processing failed") }
@@ -290,7 +297,7 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<RuntimeException> {
-            kafkaListener.onMessage(kafkaMessage)
+            kafkaListener.onMessage(kafkaMessage, 0L)
         }
 
         // The FAILED job was reset to PENDING (resumed) and reprocessed, then re-failed.
@@ -323,7 +330,7 @@ class KafkaListenerTest {
         every { jobRepository.findById(testJobId) } returns Optional.of(processedJob)
 
         // Act
-        kafkaListener.onMessage(kafkaMessage)
+        kafkaListener.onMessage(kafkaMessage, 0L)
 
         // Assert: PROCESSING is neither PENDING nor FAILED, so it is skipped (not reprocessed).
         verify(exactly = 0) { kafkaListener.processJob(any(), any()) }
@@ -361,7 +368,7 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<IllegalStateException> {
-            kafkaListener.onMessage(kafkaMessage)
+            kafkaListener.onMessage(kafkaMessage, 0L)
         }
 
         verify { jobStatusService.markJobAsFailed(testJobId, any(), "AI returned incomplete metadata") }
@@ -402,7 +409,7 @@ class KafkaListenerTest {
 
         // Act & Assert
         assertFailsWith<RuntimeException> {
-            kafkaListener.onMessage(kafkaMessage)
+            kafkaListener.onMessage(kafkaMessage, 0L)
         }
 
         verify { jobStatusService.markJobAsFailed(testJobId, any(), "Unknown error") }
@@ -469,7 +476,7 @@ class KafkaListenerTest {
         every { kafkaListener.processJob(any(), any()) } throws RuntimeException("Processing failed")
         every { jobStatusService.markJobAsDeadLettered(any(), any(), any(), any()) } just Runs
 
-        assertFailsWith<RuntimeException> { kafkaListener.onMessage(kafkaMessage) }
+        assertFailsWith<RuntimeException> { kafkaListener.onMessage(kafkaMessage, 0L) }
 
         verify { jobStatusService.markJobAsDeadLettered(testJobId, any(), "Processing failed", any()) }
         verify(exactly = 0) { jobStatusService.markJobAsFailed(any(), any(), any()) }

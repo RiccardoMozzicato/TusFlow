@@ -11,6 +11,9 @@ import g11.aiprocessingservice.dto.MetadataDTO
 import g11.aiprocessingservice.dto.jobStatus
 import g11.aiprocessingservice.entities.Job
 import g11.aiprocessingservice.exceptions.AIAnalysisUnsupportedException
+import g11.aiprocessingservice.metrics.AnalysisMetrics
+import g11.aiprocessingservice.metrics.AnalysisOutcome
+import g11.aiprocessingservice.metrics.PipelineMetrics
 import g11.aiprocessingservice.repositories.JobRepository
 import org.apache.kafka.common.errors.ResourceNotFoundException
 import org.slf4j.LoggerFactory
@@ -67,6 +70,8 @@ class MetadataProcessor(
     private val textExtractionService: TextExtractionService,
     private val supportedContentTypes: SupportedContentTypes,
     private val pipelineTracing: g11.aiprocessingservice.tracing.PipelineTracing,
+    private val analysisMetrics: AnalysisMetrics,
+    private val pipelineMetrics: PipelineMetrics,
 ) : KafkaInterface {
     private val log = LoggerFactory.getLogger(g11.aiprocessingservice.services.MetadataProcessor::class.java)
     private val objectMapper = jacksonObjectMapper()
@@ -92,8 +97,12 @@ class MetadataProcessor(
         containerFactory = "debeziumKafkaListenerContainerFactory",
         concurrency = "\${kafka.file-outbox.concurrency:3}",
     )
-    override fun onMessage(message: String){
+    override fun onMessage(
+        message: String,
+        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long,
+    ) {
         log.debug("Received message from kafka \n {}" ,message)
+        pipelineMetrics.recordEventLag("file-outbox", receivedTimestamp)
 
         // Resume the upstream trace carried in the Debezium outbox payload body.
         // The RecordInterceptor approach fires too late (after Spring Kafka creates the
@@ -172,6 +181,7 @@ class MetadataProcessor(
     ) {
         val type = exceptionType?.toString(Charsets.UTF_8)
         val msg = exceptionMessage?.toString(Charsets.UTF_8)
+        pipelineMetrics.countDeadLetter("file-outbox")
         log.warn("file-outbox automatic retries exhausted [{}]: {} — job left FAILED for user retry", type, msg)
     }
 
@@ -291,67 +301,81 @@ class MetadataProcessor(
     }
 
     fun processJob(job: JobDTO, jobId: UUID): MetadataDTO? {
-
-        // Gate by content type before downloading: types we can't analyze (e.g. binaries like
-        // .dmg, archives) are marked UNSUPPORTED without pulling their bytes — a .dmg can be huge.
-        if (!supportedContentTypes.isAnalyzable(job.contentType)) {
-            log.info("Skipping AI analysis for job {} - unsupported content type: {}", jobId, job.contentType)
-            jobStatusService.markJobAsUnsupported(
-                jobId,
-                job,
-                "Content type not supported for AI analysis: ${job.contentType}",
-            )
-            return null
-        }
-
-        val fileToAnalyze = downloadFile(job.fileId, job.version)
-        // Call downloadFile expect to receive an InputStream
-
-        // Determine which AI client to use based on content type
-        val clientToUse = selectAIClient(job.contentType)
-        val modelName = when (clientToUse) {
-            pdfAnalysisChatClient -> pdfModelName
-            imageChatClient       -> imageModelName
-            else                  -> chatModelName
-        }
-        val clientName = when (clientToUse) {
-            pdfAnalysisChatClient -> "pdf"
-            imageChatClient       -> "image"
-            else                  -> "generic"
-        }
-        log.info("Processing job {} with {} client ({}) for contentType: {}", jobId, clientName, modelName, job.contentType)
-        pipelineTracing.tagUploadAnalysis(job.ownerUserId, job.fileId, job.filename, job.contentType, modelName, clientName)
-
+        // Time the whole analysis (download + LLM) tagged by handling client and terminal outcome.
+        // `client` stays "none" if the type is rejected before a client is chosen; `outcome` defaults
+        // to FAILED and is set on each successful/unsupported exit, so an escaping exception records
+        // FAILED. Best-effort: the finally only records the metric, it never alters control flow.
+        val analysisStart = System.nanoTime()
+        var client = "none"
+        var outcome = AnalysisOutcome.FAILED
         try {
-            log.debug("First attempt / Kafka attempt / User attempt")
-            // Attempt AI analysis with retry logic using the appropriate client
-            val enhancedMeta = analyzeUploadWithRetry(fileToAnalyze!!, job, clientToUse, job.contentType)
-
-            log.debug(enhancedMeta.toString())
-
-            // For testing FAILED state (simulates incomplete metadata from AI)
-            //throw IllegalStateException("Testing FAILED state")
-
-
-            // Validate that AI returned all required fields
-            if (enhancedMeta.summary == null || enhancedMeta.tags == null || enhancedMeta.sensitivity == null) {
-                throw IllegalStateException("AI returned incomplete metadata: summary=${enhancedMeta.summary}, tags=${enhancedMeta.tags}, sensitivity=${enhancedMeta.sensitivity}")
+            // Gate by content type before downloading: types we can't analyze (e.g. binaries like
+            // .dmg, archives) are marked UNSUPPORTED without pulling their bytes — a .dmg can be huge.
+            if (!supportedContentTypes.isAnalyzable(job.contentType)) {
+                log.info("Skipping AI analysis for job {} - unsupported content type: {}", jobId, job.contentType)
+                jobStatusService.markJobAsUnsupported(
+                    jobId,
+                    job,
+                    "Content type not supported for AI analysis: ${job.contentType}",
+                )
+                outcome = AnalysisOutcome.UNSUPPORTED
+                return null
             }
 
-            // Mark job as completed (uses separate transaction)
-            jobStatusService.markJobAsCompleted(jobId, job, enhancedMeta)
+            val fileToAnalyze = pipelineMetrics.recordDownload("analysis") { downloadFile(job.fileId, job.version) }
+            // Call downloadFile expect to receive an InputStream
 
-            return enhancedMeta
+            // Determine which AI client to use based on content type
+            val clientToUse = selectAIClient(job.contentType)
+            val modelName = when (clientToUse) {
+                pdfAnalysisChatClient -> pdfModelName
+                imageChatClient       -> imageModelName
+                else                  -> chatModelName
+            }
+            val clientName = when (clientToUse) {
+                pdfAnalysisChatClient -> "pdf"
+                imageChatClient       -> "image"
+                else                  -> "generic"
+            }
+            client = clientName
+            log.info("Processing job {} with {} client ({}) for contentType: {}", jobId, clientName, modelName, job.contentType)
+            pipelineTracing.tagUploadAnalysis(job.ownerUserId, job.fileId, job.filename, job.contentType, modelName, clientName)
 
-        } catch (e: AIAnalysisUnsupportedException) {
-            // AI analysis not supported for this file - mark as UNSUPPORTED with default metadata
-            jobStatusService.markJobAsUnsupported(jobId, job, e.message)
-            return null
+            try {
+                log.debug("First attempt / Kafka attempt / User attempt")
+                // Attempt AI analysis with retry logic using the appropriate client
+                val enhancedMeta = analyzeUploadWithRetry(fileToAnalyze!!, job, clientToUse, job.contentType)
 
-        } catch (e: IllegalStateException) {
-            // AI returned incomplete metadata - propagate to let markJobAsFailed handle it
-            log.error("AI returned incomplete metadata for job {}: {}", jobId, e.message)
-            throw e
+                log.debug(enhancedMeta.toString())
+
+                // For testing FAILED state (simulates incomplete metadata from AI)
+                //throw IllegalStateException("Testing FAILED state")
+
+
+                // Validate that AI returned all required fields
+                if (enhancedMeta.summary == null || enhancedMeta.tags == null || enhancedMeta.sensitivity == null) {
+                    throw IllegalStateException("AI returned incomplete metadata: summary=${enhancedMeta.summary}, tags=${enhancedMeta.tags}, sensitivity=${enhancedMeta.sensitivity}")
+                }
+
+                // Mark job as completed (uses separate transaction)
+                jobStatusService.markJobAsCompleted(jobId, job, enhancedMeta)
+
+                outcome = AnalysisOutcome.COMPLETED
+                return enhancedMeta
+
+            } catch (e: AIAnalysisUnsupportedException) {
+                // AI analysis not supported for this file - mark as UNSUPPORTED with default metadata
+                jobStatusService.markJobAsUnsupported(jobId, job, e.message)
+                outcome = AnalysisOutcome.UNSUPPORTED
+                return null
+
+            } catch (e: IllegalStateException) {
+                // AI returned incomplete metadata - propagate to let markJobAsFailed handle it
+                log.error("AI returned incomplete metadata for job {}: {}", jobId, e.message)
+                throw e
+            }
+        } finally {
+            analysisMetrics.recordAnalysis(client, outcome, (System.nanoTime() - analysisStart) / 1_000_000)
         }
     }
 

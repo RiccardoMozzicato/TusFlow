@@ -75,6 +75,9 @@ dependencies {
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
+    // Observability - Metrics export to the LGTM stack (Prometheus via OTLP)
+    implementation("io.micrometer:micrometer-registry-otlp")
+
     implementation("org.springframework.kafka:spring-kafka")
 }
 

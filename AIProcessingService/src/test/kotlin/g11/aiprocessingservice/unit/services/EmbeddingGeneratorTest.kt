@@ -4,9 +4,12 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import g11.aiprocessingservice.dto.ChunkBatchEvent
 import g11.aiprocessingservice.dto.ChunkData
 import g11.aiprocessingservice.entities.FileVersionEmbedding
+import g11.aiprocessingservice.metrics.EmbeddingMetrics
+import g11.aiprocessingservice.metrics.PipelineMetrics
 import g11.aiprocessingservice.repositories.FileVersionEmbeddingRepository
 import g11.aiprocessingservice.services.DeadLetterService
 import g11.aiprocessingservice.services.EmbeddingGenerator
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -45,6 +48,8 @@ class EmbeddingGeneratorTest {
             objectMapper = objectMapper,
             deadLetterService = deadLetterService,
             pipelineTracing = mockk(relaxed = true),
+            embeddingMetrics = EmbeddingMetrics(SimpleMeterRegistry()),
+            pipelineMetrics = PipelineMetrics(SimpleMeterRegistry()),
             embeddingModelName = "test-model",
             embeddingDimensions = "8",
         )
@@ -72,7 +77,7 @@ class EmbeddingGeneratorTest {
         failAddFor("c1")  // chunk 0 succeeds, chunk 1 fails
 
         assertThrows<IllegalStateException> {
-            generator.generateEmbeddings(batch(chunk(0), chunk(1)))
+            generator.generateEmbeddings(batch(chunk(0), chunk(1)), receivedTimestamp = 0L)
         }
 
         // The chunk that succeeded was persisted, so the redelivery will skip it.
@@ -85,13 +90,13 @@ class EmbeddingGeneratorTest {
         failAddFor("c1")
 
         assertThrows<IllegalStateException> {
-            generator.generateEmbeddings(batch(chunk(0), chunk(1)))
+            generator.generateEmbeddings(batch(chunk(0), chunk(1)), receivedTimestamp = 0L)
         }
     }
 
     @Test
     fun `fully successful batch - does not throw`() {
-        generator.generateEmbeddings(batch(chunk(0), chunk(1)))
+        generator.generateEmbeddings(batch(chunk(0), chunk(1)), receivedTimestamp = 0L)
 
         verify(exactly = 2) { embeddingRepository.save(any<FileVersionEmbedding>()) }
     }
@@ -101,7 +106,7 @@ class EmbeddingGeneratorTest {
         every { embeddingRepository.findByFileVersionIdAndChunkIndex(1L, 0) } returns
             mockk<FileVersionEmbedding>()
 
-        generator.generateEmbeddings(batch(chunk(0)))
+        generator.generateEmbeddings(batch(chunk(0)), receivedTimestamp = 0L)
 
         verify(exactly = 0) { vectorStore.add(any()) }
         verify(exactly = 0) { embeddingRepository.save(any<FileVersionEmbedding>()) }

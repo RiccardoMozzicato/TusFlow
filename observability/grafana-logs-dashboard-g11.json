@@ -1,0 +1,809 @@
+{
+ "uid": "g11-logs",
+ "title": "G11 \u2014 Logs",
+ "tags": [
+  "g11",
+  "logs",
+  "loki",
+  "observability"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "editable": true,
+ "graphTooltip": 1,
+ "liveNow": false,
+ "refresh": "30s",
+ "style": "dark",
+ "fiscalYearStartMonth": 0,
+ "weekStart": "",
+ "time": {
+  "from": "now-3h",
+  "to": "now"
+ },
+ "timepicker": {
+  "refresh_intervals": [
+   "10s",
+   "30s",
+   "1m",
+   "5m",
+   "15m",
+   "1h"
+  ]
+ },
+ "annotations": {
+  "list": [
+   {
+    "builtIn": 1,
+    "type": "dashboard",
+    "hide": true,
+    "name": "Annotations & Alerts",
+    "enable": true,
+    "datasource": {
+     "type": "grafana",
+     "uid": "-- Grafana --"
+    },
+    "iconColor": "rgba(0, 211, 255, 1)"
+   }
+  ]
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "application",
+    "label": "Service",
+    "type": "query",
+    "datasource": {
+     "type": "loki",
+     "uid": "loki"
+    },
+    "query": "label_values(application)",
+    "refresh": 2,
+    "includeAll": true,
+    "multi": true,
+    "sort": 1,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   },
+   {
+    "name": "level",
+    "label": "Level",
+    "type": "query",
+    "datasource": {
+     "type": "loki",
+     "uid": "loki"
+    },
+    "query": "label_values(level)",
+    "refresh": 2,
+    "includeAll": true,
+    "multi": true,
+    "sort": 1,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   },
+   {
+    "name": "search",
+    "label": "Search",
+    "type": "textbox",
+    "query": "",
+    "current": {
+     "text": "",
+     "value": ""
+    }
+   }
+  ]
+ },
+ "panels": [
+  {
+   "type": "row",
+   "title": "Overview",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   },
+   "id": 1
+  },
+  {
+   "type": "stat",
+   "title": "Errors",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 0,
+    "y": 1
+   },
+   "id": 101,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "value",
+    "wideLayout": true,
+    "showPercentChange": false,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(count_over_time({application=~\"$application\", level=\"ERROR\"}[$__range]))",
+     "queryType": "instant",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "legendFormat": ""
+    }
+   ],
+   "description": "ERROR-level lines in the selected range."
+  },
+  {
+   "type": "stat",
+   "title": "Warnings",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 6,
+    "y": 1
+   },
+   "id": 102,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "value",
+    "wideLayout": true,
+    "showPercentChange": false,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(count_over_time({application=~\"$application\", level=\"WARN\"}[$__range]))",
+     "queryType": "instant",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "legendFormat": ""
+    }
+   ],
+   "description": "WARN-level lines in the selected range."
+  },
+  {
+   "type": "stat",
+   "title": "Info",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 12,
+    "y": 1
+   },
+   "id": 103,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "value",
+    "wideLayout": true,
+    "showPercentChange": false,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(count_over_time({application=~\"$application\", level=\"INFO\"}[$__range]))",
+     "queryType": "instant",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "legendFormat": ""
+    }
+   ],
+   "description": "INFO-level lines in the selected range."
+  },
+  {
+   "type": "stat",
+   "title": "Total lines",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 18,
+    "y": 1
+   },
+   "id": 104,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#4db6c4",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "value",
+    "wideLayout": true,
+    "showPercentChange": false,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(count_over_time({application=~\"$application\"}[$__range]))",
+     "queryType": "instant",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "legendFormat": ""
+    }
+   ],
+   "description": "All log lines ingested in the selected range."
+  },
+  {
+   "type": "row",
+   "title": "Log volume",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 5
+   },
+   "id": 2
+  },
+  {
+   "type": "timeseries",
+   "title": "Log volume by level",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 6
+   },
+   "id": 105,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "palette-classic"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "min": 0,
+     "custom": {
+      "drawStyle": "bars",
+      "lineInterpolation": "linear",
+      "lineWidth": 1,
+      "fillOpacity": 22,
+      "gradientMode": "opacity",
+      "spanNulls": false,
+      "showPoints": "never",
+      "pointSize": 5,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "axisBorderShow": false,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "barAlignment": 0,
+      "insertNulls": false,
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "ERROR"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "red"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "WARN"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "orange"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "INFO"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#4db6c4"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "sum",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (level) (count_over_time({application=~\"$application\"}[$__interval]))",
+     "queryType": "range",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "legendFormat": "{{level}}"
+    }
+   ],
+   "description": "Lines per interval, split by severity. ERROR red \u00b7 WARN orange \u00b7 INFO teal."
+  },
+  {
+   "type": "timeseries",
+   "title": "Errors by service",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 6
+   },
+   "id": 106,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "palette-classic"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "min": 0,
+     "custom": {
+      "drawStyle": "bars",
+      "lineInterpolation": "linear",
+      "lineWidth": 1,
+      "fillOpacity": 30,
+      "gradientMode": "opacity",
+      "spanNulls": false,
+      "showPoints": "never",
+      "pointSize": 5,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "axisBorderShow": false,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "barAlignment": 0,
+      "insertNulls": false,
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "sum",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (application) (count_over_time({application=~\"$application\", level=\"ERROR\"}[$__interval]))",
+     "queryType": "range",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "legendFormat": "{{application}}"
+    }
+   ],
+   "description": "ERROR lines per interval, per service \u2014 who is failing."
+  },
+  {
+   "type": "row",
+   "title": "Error triage",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 14
+   },
+   "id": 3
+  },
+  {
+   "type": "table",
+   "title": "Top error loggers",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 13,
+    "w": 8,
+    "x": 0,
+    "y": 15
+   },
+   "id": 107,
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "filterable": true
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 90
+       },
+       {
+        "id": "displayName",
+        "value": "errors"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "sortBy": [
+     {
+      "displayName": "errors",
+      "desc": true
+     }
+    ]
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "topk(20, sum by (logger_name) (count_over_time({application=~\"$application\", level=\"ERROR\"} | json [$__range])))",
+     "queryType": "instant",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "format": "table",
+     "instant": true
+    }
+   ],
+   "transformations": [
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      },
+      "renameByName": {
+       "logger_name": "logger"
+      }
+     }
+    }
+   ],
+   "description": "Which classes emit the most errors in range (JSON-parsed logger_name)."
+  },
+  {
+   "type": "logs",
+   "title": "Error stream",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 13,
+    "w": 16,
+    "x": 8,
+    "y": 15
+   },
+   "id": 108,
+   "options": {
+    "showTime": true,
+    "showLabels": false,
+    "showCommonLabels": false,
+    "wrapLogMessage": true,
+    "prettifyLogMessage": true,
+    "enableLogDetails": true,
+    "dedupStrategy": "none",
+    "sortOrder": "Descending",
+    "enableInfiniteScrolling": true
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "{application=~\"$application\", level=\"ERROR\"} |= \"$search\" | json",
+     "queryType": "range",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     }
+    }
+   ],
+   "description": "Live ERROR lines. Click a line to expand JSON fields and the trace id."
+  },
+  {
+   "type": "row",
+   "title": "Log explorer",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 28
+   },
+   "id": 4
+  },
+  {
+   "type": "logs",
+   "title": "All logs (filtered by $application \u00b7 $level \u00b7 $search)",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "h": 16,
+    "w": 24,
+    "x": 0,
+    "y": 29
+   },
+   "id": 109,
+   "options": {
+    "showTime": true,
+    "showLabels": false,
+    "showCommonLabels": false,
+    "wrapLogMessage": true,
+    "prettifyLogMessage": true,
+    "enableLogDetails": true,
+    "dedupStrategy": "none",
+    "sortOrder": "Descending",
+    "enableInfiniteScrolling": true
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "{application=~\"$application\", level=~\"$level\"} |= \"$search\" | json",
+     "queryType": "range",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     }
+    }
+   ],
+   "description": "Everything, filtered by the variables above. Use Search for a substring (e.g. a fileId or exception)."
+  }
+ ]
+}

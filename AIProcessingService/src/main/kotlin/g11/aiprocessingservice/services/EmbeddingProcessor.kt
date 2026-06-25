@@ -3,6 +3,8 @@ package g11.aiprocessingservice.services
 import com.fasterxml.jackson.databind.ObjectMapper
 import g11.aiprocessingservice.dto.ChunkBatchEvent
 import g11.aiprocessingservice.dto.FileAnalyzedEvent
+import g11.aiprocessingservice.metrics.ExtractionMetrics
+import g11.aiprocessingservice.metrics.PipelineMetrics
 import io.micrometer.tracing.Tracer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.header.internals.RecordHeaders
@@ -39,6 +41,8 @@ class EmbeddingProcessor(
     private val supportedContentTypes: SupportedContentTypes,
     private val deadLetterService: DeadLetterService,
     private val pipelineTracing: g11.aiprocessingservice.tracing.PipelineTracing,
+    private val extractionMetrics: ExtractionMetrics,
+    private val pipelineMetrics: PipelineMetrics,
 ) {
     private val log = LoggerFactory.getLogger(EmbeddingProcessor::class.java)
 
@@ -56,7 +60,11 @@ class EmbeddingProcessor(
         groupId = "embedding-processor",
         containerFactory = "embeddingKafkaListenerContainerFactory",
     )
-    fun processFileForEmbeddings(message: String) {
+    fun processFileForEmbeddings(
+        message: String,
+        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long,
+    ) {
+        pipelineMetrics.recordEventLag("file-analyzed", receivedTimestamp)
         val event = objectMapper.readValue(message, FileAnalyzedEvent::class.java)
 
         log.info("Processing embeddings for file ${event.fileId} v${event.version}")
@@ -75,10 +83,14 @@ class EmbeddingProcessor(
 
         try {
             // 1. Download file
-            val fileStream = downloadFile(event.fileId, event.version)
+            val fileStream = pipelineMetrics.recordDownload("embedding") { downloadFile(event.fileId, event.version) }
 
-            // 2. Text extraction
-            val extracted = textExtractionService.extract(fileStream!!, event.contentType)
+            // 2. Text extraction (timed by base MIME type, e.g. application/pdf — drop any charset param)
+            val baseMime = event.contentType.split(";").firstOrNull()?.trim() ?: event.contentType
+            val extracted = extractionMetrics.recordExtraction(baseMime) {
+                textExtractionService.extract(fileStream!!, event.contentType)
+            }
+            extractionMetrics.recordTextLength(extracted.content.length)
 
             // 3. Build base metadata
             val baseMetadata = mapOf(
@@ -105,10 +117,12 @@ class EmbeddingProcessor(
                 event.fileVersionId,
                 baseMetadata
             )
+            extractionMetrics.recordChunks(chunks.size)
 
             // 5. Batch chunks (es. 50 per batch per parallelizzare)
             val batchSize = 5
             val batches = chunks.chunked(batchSize)
+            extractionMetrics.countBatches(batches.size)
 
             pipelineTracing.tagEmbeddingPreparation(event.ownerUserId, event.fileId, event.contentType, chunks.size, batches.size)
 
@@ -165,6 +179,7 @@ class EmbeddingProcessor(
         @Header(name = KafkaHeaders.DLT_EXCEPTION_FQCN, required = false) exceptionType: ByteArray?,
         @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) exceptionMessage: ByteArray?,
     ) {
+        pipelineMetrics.countDeadLetter("file-analyzed")
         deadLetterService.record("file-analyzed", message, exceptionType, exceptionMessage)
     }
 

@@ -34,31 +34,15 @@
             <label>
                 <pattern>application=${appName},host=${HOSTNAME},level=%level</pattern>
             </label>
-            <message>
-                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - traceId=%mdc{traceId:-} spanId=%mdc{spanId:-} - %msg%n</pattern>
-            </message>
+            <!-- JSON line body so Loki/Grafana parse fields (incl. mdc_traceId / mdc_spanId from
+                 MDC) instead of regex-scraping free text. JsonLayout ships with loki4j 1.5.2. -->
+            <message class="com.github.loki4j.logback.JsonLayout"/>
         </format>
     </appender>
 
     <springProfile name="dev">
+        <!-- Only our own code logs at DEBUG; framework/library noise stays at INFO. -->
         <logger name="g11.apigateway" level="DEBUG"/>
-        <logger name="org.springframework" level="INFO"/>
-        <logger name="org.springframework.web" level="INFO"/>
-        <logger name="org.springframework.cloud.gateway" level="INFO"/>
-        <logger name="org.springframework.security" level="INFO"/>
-
-        <root level="DEBUG">
-            <appender-ref ref="LOKI"/>
-            <appender-ref ref="CONSOLE"/>
-        </root>
-    </springProfile>
-
-    <springProfile name="prod">
-        <logger name="g11.apigateway" level="INFO"/>
-        <logger name="org.springframework" level="INFO"/>
-        <logger name="org.springframework.web" level="INFO"/>
-        <logger name="org.springframework.cloud.gateway" level="INFO"/>
-        <logger name="org.springframework.security" level="INFO"/>
 
         <root level="INFO">
             <appender-ref ref="LOKI"/>
@@ -66,7 +50,21 @@
         </root>
     </springProfile>
 
+    <springProfile name="prod">
+        <!-- Our own code logs at INFO; framework/library noise only at WARN+. -->
+        <logger name="g11.apigateway" level="INFO"/>
+
+        <root level="WARN">
+            <appender-ref ref="LOKI"/>
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
     <springProfile name="!dev &amp; !prod">
+        <!-- Default profile: keep framework/library noise at INFO but let our own
+             code DEBUG logs through. -->
+        <logger name="g11.apigateway" level="DEBUG"/>
+
         <root level="INFO">
             <appender-ref ref="LOKI"/>
             <appender-ref ref="CONSOLE"/>

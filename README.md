@@ -25,6 +25,8 @@
 
 This system implements a **microservices-based file management platform** with **AI-powered metadata enrichment**. The architecture is built on an **event-driven foundation** using Apache Kafka and the **Transactional Outbox Pattern** to ensure reliable, asynchronous communication between services.
 
+> 📊 **Flow diagrams:** see [`docs/diagrams/architecture-flow.md`](docs/diagrams/architecture-flow.md) for the end-to-end sequence (login → document availability) and the Debezium/Kafka CDC topology.
+
 ### System Components
 
 ```

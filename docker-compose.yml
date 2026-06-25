@@ -460,6 +460,20 @@ services:
       - "9099:9090"   # Prometheus
     volumes:
       - lgtm_data:/data
+      # Override Tempo's 1s trace_idle_period/max_block_duration (see observability/tempo-config.yaml):
+      # cross-service traces' spans arrive seconds apart, so the 1s default sealed the block before
+      # the gateway root span landed — leaving "<root span not yet received>" in trace search.
+      - ./observability/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
+      # Align Grafana's Loki<->Tempo correlation to our JSON logs: derived field parses the
+      # mdc_traceId field for log->trace links, tracesToLogsV2 maps service.name->application
+      # for trace->logs (see observability/grafana-datasources.yaml).
+      - ./observability/grafana-datasources.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/grafana-datasources.yaml:ro
+      # Auto-provision our curated dashboard (HTTP RED + JVM/Hikari + embedding pipeline). The
+      # provider yaml is added alongside the image's bundled one; the JSON is loaded from the path
+      # the provider points at (see observability/grafana-dashboard-provider.yaml).
+      - ./observability/grafana-dashboard-provider.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/g11-dashboards.yaml:ro
+      - ./observability/grafana-dashboard-g11.json:/otel-lgtm/grafana-dashboard-g11.json:ro
+      - ./observability/grafana-logs-dashboard-g11.json:/otel-lgtm/grafana-logs-dashboard-g11.json:ro
     networks:
       - kfk-net
 

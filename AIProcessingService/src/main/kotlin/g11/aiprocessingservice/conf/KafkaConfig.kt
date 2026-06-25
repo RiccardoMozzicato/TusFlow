@@ -1,5 +1,6 @@
 package g11.aiprocessingservice.conf
 
+import io.micrometer.core.instrument.MeterRegistry
 import org.apache.kafka.clients.admin.AdminClientConfig
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -26,7 +27,8 @@ import org.springframework.util.backoff.BackOff
 @Configuration
 class KafkaConfig (
     @Value ("\${kafka.bootstrap-servers}")  private val bootstrapAddress: String,
-    @Value ("\${kafka.consumer.group-id}") private val groupId: String
+    @Value ("\${kafka.consumer.group-id}") private val groupId: String,
+    private val meterRegistry: MeterRegistry,
 ){
 
     /**
@@ -118,7 +120,13 @@ class KafkaConfig (
             ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
             ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to false
         )
-        return DefaultKafkaConsumerFactory(props)
+        // Register a MicrometerConsumerListener so the native Kafka consumer client metrics — most
+        // notably kafka.consumer.fetch.manager.records-lag (per topic/partition backlog) — are bound
+        // to the registry and exported via OTLP. This single factory backs all three container
+        // factories below, so it covers file-outbox, file-analyzed and embeddings-batch.
+        return DefaultKafkaConsumerFactory<String, String>(props).apply {
+            addListener(org.springframework.kafka.core.MicrometerConsumerListener(meterRegistry))
+        }
     }
 
     /**

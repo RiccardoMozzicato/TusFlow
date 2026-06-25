@@ -1,10 +1,13 @@
 package g11.tusuploaderservice.services
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import g11.tusuploaderservice.metrics.TusMetrics
 import io.micrometer.tracing.Tracer
 import io.micrometer.tracing.propagation.Propagator
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
+import org.springframework.kafka.support.KafkaHeaders
+import org.springframework.messaging.handler.annotation.Header
 import org.springframework.stereotype.Service
 import java.util.*
 
@@ -14,6 +17,7 @@ class KafkaConsumer(
     private val objectMapper: ObjectMapper,
     private val tracer: Tracer,
     private val propagator: Propagator,
+    private val metrics: TusMetrics,
 ): KafkaConsumerInterface {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -21,8 +25,12 @@ class KafkaConsumer(
         topics = ["job-outbox"],
         groupId = "tus-uploader-service"
     )
-    override fun consumeFileUploadCompleted(message: String) {
-        log.info("Received Kafka message: {}", message)
+    override fun consumeFileUploadCompleted(
+        message: String,
+        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long,
+    ) {
+        log.debug("Received Kafka message: {}", message)
+        metrics.recordEventLag("job-outbox", receivedTimestamp)
 
         // Resume the upstream trace carried in the Debezium outbox payload body.
         val traceparent = extractTraceparentFromPayload(message)
@@ -73,7 +81,7 @@ class KafkaConsumer(
                 }
             }
 
-            log.info("Processing {} event for fileId: {}, version: {}, metadata: {}",
+            log.debug("Processing {} event for fileId: {}, version: {}, metadata: {}",
                 eventType, fileId, version, metadata)
 
             when (eventType) {

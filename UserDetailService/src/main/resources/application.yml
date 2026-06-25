@@ -56,4 +56,13 @@ management:
   otlp:
     tracing:
       endpoint: http://localhost:4318/v1/traces
+    metrics:
+      export:
+        url: ${OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
+        step: 10s
+  metrics:
+    distribution:
+      # Emit histogram buckets so Grafana can compute real p95/p99 + heatmaps.
+      percentiles-histogram:
+        http.server.requests: true
 

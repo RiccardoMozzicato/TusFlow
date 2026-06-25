@@ -7,6 +7,7 @@ import g11.tusuploaderservice.exceptions.MissingFieldException
 import g11.tusuploaderservice.exceptions.TusContentTypeException
 import g11.tusuploaderservice.exceptions.UploadLengthException
 import g11.tusuploaderservice.exceptions.InvalidFormatException
+import g11.tusuploaderservice.metrics.TusMetrics
 import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.FileServiceInterface
 import g11.tusuploaderservice.services.TusServiceInterface
@@ -35,14 +36,30 @@ import org.springframework.http.ProblemDetail
 import java.util.UUID
 import g11.tusuploaderservice.utils.parseMetadataHeader
 import g11.tusuploaderservice.utils.getUserIdFromJwt
+import io.micrometer.tracing.Tracer
 import org.springframework.web.bind.annotation.RequestParam
 import kotlin.text.get
 
 
 @RestController
 @RequestMapping("/api/v1/uploads")
-class TusController(val tus: TusProperties, val tusService: TusServiceInterface, private val fileService: FileServiceInterface) {
+class TusController(
+    val tus: TusProperties,
+    val tusService: TusServiceInterface,
+    private val fileService: FileServiceInterface,
+    private val tracer: Tracer,
+    private val tusMetrics: TusMetrics,
+) {
     private val log = LoggerFactory.getLogger(TusController::class.java)
+
+    // Tags the current request span with the client-generated file id. A tus upload spans
+    // several independent HTTP requests (the creation POST plus one PATCH per chunk), each of
+    // which the gateway records as its own trace. They can't share a single trace id, so we
+    // stamp every upload request's span with `file.id` instead: querying Tempo with
+    // `{ .file.id = "<uuid>" }` then regroups the POST and all its PATCHes for one upload.
+    private fun tagFileId(fileId: UUID?) {
+        fileId?.let { tracer.currentSpan()?.tag("file.id", it.toString()) }
+    }
 
     // Resolves the authenticated user (owner) id from the JWT for request logging.
     // Never throws so an API log line can't break the request flow.
@@ -342,6 +359,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         res: HttpServletResponse
     ) {
         log.debug("API POST /api/v1/uploads userOwnerId={} fileId={}", currentUserOwnerId(), fileId)
+        tagFileId(fileId)
 
         //if no scope is provided, default to PERSONAL
         val sharingScope = scope ?: SharingScope.PERSONAL
@@ -392,6 +410,9 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
             }
 
             file = tusService.createUploadWithChunk(file, chunk)
+            tusMetrics.countCreated()
+            tusMetrics.recordChunk(chunk.size)
+            tusMetrics.countCompletionIfDone(file.uploadOffset, file.uploadLength)
             log.info("Upload chunk processed fileId={} offset={}", fileId, file.uploadOffset)
             res.setHeader("Upload-Offset", file.uploadOffset.toString())
             uploadExpires = file.uploadExpires
@@ -399,6 +420,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         else {
             log.debug("Initializing empty upload fileId={}", fileId)
             file = tusService.createUpload(file)
+            tusMetrics.countCreated()
             log.info("Upload initialized fileId={}", fileId)
         }
 
@@ -553,6 +575,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
     open fun headUploads(@PathVariable id: String, req: HttpServletRequest, res: HttpServletResponse) {
         log.debug("API HEAD /api/v1/uploads/{} userOwnerId={} uploadId={}", id, currentUserOwnerId(), id)
         val result = tusService.getUploadInfo(id)
+        tagFileId(result.fileUuid)
 
         log.debug(
             "Upload info resolved id={} offset={} length={} defer={} expiresPresent={} metadataPresent={}",
@@ -880,6 +903,9 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         log.debug("Uploading chunk received: uploadId={} offset={} size={}", id, offset, chunk.size)
 
         uploadDto = tusService.appendChunk(uploadDto, chunk)
+        tagFileId(uploadDto.fileUuid)
+        tusMetrics.recordChunk(chunk.size)
+        tusMetrics.countCompletionIfDone(uploadDto.uploadOffset, uploadDto.uploadLength)
 
         log.info("Chunk appended successfully uploadId={} newOffset={}", id, uploadDto.uploadOffset)
         res.setHeader("Tus-Resumable", tus.version)
@@ -1018,6 +1044,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
     ) {
         log.debug("API DELETE /api/v1/uploads/{} userOwnerId={} uploadId={}", file_id, currentUserOwnerId(), file_id)
         tusService.terminateUpload(file_id)
+        tusMetrics.countTerminated()
         res.setHeader("Tus-Resumable", tus.version)
     }
 }

@@ -3,6 +3,8 @@ package g11.aiprocessingservice.unit.services
 import com.fasterxml.jackson.databind.ObjectMapper
 import g11.aiprocessingservice.conf.SupportedContentTypeProperties
 import g11.aiprocessingservice.dto.FileAnalyzedEvent
+import g11.aiprocessingservice.metrics.ExtractionMetrics
+import g11.aiprocessingservice.metrics.PipelineMetrics
 import g11.aiprocessingservice.services.ChunkingService
 import g11.aiprocessingservice.services.DeadLetterService
 import g11.aiprocessingservice.services.EmbeddingProcessor
@@ -14,6 +16,7 @@ import io.mockk.verify
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.springframework.kafka.core.KafkaTemplate
 import java.util.UUID
 
@@ -49,6 +52,10 @@ class EmbeddingProcessorTest {
             supportedContentTypes = supportedContentTypes,
             deadLetterService = deadLetterService,
             pipelineTracing = mockk(relaxed = true),
+            // Real metric instances: recordDownload/recordExtraction wrap work in lambdas, so a
+            // relaxed mock would skip the block. A SimpleMeterRegistry keeps them in-memory.
+            extractionMetrics = ExtractionMetrics(SimpleMeterRegistry()),
+            pipelineMetrics = PipelineMetrics(SimpleMeterRegistry()),
         )
     }
 
@@ -70,7 +77,7 @@ class EmbeddingProcessorTest {
         every { objectMapper.readValue(any<String>(), FileAnalyzedEvent::class.java) } returns
             event("image/png")
 
-        processor.processFileForEmbeddings("{}")
+        processor.processFileForEmbeddings("{}", 0L)
 
         // Returns early: never extracts text, never emits a chunk batch (so nothing can fail/DLT).
         verify(exactly = 0) { textExtractionService.extract(any(), any()) }

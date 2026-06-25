@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import g11.aiprocessingservice.dto.ChunkBatchEvent
 import g11.aiprocessingservice.dto.ChunkData
 import g11.aiprocessingservice.entities.FileVersionEmbedding
+import g11.aiprocessingservice.metrics.ChunkOutcome
+import g11.aiprocessingservice.metrics.EmbeddingMetrics
+import g11.aiprocessingservice.metrics.PipelineMetrics
 import g11.aiprocessingservice.repositories.FileVersionEmbeddingRepository
 import org.slf4j.LoggerFactory
 import org.springframework.ai.document.Document
@@ -27,6 +30,8 @@ class EmbeddingGenerator(
     private val objectMapper: ObjectMapper,
     private val deadLetterService: DeadLetterService,
     private val pipelineTracing: g11.aiprocessingservice.tracing.PipelineTracing,
+    private val embeddingMetrics: EmbeddingMetrics,
+    private val pipelineMetrics: PipelineMetrics,
     @Value("\${app.embedding.model:qwen3-embedding-4b}") private val embeddingModelName: String,
     @Value("\${app.embedding.dimensions:2560}") private val embeddingDimensions: String,
 ) {
@@ -42,6 +47,7 @@ class EmbeddingGenerator(
         @Header(name = KafkaHeaders.DLT_EXCEPTION_FQCN, required = false) exceptionType: ByteArray?,
         @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) exceptionMessage: ByteArray?,
     ) {
+        pipelineMetrics.countDeadLetter("embeddings-batch")
         deadLetterService.record("embeddings-batch", message, exceptionType, exceptionMessage)
     }
 
@@ -66,7 +72,11 @@ class EmbeddingGenerator(
     // transaction + vectorStore.add), so when this method throws to trigger a retry, the chunks that
     // did succeed on this pass stay committed and are skipped (deduped) on the next backoff
     // redelivery instead of being rolled back and re-embedded.
-    fun generateEmbeddings(message: String) {
+    fun generateEmbeddings(
+        message: String,
+        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long,
+    ) {
+        pipelineMetrics.recordEventLag("embeddings-batch", receivedTimestamp)
         val batch = objectMapper.readValue(message, ChunkBatchEvent::class.java)
 
         log.info("Generating embeddings for batch ${batch.batchNumber}/${batch.totalBatches} " +
@@ -86,14 +96,23 @@ class EmbeddingGenerator(
         var failed = 0
         var lastFailure: Exception? = null
 
-        batch.chunks.forEach { chunk ->
-            try {
-                if (embedChunk(batch.fileVersionId, chunk)) embedded++ else skipped++
-            } catch (e: Exception) {
-                failed++
-                lastFailure = e
-                log.error("Failed to embed chunk ${chunk.chunkIndex}: ${e.message}", e)
-                // Continue con altri chunks invece di fallire tutto il batch
+        embeddingMetrics.recordBatch {
+            batch.chunks.forEach { chunk ->
+                try {
+                    if (embedChunk(batch.fileVersionId, chunk)) {
+                        embedded++
+                        embeddingMetrics.countChunk(ChunkOutcome.EMBEDDED)
+                    } else {
+                        skipped++
+                        embeddingMetrics.countChunk(ChunkOutcome.SKIPPED)
+                    }
+                } catch (e: Exception) {
+                    failed++
+                    lastFailure = e
+                    embeddingMetrics.countChunk(ChunkOutcome.FAILED)
+                    log.error("Failed to embed chunk ${chunk.chunkIndex}: ${e.message}", e)
+                    // Continue con altri chunks invece di fallire tutto il batch
+                }
             }
         }
 

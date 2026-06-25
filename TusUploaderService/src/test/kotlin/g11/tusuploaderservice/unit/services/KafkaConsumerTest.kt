@@ -25,7 +25,7 @@ class KafkaConsumerTest {
     fun setUp() {
         fileService = mockk()
         objectMapper = ObjectMapper()
-        kafkaConsumer = KafkaConsumer(fileService, objectMapper, mockk(relaxed = true), mockk(relaxed = true))
+        kafkaConsumer = KafkaConsumer(fileService, objectMapper, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
     }
 
     @Test
@@ -43,7 +43,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 1) {
@@ -73,7 +73,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 1) {
@@ -102,7 +102,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then: failure metadata persisted on the file. The live browser notification is pushed
         // by AIProcessingService over STOMP, not from this consumer.
@@ -128,7 +128,7 @@ class KafkaConsumerTest {
         """.trimIndent()
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 0) { fileService.updateFileMetadata(any(), any(), any()) }
@@ -149,7 +149,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 1) {
@@ -176,7 +176,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 1) {
@@ -207,7 +207,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 1) {
@@ -238,7 +238,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 1) {
@@ -257,7 +257,7 @@ class KafkaConsumerTest {
 
         // When & Then
         assertThrows<Exception> {
-            kafkaConsumer.consumeFileUploadCompleted(message)
+            kafkaConsumer.consumeFileUploadCompleted(message, 0L)
         }
 
         verify(exactly = 0) { fileService.updateFileMetadata(any(), any(), any()) }
@@ -275,7 +275,7 @@ class KafkaConsumerTest {
 
         // When & Then
         assertThrows<IllegalArgumentException> {
-            kafkaConsumer.consumeFileUploadCompleted(message)
+            kafkaConsumer.consumeFileUploadCompleted(message, 0L)
         }
 
         verify(exactly = 0) { fileService.updateFileMetadata(any(), any(), any()) }
@@ -297,7 +297,7 @@ class KafkaConsumerTest {
 
         // When & Then
         assertThrows<RuntimeException> {
-            kafkaConsumer.consumeFileUploadCompleted(message)
+            kafkaConsumer.consumeFileUploadCompleted(message, 0L)
         }
 
         verify(exactly = 1) { fileService.updateFileMetadata(fileId, version, any()) }
@@ -318,7 +318,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 1) {
@@ -351,7 +351,7 @@ class KafkaConsumerTest {
         every { fileService.updateFileMetadata(fileId, version, any()) } just Runs
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 1) {
@@ -378,7 +378,7 @@ class KafkaConsumerTest {
         """.trimIndent()
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 0) { fileService.updateFileMetadata(any(), any(), any()) }
@@ -397,7 +397,7 @@ class KafkaConsumerTest {
         """.trimIndent()
 
         // When
-        kafkaConsumer.consumeFileUploadCompleted(message)
+        kafkaConsumer.consumeFileUploadCompleted(message, 0L)
 
         // Then
         verify(exactly = 0) { fileService.updateFileMetadata(any(), any(), any()) }

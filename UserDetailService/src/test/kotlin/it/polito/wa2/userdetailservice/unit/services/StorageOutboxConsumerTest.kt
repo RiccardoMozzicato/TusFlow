@@ -1,6 +1,7 @@
 package it.polito.wa2.userdetailservice.unit.services
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -8,6 +9,7 @@ import io.mockk.verify
 import it.polito.wa2.userdetailservice.entities.ProcessedStorageEvent
 import it.polito.wa2.userdetailservice.entities.User
 import it.polito.wa2.userdetailservice.enums.UserRole
+import it.polito.wa2.userdetailservice.metrics.UserDetailMetrics
 import it.polito.wa2.userdetailservice.repositories.ProcessedStorageEventRepository
 import it.polito.wa2.userdetailservice.repositories.UserRepository
 import it.polito.wa2.userdetailservice.services.StorageOutboxConsumer
@@ -34,7 +36,7 @@ class StorageOutboxConsumerTest {
         userRepository = mockk(relaxed = true)
         processedStorageEventRepository = mockk(relaxed = true)
         acknowledgment = mockk(relaxed = true)
-        consumer = StorageOutboxConsumer(userRepository, processedStorageEventRepository)
+        consumer = StorageOutboxConsumer(userRepository, processedStorageEventRepository, mockk(relaxed = true), UserDetailMetrics(SimpleMeterRegistry()))
         // Default: events have never been processed before.
         every { processedStorageEventRepository.existsById(any()) } returns false
         // Generic save<S>(): S returns Object under a relaxed mock, which fails the call-site
@@ -83,7 +85,7 @@ class StorageOutboxConsumerTest {
         every { userRepository.findById(userId) } returns Optional.of(user)
 
         // act
-        consumer.onMessage(message("STORAGE_RESERVED", size = 100L), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED", size = 100L), acknowledgment, 0L)
 
         // assert
         assertEquals(300L, user.storageUsed)
@@ -97,7 +99,7 @@ class StorageOutboxConsumerTest {
         every { userRepository.findById(userId) } returns Optional.of(user)
 
         // act
-        consumer.onMessage(message("STORAGE_RELEASED", size = 50L), acknowledgment)
+        consumer.onMessage(message("STORAGE_RELEASED", size = 50L), acknowledgment, 0L)
 
         // assert
         assertEquals(150L, user.storageUsed)
@@ -111,7 +113,7 @@ class StorageOutboxConsumerTest {
         every { userRepository.findById(userId) } returns Optional.of(user)
 
         // act
-        consumer.onMessage(message("STORAGE_RELEASED", size = 100L), acknowledgment)
+        consumer.onMessage(message("STORAGE_RELEASED", size = 100L), acknowledgment, 0L)
 
         // assert
         assertEquals(0L, user.storageUsed)
@@ -124,7 +126,7 @@ class StorageOutboxConsumerTest {
         every { userRepository.findById(userId) } returns Optional.of(user)
 
         // act
-        consumer.onMessage(message("STORAGE_CONFIRMED", size = 100L), acknowledgment)
+        consumer.onMessage(message("STORAGE_CONFIRMED", size = 100L), acknowledgment, 0L)
 
         // assert
         assertEquals(200L, user.storageUsed)
@@ -138,7 +140,7 @@ class StorageOutboxConsumerTest {
         every { userRepository.findById(userId) } returns Optional.of(user)
 
         // act
-        consumer.onMessage(message("STORAGE_RESERVED", size = 4096L), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED", size = 4096L), acknowledgment, 0L)
 
         // assert
         assertEquals(4096L, user.storageUsed)
@@ -154,7 +156,7 @@ class StorageOutboxConsumerTest {
         every { processedStorageEventRepository.save(capture(savedSlot)) } answers { savedSlot.captured }
 
         // act
-        consumer.onMessage(message("STORAGE_RESERVED", size = 100L, eventId = eventId.toString()), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED", size = 100L, eventId = eventId.toString()), acknowledgment, 0L)
 
         // assert
         verify { processedStorageEventRepository.save(any()) }
@@ -169,7 +171,7 @@ class StorageOutboxConsumerTest {
         every { userRepository.findById(userId) } returns Optional.of(user)
 
         // act
-        consumer.onMessage(message("STORAGE_RESERVED", size = 5L, payloadAsString = true), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED", size = 5L, payloadAsString = true), acknowledgment, 0L)
 
         // assert
         assertEquals(15L, user.storageUsed)
@@ -178,7 +180,7 @@ class StorageOutboxConsumerTest {
     @Test
     fun `ignores unrelated event types without touching the user`() {
         // act
-        consumer.onMessage(message("FILE_INSERTED"), acknowledgment)
+        consumer.onMessage(message("FILE_INSERTED"), acknowledgment, 0L)
 
         // assert
         verify(exactly = 0) { userRepository.findById(any()) }
@@ -189,7 +191,7 @@ class StorageOutboxConsumerTest {
     @Test
     fun `skips messages without an event_type`() {
         // act
-        consumer.onMessage(message(eventType = null), acknowledgment)
+        consumer.onMessage(message(eventType = null), acknowledgment, 0L)
 
         // assert
         verify(exactly = 0) { userRepository.findById(any()) }
@@ -199,8 +201,8 @@ class StorageOutboxConsumerTest {
     @Test
     fun `skips payloads missing ownerUserId or size`() {
         // act
-        consumer.onMessage(message("STORAGE_RESERVED", ownerUserId = null), acknowledgment)
-        consumer.onMessage(message("STORAGE_RESERVED", size = null), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED", ownerUserId = null), acknowledgment, 0L)
+        consumer.onMessage(message("STORAGE_RESERVED", size = null), acknowledgment, 0L)
 
         // assert
         verify(exactly = 0) { userRepository.findById(any()) }
@@ -213,7 +215,7 @@ class StorageOutboxConsumerTest {
         every { userRepository.findById(userId) } returns Optional.empty()
 
         // act
-        consumer.onMessage(message("STORAGE_RESERVED"), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED"), acknowledgment, 0L)
 
         // assert
         verify(exactly = 0) { processedStorageEventRepository.save(any()) }
@@ -227,7 +229,7 @@ class StorageOutboxConsumerTest {
         every { userRepository.findById(userId) } returns Optional.of(user)
 
         // act
-        consumer.onMessage(message("STORAGE_RESERVED", eventId = "not-a-uuid"), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED", eventId = "not-a-uuid"), acknowledgment, 0L)
 
         // assert - delta not applied, marker not written
         assertEquals(100L, user.storageUsed)
@@ -243,7 +245,7 @@ class StorageOutboxConsumerTest {
         every { processedStorageEventRepository.existsById(any()) } returns true
 
         // act
-        consumer.onMessage(message("STORAGE_RESERVED", size = 100L), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED", size = 100L), acknowledgment, 0L)
 
         // assert - the counter is untouched and no marker is written
         assertEquals(200L, user.storageUsed)
@@ -259,7 +261,7 @@ class StorageOutboxConsumerTest {
         every { processedStorageEventRepository.save(any()) } throws DataIntegrityViolationException("duplicate key")
 
         // act
-        consumer.onMessage(message("STORAGE_RESERVED", size = 100L), acknowledgment)
+        consumer.onMessage(message("STORAGE_RESERVED", size = 100L), acknowledgment, 0L)
 
         // assert - the delta is skipped so the counter does not drift
         assertEquals(200L, user.storageUsed)
