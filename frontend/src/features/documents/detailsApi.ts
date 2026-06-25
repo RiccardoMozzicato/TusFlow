@@ -88,11 +88,14 @@ export function downloadUrl(id: string): string {
 
 /**
  * Absolute URL of a document's details PAGE (not the API), for "Copy link".
- * Honors the app's base path (Vite `base` / router basename, e.g. `/ui/`) so the
- * link resolves through the gateway — `import.meta.env.BASE_URL` is `/ui/`.
+ * Honors the app's base path (Vite `base` / router basename, e.g. `/ui`) so the
+ * link resolves through the gateway. Vite's `base` is set without a trailing
+ * slash, so `import.meta.env.BASE_URL` can be `/ui`; we normalize it to end with
+ * exactly one slash, otherwise the link would collapse to `/uidocuments/{id}`.
  */
 export function documentPageUrl(id: string): string {
-  return `${window.location.origin}${import.meta.env.BASE_URL}documents/${id}`
+  const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
+  return `${window.location.origin}${base}documents/${id}`
 }
 
 /**

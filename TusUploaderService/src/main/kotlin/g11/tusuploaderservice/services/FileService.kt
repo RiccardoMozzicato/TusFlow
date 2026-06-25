@@ -166,23 +166,6 @@ class FileService(
         }
     }
 
-    /**
-     * Restituisce tutti i file presenti nel repository
-     */
-    override fun getAllFiles(): List<FileDTO> {
-        log.debug("Retrieving all files from repository")
-
-        val files = fileRepository.findAll()
-
-        if (files.isEmpty()) {
-            log.warn("No files found in repository")
-            throw ResourceNotFoundException("No files found in the repository")
-        }
-
-        log.info("Found {} files in repository", files.size)
-        return files.map { it.toDTO() }
-    }
-
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff', 'ROLE_ai_worker')")
     override fun getFileMetadata(id: UUID): FileDTO {
         log.debug("Retrieving metadata for {}", id)
@@ -523,19 +506,28 @@ class FileService(
             return DownloadDTO(fileVersion.filename, contentType, stream)
         }
 
-        // Otherwise, merge first
-        log.debug("File not merged yet, starting merge process for fileId: {} version: {}", id, fileVersion.version)
-
-        // Recupera l'upload a partire da fileVersionId
+        // Otherwise the version still needs merging. Serialize concurrent merges of the same
+        // upload: on completion the AI pipeline downloads each file twice (embedding + metadata)
+        // and the browser preview can add a third — all reach this path at once. Without
+        // serialization those merges interleave their MinIO part delete/rewrite and corrupt the
+        // object (leaving 0-byte parts). A pessimistic write lock on the upload row makes exactly
+        // one request perform the merge; the others find the upload already gone and serve the
+        // composed object.
         val versionId = fileVersion.id
             ?: throw ResourceNotFoundException("FileVersion id not found for file $id")
 
-        val upload = tusRepository.findByFileVersionId(versionId)
-            .orElseThrow {
-                log.warn("Upload for file $id and version ${fileVersion.version} not found")
-                ResourceNotFoundException("Upload for file $id not found")
-            }
+        // Blocks until any in-flight merge of this upload commits. A successful merge deletes the
+        // upload row, so an empty result means another request already merged this version.
+        val upload = tusRepository.findWithLockByFileVersionId(versionId).orElse(null)
+        if (upload == null) {
+            log.debug("Version already merged by a concurrent request, serving directly - fileId: {} version: {}", id, fileVersion.version)
+            // The merge always writes to this deterministic key (see below).
+            val key = "${file.uuid}/v${fileVersion.version}/${fileVersion.filename}"
+            return DownloadDTO(fileVersion.filename, contentType, storageService.getObject("files", key))
+        }
 
+        // We hold the lock and the upload still exists: perform the one-and-only merge.
+        log.debug("File not merged yet, starting merge process for fileId: {} version: {}", id, fileVersion.version)
         if (upload.chunkCount == 1) {
             log.debug("Single chunk upload detected, moving chunk directly - fileId: {}", id)
             moveSingleChunkUpload(upload)

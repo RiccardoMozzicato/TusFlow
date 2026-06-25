@@ -1,7 +1,6 @@
 package g11.aiprocessingservice.rag
 
 import g11.aiprocessingservice.rag.dto.RagQueryRequest
-import g11.aiprocessingservice.rag.dto.RagQueryResponse
 import g11.aiprocessingservice.rag.dto.RagStreamHandle
 import g11.aiprocessingservice.rag.retrieval.RagProperties
 import org.slf4j.LoggerFactory
@@ -22,32 +21,6 @@ class RagController(
     private val ragProperties: RagProperties,
 ) {
     private val log = LoggerFactory.getLogger(this::class.java)
-
-    /**
-     * Query documents using RAG across both owned files and files shared with the user.
-     */
-    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    @PostMapping("/query")
-    fun query(@RequestBody request: RagQueryRequest): ResponseEntity<RagQueryResponse> {
-        log.debug(
-            "API POST /api/rag/query user={} conversationId={} query={}",
-            userContext.currentSubjectOrUnknown(),
-            request.conversationId,
-            request.query,
-        )
-
-        val ragResponse = ragService.queryWithRag(request.query, request.conversationId, request.topK ?: 5)
-
-        return ResponseEntity.ok(
-            RagQueryResponse(
-                query = request.query,
-                answer = ragResponse.answer,
-                sourcesCount = ragResponse.sourcesCount,
-                sources = ragResponse.sources,
-                accessibleFilesCount = ragResponse.accessibleFilesCount,
-            )
-        )
-    }
 
     /**
      * Streaming variant: returns a streamId immediately and pushes the answer token-by-token over the

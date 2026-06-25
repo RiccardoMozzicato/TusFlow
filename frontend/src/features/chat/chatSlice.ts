@@ -1,9 +1,7 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from '@/app/store'
 import {
-  queryRag,
   streamRag,
-  type RagQueryResponse,
   type RagSource,
   type RagStreamHandle,
 } from './chatApi'
@@ -56,16 +54,6 @@ function ensureAssistant(state: ChatState, streamId: string): ChatMessage {
   state.seq += 1
   return state.messages[state.messages.length - 1]
 }
-
-// Non-streaming ask (kept as a fallback). The user turn is appended in `pending`, the assistant turn
-// in `fulfilled`/`rejected`.
-export const askRag = createAsyncThunk<
-  RagQueryResponse,
-  { query: string },
-  { state: RootState }
->('chat/askRag', async ({ query }, { getState }) =>
-  queryRag(query, getState().chat.conversationId),
-)
 
 // Streaming ask: POST returns a streamId; the answer then arrives as frames over the rag socket,
 // dispatched into the stream* reducers below.
@@ -123,33 +111,6 @@ const chatSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(askRag.pending, (state, action) => {
-        state.status = 'loading'
-        state.error = null
-        state.messages.push({ id: `u${state.seq}`, role: 'user', text: action.meta.arg.query })
-        state.seq += 1
-      })
-      .addCase(askRag.fulfilled, (state, action) => {
-        state.status = 'idle'
-        state.messages.push({
-          id: `a${state.seq}`,
-          role: 'assistant',
-          text: action.payload.answer,
-          sources: action.payload.sources.map(mapSource),
-        })
-        state.seq += 1
-      })
-      .addCase(askRag.rejected, (state, action) => {
-        state.status = 'idle'
-        state.error = action.error.message ?? 'Request failed'
-        state.messages.push({
-          id: `a${state.seq}`,
-          role: 'assistant',
-          text: STREAM_ERROR_FALLBACK,
-          isError: true,
-        })
-        state.seq += 1
-      })
       // Streaming: append the user turn now; the assistant turn fills in from socket frames.
       .addCase(streamMessage.pending, (state, action) => {
         state.status = 'loading'

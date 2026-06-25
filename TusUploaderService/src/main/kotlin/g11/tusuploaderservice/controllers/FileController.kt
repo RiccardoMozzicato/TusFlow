@@ -9,8 +9,6 @@ import g11.tusuploaderservice.dto.FiltersDTO
 import g11.tusuploaderservice.dto.MetadataAIDTO
 import g11.tusuploaderservice.dto.Ownership
 import g11.tusuploaderservice.dto.PendingUploadDTO
-import g11.tusuploaderservice.dto.RagQueryRequest
-import g11.tusuploaderservice.dto.RagQueryResponse
 import g11.tusuploaderservice.dto.SharingScope
 import g11.tusuploaderservice.entities.PERMISSION_LEVEL
 import g11.tusuploaderservice.entities.FileStatus
@@ -31,7 +29,6 @@ import io.swagger.v3.oas.annotations.headers.Header
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.core.io.InputStreamResource
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -39,12 +36,9 @@ import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
-import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import org.springframework.web.bind.annotation.*
-import org.springframework.web.client.RestClient
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 import java.util.Date
@@ -62,7 +56,6 @@ import java.util.UUID
 @RequestMapping("/api/v1/files")
 class FileController(
     private val fileService: FileServiceInterface,
-    @Qualifier("aiServiceClient") private val aiServiceClient: RestClient
 ) {
     private val log = LoggerFactory.getLogger(FileController::class.java)
 
@@ -70,36 +63,6 @@ class FileController(
     // Never throws so an API log line can't break the request flow.
     private fun currentUserOwnerId(): String =
         runCatching { getUserIdFromJwt().toString() }.getOrDefault("unknown")
-
-    @Deprecated("This endpoint is deprecated and will be removed in future versions. Use GET /api/v1/files with appropriate filters instead.")
-    //region Swagger Documentation
-    @Operation(
-        tags = ["File Management"],
-        summary = "Get all files",
-        description = "Retrieves all files present in the repository without pagination or filtering.",
-    )
-    @ApiResponse(
-        responseCode = "200",
-        description = "Successfully retrieved all files",
-        content = [Content(
-            mediaType = "application/json",
-            schema = Schema(implementation = FileDTO::class)
-        )]
-    )
-    @ApiResponse(
-        responseCode = "404",
-        description = "No files found in the repository",
-        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
-    )
-    //endregion
-    @GetMapping("/all")
-    fun getAllFiles(): ResponseEntity<List<FileDTO>> {
-        log.debug("API GET /api/v1/files/all userOwnerId={}", currentUserOwnerId())
-        log.debug("Getting all files from repository")
-        val files = fileService.getAllFiles()
-        log.debug("Retrieved {} files from repository", files.size)
-        return ResponseEntity.ok(files)
-    }
 
     //region Swagger Documentation
     @Operation(
@@ -1184,8 +1147,12 @@ class FileController(
 
         fileService.existsFileOrThrow(fileId) // Throws 404 if file does not exist
         log.debug("File exists, redirecting to upload endpoint for file: {}", fileId)
+        // 307 preserves the method, body and (same-origin) headers, so the tus client's
+        // creation POST — with Upload-Length / Tus-Resumable / Upload-Metadata — is replayed
+        // against the real upload endpoint. The path must be absolute-from-root and include
+        // /api/v1 so it routes through the gateway to this service's TusController.
         res.status = HttpServletResponse.SC_TEMPORARY_REDIRECT // 307
-        res.setHeader("Location", "/uploads?fileId=${fileId}")
+        res.setHeader("Location", "/api/v1/uploads?fileId=${fileId}")
     }
 
     //region Swagger Documentation
@@ -1322,65 +1289,6 @@ class FileController(
     fun getFavoritedVersionsForFile(@PathVariable fileId: UUID): ResponseEntity<List<Long>> {
         val versions = fileService.getFavoritedVersionsForFile(fileId)
         return ResponseEntity.ok(versions)
-    }
-
-    //region Swagger Documentation
-    @Operation(
-        tags = ["AI RAG"],
-        summary = "Query files with RAG",
-        description = "Performs semantic search on file contents using RAG (Retrieval-Augmented Generation) powered by AI."
-    )
-    @ApiResponse(
-        responseCode = "200",
-        description = "Successfully retrieved RAG response",
-        content = [Content(mediaType = "application/json", schema = Schema(implementation = RagQueryResponse::class))]
-    )
-    @ApiResponse(
-        responseCode = "500",
-        description = "AI Service Error",
-        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
-    )
-    //endregion
-
-    @PostMapping("/query")
-    fun queryFiles(@RequestBody request: RagQueryRequest, principal: Authentication): ResponseEntity<RagQueryResponse> {
-        //TODO modify the api or delete it
-        log.debug("API POST /api/v1/files/query userOwnerId={}", currentUserOwnerId())
-        // Estrai userId dal JWT token
-        val userId = when (principal) {
-            is JwtAuthenticationToken -> principal.token.subject
-            else -> {
-                log.warn("Invalid authentication token provided for RAG query")
-                throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid authentication")
-            }
-        }
-
-        log.info("Forwarding RAG query to AI Service: {} for user: {}", request.query, userId)
-
-        try {
-            // Aggiungi userId ai filtri
-            val filters = request.filters.toMutableMap()
-            filters["ownerId"] = userId
-
-            val requestWithFilters = request.copy(filters = filters)
-
-            log.debug("Sending RAG request with filters to AI Service for user: {}", userId)
-            val response = aiServiceClient.post()
-                .uri("/api/rag/query")
-                .body(requestWithFilters)
-                .retrieve()
-                .body(RagQueryResponse::class.java)
-
-            log.debug("Successfully received RAG response from AI Service for user: {}", userId)
-            return ResponseEntity.ok(response)
-
-        } catch (e: Exception) {
-            log.error("Failed to query AI Service: ${e.message}", e)
-            throw ResponseStatusException(
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                "Failed to contact AI Service: ${e.message}"
-            )
-        }
     }
 
     private companion object {

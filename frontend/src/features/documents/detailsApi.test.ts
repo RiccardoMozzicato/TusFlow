@@ -4,6 +4,7 @@ import { API } from '@/config'
 import {
   deleteFile,
   deleteFileShare,
+  documentPageUrl,
   getWritableFileIds,
   isFileWritable,
   Permission,
@@ -21,6 +22,7 @@ const mockedDelete = vi.mocked(http.delete)
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllEnvs()
 })
 
 describe('updateGeneratedMetadata', () => {
@@ -114,5 +116,19 @@ describe('deleteFile', () => {
     await deleteFile('file-1')
 
     expect(mockedDelete).toHaveBeenCalledWith(`${API.files}/file-1`)
+  })
+})
+
+describe('documentPageUrl', () => {
+  const origin = window.location.origin
+
+  it('inserts the missing slash when BASE_URL has no trailing slash', () => {
+    vi.stubEnv('BASE_URL', '/ui')
+    expect(documentPageUrl('file-1')).toBe(`${origin}/ui/documents/file-1`)
+  })
+
+  it('does not double the slash when BASE_URL already ends with one', () => {
+    vi.stubEnv('BASE_URL', '/ui/')
+    expect(documentPageUrl('file-1')).toBe(`${origin}/ui/documents/file-1`)
   })
 })

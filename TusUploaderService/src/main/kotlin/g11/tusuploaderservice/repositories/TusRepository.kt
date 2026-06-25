@@ -21,6 +21,17 @@ interface TusRepository: JpaRepository<Upload, UUID>, JpaSpecificationExecutor<U
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     fun findWithLockById(id: UUID): Optional<Upload>
 
+    /**
+     * Row-locked lookup by file-version id (SELECT ... FOR UPDATE), used to serialize the lazy
+     * merge in [g11.tusuploaderservice.services.FileService.downloadFile]. On upload completion
+     * the AI pipeline downloads each file twice (embedding + metadata) and the browser preview can
+     * add a third — all triggering the merge at once. Locking here makes exactly one request
+     * perform the merge; a successful merge deletes the upload row, so an empty result means a
+     * concurrent request already merged this version.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    fun findWithLockByFileVersionId(fileVersionId: Long): Optional<Upload>
+
     fun existsByFileId(fileUuid: UUID): Boolean
 
     fun findAllByExpiresAtBeforeAndStatusNot(now: Date, uploadStatus: UploadStatus): List<Upload>

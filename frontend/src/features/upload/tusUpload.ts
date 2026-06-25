@@ -31,6 +31,15 @@ export interface CreateUploadOptions {
   /** Client-generated file UUID, sent as the `fileId` query param. */
   fileId: string
   scope: SharingScope
+  /**
+   * Upload a new version of an existing file (rather than create a new file).
+   * The creation POST then targets the canonical `POST /api/v1/files/{fileId}/versions`
+   * endpoint, which validates the file + write access and 307-redirects to the tus
+   * upload resource; tus follows the redirect (same-origin, so Upload-Length /
+   * Tus-Resumable / Upload-Metadata are preserved). A version inherits the file's
+   * existing sharing scope, so `scope` is not sent in this mode. Defaults to false.
+   */
+  asNewVersion?: boolean
   /** User-provided key/value metadata, merged into the tus `Upload-Metadata` header. */
   metadata?: Record<string, string>
   /**
@@ -56,6 +65,7 @@ export function createUpload({
   fileId,
   scope,
   metadata,
+  asNewVersion = false,
   startPaused = false,
   onProgress,
   onChunkComplete,
@@ -67,8 +77,12 @@ export function createUpload({
   let isPausedIntentionally = startPaused
   let isAbortedIntentionally = false
 
-  const params = new URLSearchParams({ fileId, sharingScope: scope })
-  const endpoint = `${API.uploads}?${params.toString()}`
+  // A new version posts to the canonical createFileVersion endpoint, which
+  // 307-redirects (carrying the tus headers) to the upload resource. A new file
+  // posts straight to the tus endpoint with its chosen sharing scope.
+  const endpoint = asNewVersion
+    ? `${API.files}/${fileId}/versions`
+    : `${API.uploads}?${new URLSearchParams({ fileId, sharingScope: scope }).toString()}`
 
   const xsrfToken = getCookie(XSRF_COOKIE_NAME)
 

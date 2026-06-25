@@ -23,7 +23,6 @@ interface FileServiceInterface {
     fun createFileVersion(upload: Upload,file: File): FileVersion
 
     fun getFiles(filtersDTO: FiltersDTO): Page<FileDTO>
-    fun getAllFiles(): List<FileDTO>
 
     fun getFileMetadata(id: UUID): FileDTO
     fun getFileGeneratedMetadata(id: UUID, version: Long?): MetadataAIDTO

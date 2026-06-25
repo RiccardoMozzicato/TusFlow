@@ -6,6 +6,9 @@ ACT_IMAGE := "catthehacker/ubuntu:act-latest"
 
 docker:
     docker compose up -d
+
+downall:
+    docker compose down --volumes --remove-orphans
 # Register Debezium connectors (run once after docker compose up)
 debezium:
     docker compose --profile setup up --wait setup-connector setup-job-outbox-connector

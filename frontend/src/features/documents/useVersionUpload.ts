@@ -3,9 +3,10 @@ import { createUpload, type UploadController } from '@/features/upload/tusUpload
 import type { SharingScope } from './documentsApi'
 
 // Drives a single new-version upload from the Document Details page. A new
-// version is just a tus upload that reuses the file's *existing* UUID — the
-// backend's createUpload sees the file already exists, checks WRITE permission,
-// and appends a new FileVersion instead of creating a new file.
+// version reuses the file's *existing* UUID and is created through the canonical
+// `POST /api/v1/files/{fileId}/versions` endpoint (see `asNewVersion` in
+// createUpload): the backend validates the file + write access, then the tus
+// upload appends a new FileVersion instead of creating a new file.
 
 export type VersionUploadStatus = 'idle' | 'uploading' | 'success' | 'error'
 
@@ -58,6 +59,7 @@ export function useVersionUpload(
         file,
         fileId,
         scope,
+        asNewVersion: true,
         onProgress: (uploaded, total) => {
           setState((prev) => ({
             ...prev,

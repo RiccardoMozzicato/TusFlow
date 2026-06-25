@@ -56,44 +56,10 @@ class JobControllers(
             .getOrDefault("unknown")
 
     /**
-     * Get the status of a job processing AI metadata.
-     * Returns job status and payload.
-     *
-     * @param fileId The UUID of the file
-     * @param version The version of the file
-     * @return JobStatusResponseDTO with current job status
-     */
-    @PreAuthorize("isAuthenticated()")
-    @GetMapping("/status")
-    fun getJobStatus(
-        @RequestParam fileId: UUID,
-        @RequestParam version: Long
-    ): ResponseEntity<JobStatusResponseDTO> {
-        log.debug("API GET /api/v1/jobs/status userOwnerId={} fileId={} version={}", currentUserOwnerId(), fileId, version)
-        
-        val job = jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, version)
-        
-        return if (job != null) {
-            val response = JobStatusResponseDTO(
-                jobId = job.jobid,
-                fileId = job.fileid,
-                version = job.version,
-                status = job.status,
-                payload = job.payload
-            )
-            log.debug("Job status for file {} version {}: {}", fileId, version, job.status)
-            ResponseEntity.ok(response)
-        } else {
-            log.warn("No job found for fileId: {}, version: {}", fileId, version)
-            ResponseEntity.status(HttpStatus.NOT_FOUND).build()
-        }
-    }
-
-    /**
-     * Batch variant of [getJobStatus]: returns the current AI-job status for many
-     * files in one call, so the document library can flag each card. Pairs without
-     * a job are simply omitted from the response (= "no AI job"). One query; the
-     * latest job per (fileId, version) is selected, mirroring [getJobStatus].
+     * Returns the current AI-job status for many files in one call, so the document
+     * library can flag each card. Pairs without a job are simply omitted from the
+     * response (= "no AI job"). One query; the latest job per (fileId, version) is
+     * selected (findFirst...OrderByJobidDesc semantics).
      */
     @PreAuthorize("isAuthenticated()")
     @PostMapping("/status/batch")
