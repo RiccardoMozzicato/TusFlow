@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '@/components/Icon'
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
@@ -16,14 +16,39 @@ import {
   streamToken,
 } from '../chatSlice'
 import { connectRagSocket, disconnectRagSocket, onRagEvent } from '@/features/realtime/ragSocket'
+import { initialsOf } from '@/lib/initials'
 import type { ChatMessage as ChatMessageModel, ChatSource } from '../types'
+
+// Conversation text scales with a user-controlled zoom (Ctrl +/-/0), persisted
+// so the chosen size sticks across sessions. The base sits a little below the
+// body-sm token (14px) so the default view is comfortably compact.
+const RAG_ZOOM_KEY = 'rag-chat-zoom'
+const RAG_BASE_FONT_PX = 13
+const RAG_MIN_ZOOM = 0.8
+const RAG_MAX_ZOOM = 1.8
+const RAG_ZOOM_STEP = 0.1
+
+function clampZoom(value: number): number {
+  return Math.min(RAG_MAX_ZOOM, Math.max(RAG_MIN_ZOOM, Math.round(value * 100) / 100))
+}
+
+function loadZoom(): number {
+  if (typeof window === 'undefined') return 1
+  const raw = Number(window.localStorage.getItem(RAG_ZOOM_KEY))
+  return Number.isFinite(raw) && raw > 0 ? clampZoom(raw) : 1
+}
+
+// Inline font sizing for the conversation bubbles, driven by the current zoom.
+function messageTextStyle(zoom: number): React.CSSProperties {
+  return { fontSize: `${RAG_BASE_FONT_PX * zoom}px`, lineHeight: 1.6 }
+}
 
 // Picks the file-type glyph for a cited source chip.
 function sourceIcon(label: string): { name: string; className: string } {
   if (label.toLowerCase().endsWith('.pdf')) {
-    return { name: 'picture_as_pdf', className: 'text-ds-error text-[18px]' }
+    return { name: 'picture_as_pdf', className: 'text-ds-error text-[14px]' }
   }
-  return { name: 'description', className: 'text-ds-primary text-[18px]' }
+  return { name: 'description', className: 'text-ds-primary text-[14px]' }
 }
 
 function SourceList({ sources }: { sources: ChatSource[] }) {
@@ -132,17 +157,23 @@ function TypingDots() {
   )
 }
 
-function UserBubble({ text }: { text: string }) {
+function UserBubble({ text, zoom, initials }: { text: string; zoom: number; initials: string }) {
   return (
-    <div className="flex justify-end">
-      <div className="max-w-[80%] rounded-ds-xl rounded-tr-none bg-ds-surface-container-high px-4 py-3 text-ds-on-surface-variant shadow-sm">
-        <p className="whitespace-pre-wrap break-words font-ds-body text-ds-body-md">{text}</p>
+    <div className="flex items-center justify-end gap-3">
+      <p
+        className="max-w-[80%] whitespace-pre-wrap break-words font-ds-body font-medium text-ds-on-surface-variant"
+        style={messageTextStyle(zoom)}
+      >
+        {text}
+      </p>
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-ds-full bg-ds-primary font-ds-label text-ds-label-md font-bold text-ds-on-primary">
+        {initials}
       </div>
     </div>
   )
 }
 
-function AssistantTurn({ message }: { message: ChatMessageModel }) {
+function AssistantTurn({ message, zoom }: { message: ChatMessageModel; zoom: number }) {
   const [copied, setCopied] = useState(false)
   const sources = message.sources ?? []
   const showDots = message.isStreaming && message.text.length === 0
@@ -165,20 +196,15 @@ function AssistantTurn({ message }: { message: ChatMessageModel }) {
       <div className="flex-1 space-y-3">
         <AgentReasoning sources={sources} />
 
-        <div
-          className={`max-w-[95%] space-y-3 rounded-ds-xl rounded-tl-none border p-4 shadow-sm ${
-            message.isError
-              ? 'border-ds-error/40 bg-ds-error-container'
-              : 'border-ds-outline-variant bg-ds-surface-container-lowest'
-          }`}
-        >
+        <div className="max-w-[95%] space-y-3">
           {showDots ? (
             <TypingDots />
           ) : (
             <p
-              className={`whitespace-pre-wrap break-words font-ds-body text-ds-body-md leading-relaxed ${
-                message.isError ? 'text-ds-on-error-container' : 'text-ds-on-surface'
+              className={`whitespace-pre-wrap break-words font-ds-body ${
+                message.isError ? 'text-ds-error' : 'text-ds-on-surface'
               }`}
+              style={messageTextStyle(zoom)}
             >
               {message.text}
             </p>
@@ -213,18 +239,10 @@ export default function ChatPanel() {
   const isStreaming = useAppSelector(selectChatStreaming)
   const user = useAppSelector(selectCurrentUser)
   const [input, setInput] = useState('')
+  const [zoom, setZoom] = useState(loadZoom)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const turnTopRef = useRef<HTMLDivElement>(null)
 
-  // Id of the latest assistant turn, so we can anchor the viewport to the start
-  // of the answer (not chase the streaming tail to the bottom).
-  const lastAssistantId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i].role === 'assistant') return messages[i].id
-    }
-    return null
-  }, [messages])
-
+  const userInitials = initialsOf(user?.fullName || user?.username || 'Unknown user')
   const isLoading = status === 'loading'
   const canSend = input.trim().length > 0 && !isLoading && Boolean(user?.uuid)
   // "Thinking…" dots only cover the gap before any assistant turn exists.
@@ -264,17 +282,35 @@ export default function ChatPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [dispatch])
 
-  // When a new assistant turn begins, scroll so the START of its answer sits at
-  // the top of the transcript, instead of following the streaming tail down.
+  // Persist the chosen zoom so it survives reopening the panel / reloads.
   useEffect(() => {
-    if (lastAssistantId) {
-      turnTopRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    } else {
-      // No assistant turn yet (e.g. the "thinking" state): keep the latest user
-      // message visible at the bottom.
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+    window.localStorage.setItem(RAG_ZOOM_KEY, String(zoom))
+  }, [zoom])
+
+  // Ctrl/Cmd +/- resizes the answer text in place (overriding the browser's
+  // page zoom while the panel is open); Ctrl/Cmd 0 resets it.
+  useEffect(() => {
+    function onZoomKey(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey)) return
+      if (event.key === '+' || event.key === '=' || event.code === 'NumpadAdd') {
+        event.preventDefault()
+        setZoom((z) => clampZoom(z + RAG_ZOOM_STEP))
+      } else if (event.key === '-' || event.key === '_' || event.code === 'NumpadSubtract') {
+        event.preventDefault()
+        setZoom((z) => clampZoom(z - RAG_ZOOM_STEP))
+      } else if (event.key === '0' || event.code === 'Numpad0') {
+        event.preventDefault()
+        setZoom(1)
+      }
     }
-  }, [lastAssistantId, isThinking])
+    window.addEventListener('keydown', onZoomKey)
+    return () => window.removeEventListener('keydown', onZoomKey)
+  }, [])
+
+  // Keep the latest message in view as the conversation grows.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+  }, [messages.length, isThinking])
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -297,13 +333,13 @@ export default function ChatPanel() {
         className="flex h-[min(85vh,870px)] w-full max-w-3xl flex-col overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest shadow-2xl"
       >
         {/* Header */}
-        <header className="flex h-16 items-center justify-between border-b border-ds-outline-variant bg-ds-primary px-6 text-ds-on-primary">
-          <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-ds-full bg-white/10">
-              <Icon name="auto_awesome" className="text-[22px] text-ds-primary-fixed-dim" />
+        <header className="flex h-14 items-center justify-between border-b border-ds-outline-variant bg-ds-primary px-4 text-ds-on-primary">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-ds-full bg-white/10">
+              <Icon name="auto_awesome" className="text-[18px] text-ds-primary-fixed-dim" />
             </div>
             <div>
-              <h1 className="font-ds-heading text-ds-headline-sm leading-tight">
+              <h1 className="font-ds-heading text-ds-body-lg leading-tight">
                 DocPortal AI Assistant
               </h1>
               <p className="font-ds-label text-ds-label-sm uppercase tracking-wider opacity-80">
@@ -312,6 +348,37 @@ export default function ChatPanel() {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <div className="mr-1 flex items-center gap-0.5 rounded-ds-full bg-white/10 px-1">
+              <button
+                type="button"
+                onClick={() => setZoom((z) => clampZoom(z - RAG_ZOOM_STEP))}
+                disabled={zoom <= RAG_MIN_ZOOM}
+                title="Decrease text size (Ctrl -)"
+                aria-label="Decrease text size"
+                className="flex h-8 w-8 items-center justify-center rounded-ds-full transition-colors hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Icon name="remove" filled={false} className="text-[18px]" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoom(1)}
+                title="Reset text size (Ctrl 0)"
+                aria-label="Reset text size"
+                className="min-w-[3rem] rounded-ds px-1 py-1 text-center font-ds-label text-ds-label-sm tabular-nums transition-colors hover:bg-white/10"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoom((z) => clampZoom(z + RAG_ZOOM_STEP))}
+                disabled={zoom >= RAG_MAX_ZOOM}
+                title="Increase text size (Ctrl +)"
+                aria-label="Increase text size"
+                className="flex h-8 w-8 items-center justify-center rounded-ds-full transition-colors hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Icon name="add" filled={false} className="text-[18px]" />
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => dispatch(clearChat())}
@@ -344,19 +411,19 @@ export default function ChatPanel() {
               </p>
             </div>
           ) : (
-            messages.map((message) =>
-              message.role === 'user' ? (
-                <UserBubble key={message.id} text={message.text} />
-              ) : (
-                <div
-                  key={message.id}
-                  ref={message.id === lastAssistantId ? turnTopRef : undefined}
-                  className="scroll-mt-6"
-                >
-                  <AssistantTurn message={message} />
+            messages.map((message, index) => {
+              // A divider sits above every turn except the very first message.
+              const divider = index > 0 ? 'border-t border-ds-outline-variant pt-6' : undefined
+              return message.role === 'user' ? (
+                <div key={message.id} className={divider}>
+                  <UserBubble text={message.text} zoom={zoom} initials={userInitials} />
                 </div>
-              ),
-            )
+              ) : (
+                <div key={message.id} className={divider}>
+                  <AssistantTurn message={message} zoom={zoom} />
+                </div>
+              )
+            })
           )}
 
           {isThinking ? (

@@ -4,7 +4,7 @@ import { loadDocuments } from '@/features/documents/documentsSlice'
 import type { SharingScope } from '@/features/documents/documentsApi'
 import { selectCurrentUser } from '@/features/auth/authSlice'
 import { createUpload, type UploadController } from './tusUpload'
-import { onJobUpdate, type JobUpdateStatus } from '@/features/realtime/jobsSocket'
+import { isTerminalJobStatus, onJobUpdate, type TerminalJobStatus } from '@/features/realtime/jobsSocket'
 import { fileTypeChip } from './fileType'
 import { formatBytes, formatEta, formatSpeed } from './format'
 import { toMetadataRecord } from './metadata'
@@ -181,11 +181,11 @@ export function useUploadQueue(): UseUploadQueue {
   // A terminal AI outcome (or the safety timeout) for an uploaded file: the bytes
   // are in, so surface a completed row and refresh the library.
   const handleJobTerminal = useCallback(
-    (id: string, status: JobUpdateStatus) => {
+    (id: string, status: TerminalJobStatus) => {
       const m = meta.current.get(id)
       const size = m ? formatBytes(m.bytesTotal) : ''
 
-      const primaryByStatus: Record<JobUpdateStatus, string> = {
+      const primaryByStatus: Record<TerminalJobStatus, string> = {
         completed: 'Done',
         unsupported: 'Uploaded (no AI preview)',
         failed: 'Uploaded (analysis failed)',
@@ -223,6 +223,9 @@ export function useUploadQueue(): UseUploadQueue {
       // file was created with `id` as its fileId, so match on that.
       const unsubscribe = onJobUpdate((update) => {
         if (update.fileId !== id) return
+        // The row already shows "Generating metadata…" for the pending/processing
+        // pings; only a terminal outcome flips it to a completed row.
+        if (!isTerminalJobStatus(update.status)) return
         handleJobTerminal(id, update.status)
       })
       // Safety net: never leave the row stuck if the update is missed (e.g. it

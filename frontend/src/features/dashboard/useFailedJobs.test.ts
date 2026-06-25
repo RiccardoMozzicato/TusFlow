@@ -12,7 +12,10 @@ vi.mock('@/features/documents/jobsApi', () => ({
   retryJob: vi.fn(),
 }))
 
-vi.mock('@/features/realtime/jobsSocket', () => ({
+// Keep the real isTerminalJobStatus (the hook uses it to ignore non-terminal pings);
+// only onJobUpdate is replaced so tests can drive the listener.
+vi.mock('@/features/realtime/jobsSocket', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/realtime/jobsSocket')>()),
   onJobUpdate: vi.fn(),
 }))
 
@@ -119,6 +122,24 @@ describe('useFailedJobs', () => {
     // Still reprocessing — the update was for a different file.
     expect(result.current.retryStates['job-1']?.status).toBe('reprocessing')
     expect(unsubscribe).not.toHaveBeenCalled()
+  })
+
+  it('stays reprocessing on non-terminal pending/processing pings', async () => {
+    const socket = captureListener()
+    const { result } = renderHook(() => useFailedJobs())
+    await waitFor(() => expect(result.current.jobs).toEqual([JOB]))
+
+    act(() => result.current.retry(JOB))
+    await waitFor(() =>
+      expect(result.current.retryStates['job-1']?.status).toBe('reprocessing'),
+    )
+
+    socket.emit('pending')
+    socket.emit('processing')
+
+    // The retry only resolves on a terminal outcome; the pings are ignored.
+    expect(result.current.retryStates['job-1']?.status).toBe('reprocessing')
+    expect(socket.unsubscribe).not.toHaveBeenCalled()
   })
 
   it('transitions reprocessing → succeeded on a completed update', async () => {

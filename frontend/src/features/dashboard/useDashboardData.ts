@@ -64,8 +64,9 @@ export function useDashboardData(): DashboardData {
     }
   }, [reloadToken])
 
-  // A terminal AI-job update changes both the counters and the recent rows, so
-  // refetch (debounced) to keep the overview in sync without polling.
+  // Any AI-job update shifts the counters (a pending/processing ping bumps the
+  // pending bucket; a terminal outcome moves it to completed/failed) and may change
+  // the recent rows, so refetch (debounced) to keep the overview in sync without polling.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     const unsubscribe = onJobUpdate(() => {

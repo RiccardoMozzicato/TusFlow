@@ -89,6 +89,42 @@ class JobStatusServiceTest {
     }
 
     @Test
+    fun `notifyJobPending broadcasts PENDING to the owner without touching the DB`() {
+        val jobDto = job()
+        val message = slot<JobStatusMessage>()
+        every {
+            messagingTemplate.convertAndSendToUser(any(), any(), capture(message))
+        } answers { }
+
+        service.notifyJobPending(jobDto)
+
+        // Broadcast-only: no status write, just the live ping for the in-progress indicator.
+        verify(exactly = 0) { jobRepository.save(any<Job>()) }
+        verify {
+            messagingTemplate.convertAndSendToUser(jobDto.ownerUserId.toString(), "/queue/jobs", any<JobStatusMessage>())
+        }
+        assertEquals(jobStatus.PENDING.name, message.captured.status)
+    }
+
+    @Test
+    fun `notifyJobProcessing broadcasts PROCESSING to the owner without touching the DB`() {
+        val jobDto = job()
+        val message = slot<JobStatusMessage>()
+        every {
+            messagingTemplate.convertAndSendToUser(any(), any(), capture(message))
+        } answers { }
+
+        service.notifyJobProcessing(jobDto)
+
+        // PROCESSING is a live-only refinement of PENDING: nothing is persisted.
+        verify(exactly = 0) { jobRepository.save(any<Job>()) }
+        verify {
+            messagingTemplate.convertAndSendToUser(jobDto.ownerUserId.toString(), "/queue/jobs", any<JobStatusMessage>())
+        }
+        assertEquals(jobStatus.PROCESSING.name, message.captured.status)
+    }
+
+    @Test
     fun `markJobAsDeadLettered broadcasts a terminal status to the owning user`() {
         val jobDto = job()
         every { jobRepository.findById(jobId) } returns Optional.of(entity())

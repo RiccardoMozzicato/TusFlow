@@ -6,13 +6,17 @@ import { applyJobUpdate as applyDetailJobUpdate } from '@/features/documents/doc
 import { JobStatus } from '@/features/documents/jobsApi'
 import { connectJobsSocket, disconnectJobsSocket, onJobUpdate, type JobUpdateStatus } from './jobsSocket'
 
-// Maps a live terminal job status onto the JobStatus the Library indicator uses.
+// Maps a live job status onto the JobStatus the Library indicator uses.
 // 'deadlettered' has no library-facing distinction — it reads as a failed analysis.
+// 'pending' and 'processing' both map onto PENDING: a job being analyzed counts as a
+// pending job, and the indicator renders PENDING/PROCESSING identically anyway.
 const JOB_STATUS_BY_UPDATE: Record<JobUpdateStatus, JobStatus> = {
   completed: JobStatus.COMPLETED,
   unsupported: JobStatus.UNSUPPORTED,
   failed: JobStatus.FAILED,
   deadlettered: JobStatus.FAILED,
+  pending: JobStatus.PENDING,
+  processing: JobStatus.PENDING,
 }
 
 /**

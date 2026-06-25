@@ -199,9 +199,22 @@ class JobStatusService(
         log.error("Job $jobId dead-lettered after exhausting all retries: $errorMessage")
     }
 
+    override fun notifyJobPending(job: JobDTO) {
+        // The job is already persisted as PENDING by the caller (createJobIfNotExists / prepareRetry);
+        // this only mirrors that onto the live channel so the in-progress indicator appears at once.
+        broadcast(job, jobStatus.PENDING.name)
+    }
+
+    override fun notifyJobProcessing(job: JobDTO) {
+        // Broadcast-only: PROCESSING is a live refinement of PENDING (the persisted status and the
+        // aggregate "pending" counter stay unchanged), so there is nothing to save here.
+        broadcast(job, jobStatus.PROCESSING.name)
+    }
+
     /**
-     * Pushes a terminal job outcome to the owning user's STOMP queue. Best-effort: a messaging
-     * failure must never roll back the job transition, so it is logged and swallowed.
+     * Pushes a job status to the owning user's STOMP queue. Best-effort: a messaging failure must
+     * never roll back (or derail) the job transition, so it is logged and swallowed. Used for both
+     * terminal outcomes (with metadata/error) and the non-terminal PENDING/PROCESSING pings.
      */
     private fun broadcast(
         job: JobDTO,

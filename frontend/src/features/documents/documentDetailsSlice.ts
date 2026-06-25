@@ -1,6 +1,6 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from '@/app/store'
-import type { JobUpdateStatus } from '@/features/realtime/jobsSocket'
+import { isTerminalJobStatus, type JobUpdateStatus } from '@/features/realtime/jobsSocket'
 import {
   createFileShare,
   deleteFile,
@@ -186,15 +186,22 @@ const documentDetailsSlice = createSlice({
       const detail = state.detail
       if (!detail || detail.id !== fileId) return
 
-      // Reflect the terminal outcome on the analysis indicator ('deadlettered'
-      // reads as a failed analysis to the user).
+      // Reflect the live status on the analysis indicator. 'deadlettered' reads as a
+      // failed analysis; 'pending'/'processing' both read as the in-progress 'pending'
+      // state (AiAnalysisStatus has no separate 'processing').
       const statusByUpdate: Record<JobUpdateStatus, AiAnalysisStatus> = {
         completed: 'completed',
         unsupported: 'unsupported',
         failed: 'failed',
         deadlettered: 'failed',
+        pending: 'pending',
+        processing: 'pending',
       }
       detail.aiAnalysisStatus = statusByUpdate[status]
+
+      // Non-terminal pings only move the indicator; the timeline + metadata are filled
+      // in once the job reaches a terminal outcome below.
+      if (!isTerminalJobStatus(status)) return
 
       // completed/unsupported carry the enriched metadata; patch what's present.
       if (metadata) {

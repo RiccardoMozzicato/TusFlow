@@ -52,7 +52,9 @@ class KafkaListenerTest {
         chatClient = mockk()
         pdfAnalysisChatClient = mockk()
         imageChatClient = mockk()
-        jobStatusService = mockk()
+        // Relaxed: the processor now also emits non-terminal PENDING/PROCESSING pings
+        // (notifyJobPending / notifyJobProcessing) that individual tests don't stub.
+        jobStatusService = mockk(relaxed = true)
         retryJobService = mockk(relaxed = true)
         promptTemplate = mockk()
         kafkaTemplate = mockk(relaxed = true)
@@ -436,6 +438,54 @@ class KafkaListenerTest {
         assertNull(result)
         verify { jobStatusService.markJobAsUnsupported(testJobId, job, any()) }
         verify(exactly = 0) { kafkaListener.downloadFile(any(), any()) }
+        // An unsupported file short-circuits before analysis, so it never emits a PROCESSING ping.
+        verify(exactly = 0) { jobStatusService.notifyJobProcessing(any()) }
+    }
+
+    @Test
+    fun `onMessage emits a PENDING ping for a queued job before processing`() {
+        val kafkaMessage = """
+            {
+                "event_type": "FILE_INSERTED",
+                "id": "$testJobId",
+                "payload": "{\"id\":\"$testJobId\",\"fileId\":\"$testFileId\",\"version\":1,\"filename\":\"test.txt\",\"contentType\":\"text/plain\",\"ownerUserId\":\"$testOwnerUserId\",\"fileVersionId\":1}"
+            }
+        """.trimIndent()
+
+        every { jobRepository.findById(testJobId) } returns Optional.empty()
+        every { jobRepository.save(any<Job>()) } returns mockk()
+        every { kafkaListener.processJob(any(), any()) } returns null
+
+        kafkaListener.onMessage(kafkaMessage, 0L)
+
+        // The owner is pinged PENDING so the live indicator turns "in progress" before analysis runs.
+        verify { jobStatusService.notifyJobPending(match { it.id == testJobId }) }
+    }
+
+    @Test
+    fun `processJob emits a PROCESSING ping once analysis starts for a supported type`() {
+        val job = JobDTO(
+            id = testJobId,
+            fileId = testFileId,
+            version = 1L,
+            filename = "n.txt",
+            contentType = "text/plain",
+            ownerUserId = testOwnerUserId,
+            fileVersionId = 1L,
+        )
+        // Fresh job; make the download fail fast so the test stays focused on the PROCESSING ping
+        // (which fires right after the content-type gate, before the download).
+        every { jobRepository.findById(testJobId) } returns Optional.of(
+            Job(
+                jobid = testJobId, fileid = testFileId, version = 1, type = "FILE_ANALYSIS",
+                attempts = 0u, payload = emptyMap(), status = jobStatus.PENDING,
+            ),
+        )
+        every { kafkaListener.downloadFile(testFileId, 1L) } throws RuntimeException("download boom")
+
+        assertFailsWith<RuntimeException> { kafkaListener.processJob(job, testJobId) }
+
+        verify { jobStatusService.notifyJobProcessing(match { it.id == testJobId }) }
     }
 
     @Test
