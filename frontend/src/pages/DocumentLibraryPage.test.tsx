@@ -59,7 +59,7 @@ function makePage(content: FileDTO[], overrides: Partial<PageResponse<FileDTO>> 
   } satisfies PageResponse<FileDTO>
 }
 
-function renderPage() {
+function renderPage(initialEntry = '/documents') {
   const store = configureStore({
     reducer: {
       auth: authReducer,
@@ -69,7 +69,7 @@ function renderPage() {
   })
   render(
     <Provider store={store}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <DocumentLibraryPage />
       </MemoryRouter>
     </Provider>,
@@ -133,6 +133,22 @@ describe('DocumentLibraryPage', () => {
     )
   })
 
+  it('initializes filters and page from the URL query string', async () => {
+    mockedGetFiles.mockResolvedValue(
+      makePage([fileDto], { totalElements: 30, totalPages: 3, number: 1, first: false, last: false }),
+    )
+    renderPage('/documents?page=2&type=pdf&search=budget')
+
+    await waitFor(() =>
+      expect(mockedGetFiles).toHaveBeenLastCalledWith({
+        ...defaultParams(1),
+        contentType: 'application/pdf',
+        search: 'budget',
+      }),
+    )
+    expect(screen.getByPlaceholderText(/search within library/i)).toHaveValue('budget')
+  })
+
   it('re-fetches page 0 with a contentType filter when a File Type is picked', async () => {
     mockedGetFiles.mockResolvedValue(makePage([fileDto], { totalElements: 1 }))
     renderPage()
@@ -146,6 +162,32 @@ describe('DocumentLibraryPage', () => {
       expect(mockedGetFiles).toHaveBeenLastCalledWith({
         ...defaultParams(0),
         contentType: 'application/pdf',
+      }),
+    )
+  })
+
+  it('drops the exclusion list when switching from "Other" back to a known type', async () => {
+    mockedGetFiles.mockResolvedValue(makePage([fileDto], { totalElements: 1 }))
+    renderPage()
+
+    await screen.findByText('Annual Report.pdf')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Other' }))
+    await waitFor(() =>
+      expect(mockedGetFiles).toHaveBeenLastCalledWith({
+        ...defaultParams(0),
+        excludeContentTypes: ['application/pdf', 'word', 'text/plain'],
+      }),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'PDF' }))
+    // The request must carry contentType alone — not contentType *and* the stale
+    // exclusion list, which would ask for PDFs while excluding them (empty result).
+    await waitFor(() =>
+      expect(mockedGetFiles).toHaveBeenLastCalledWith({
+        ...defaultParams(0),
+        contentType: 'application/pdf',
+        excludeContentTypes: undefined,
       }),
     )
   })

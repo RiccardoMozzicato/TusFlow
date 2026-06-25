@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import { useDebouncedValue } from '@/lib/useDebouncedValue'
 import FilterPanel from '@/features/documents/components/FilterPanel'
@@ -11,15 +12,18 @@ import NewVersionDialog from '@/features/documents/components/NewVersionDialog'
 import FileInfoDialog from '@/features/documents/components/FileInfoDialog'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import {
+  type DocumentFilters,
   loadDocuments,
-  resetFilters,
-  selectDocumentFilters,
   selectDocuments,
   selectDocumentsError,
   selectDocumentsPageInfo,
   selectDocumentsStatus,
   setFilters,
 } from '@/features/documents/documentsSlice'
+import {
+  buildDocumentParams,
+  parseDocumentParams,
+} from '@/features/documents/filterParams'
 import {
   deleteDocument,
   selectDeleteFileError,
@@ -38,19 +42,23 @@ const SEARCH_DEBOUNCE_MS = 350
 
 // Document Library: filter rail + a canvas with a toolbar and a card grid.
 // Files come from the gateway-routed file service (getFiles), one page at a time.
-// Both the filter rail and the toolbar search drive the server-side query: the
-// search box is debounced into the `search` filter, which re-runs the paginated
-// request from page 0.
+//
+// The URL's query string is the single source of truth for the selection: the
+// filter rail, toolbar search, and pager all write the next selection into the
+// URL, and a single effect reads it back to drive the paginated request. This
+// keeps the current view bookmarkable, shareable, and Back/Forward-aware. Any
+// filter change resets to the first page; the debounced search box is committed
+// the same way.
 export default function DocumentLibraryPage() {
   // Row layout is the default; the card grid is opt-in via the toolbar toggle.
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [dialog, setDialog] = useState<ActiveDialog>(null)
   const dispatch = useAppDispatch()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const documents = useAppSelector(selectDocuments)
   const status = useAppSelector(selectDocumentsStatus)
   const error = useAppSelector(selectDocumentsError)
-  const filters = useAppSelector(selectDocumentFilters)
   const { page, totalElements, totalPages, isFirst, isLast } = useAppSelector(
     selectDocumentsPageInfo,
   )
@@ -58,33 +66,57 @@ export default function DocumentLibraryPage() {
   const isDeleting = useAppSelector(selectIsDeletingFile)
   const deleteError = useAppSelector(selectDeleteFileError)
 
-  const { contentType, excludeContentTypes, dateFrom, dateTo, sort, search, sharingScope, ownership } =
-    filters
-  // Stable primitive keys so the effect re-runs when a set/array filter changes.
-  const scopesKey = sharingScope.join(',')
-  const excludeKey = excludeContentTypes?.join(',') ?? ''
+  // The canonical selection, parsed from the URL. Memoized on the raw query
+  // string so it keeps a stable identity until the URL actually changes.
+  const paramsKey = searchParams.toString()
+  const { filters, page: requestedPage } = useMemo(
+    () => parseDocumentParams(new URLSearchParams(paramsKey)),
+    [paramsKey],
+  )
+  const { sort, search } = filters
+
+  // Writes a new selection into the URL. Filter changes always return to the
+  // first page; only the pager carries a page forward.
+  function applyFilters(next: DocumentFilters) {
+    setSearchParams(buildDocumentParams(next, 0))
+  }
+  function goToPage(nextPage: number) {
+    setSearchParams(buildDocumentParams(filters, nextPage))
+  }
 
   // The search box updates this local state immediately (responsive typing); the
-  // debounced value is pushed into the `search` filter, which drives the request.
+  // debounced value is committed into the URL's `search` param.
   const [searchInput, setSearchInput] = useState(search ?? '')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
 
-  // Commit the debounced query into the filters as a normalized value (trimmed,
-  // blank → undefined). Guarded so an unchanged query doesn't trigger a refetch.
+  // Keep the box in sync when the query changes from outside (Back/Forward, or
+  // Clear All). Typing flows the other way and settles on the same value.
+  useEffect(() => {
+    setSearchInput(search ?? '')
+  }, [search])
+
+  // Commit the debounced query into the URL as a normalized value (trimmed,
+  // blank → undefined). Guarded so an unchanged query doesn't push a new entry.
   useEffect(() => {
     const next = debouncedSearch.trim() || undefined
-    if (next !== search) dispatch(setFilters({ search: next }))
-  }, [dispatch, debouncedSearch, search])
+    if (next !== search) applyFilters({ ...filters, search: next })
+    // applyFilters/filters are derived from the URL; depending on the committed
+    // value keeps this from re-firing on unrelated renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, search])
 
-  // Reload from page 0 on mount and whenever a server-side filter changes.
-  // Pagination Prev/Next dispatch directly below (they don't touch filters).
+  // Mirror the URL selection into the slice, then load the requested page. The
+  // thunk reads the filters back out of the store, so they must be set first.
+  // Re-runs only when the query string changes.
   useEffect(() => {
-    void dispatch(loadDocuments({ page: 0 }))
-  }, [dispatch, contentType, excludeKey, dateFrom, dateTo, sort, search, scopesKey, ownership])
+    dispatch(setFilters(filters))
+    void dispatch(loadDocuments({ page: requestedPage }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, paramsKey])
 
   // Reloads the current page after a mutating action (delete / new version).
   function refresh() {
-    void dispatch(loadDocuments({ page }))
+    void dispatch(loadDocuments({ page: requestedPage }))
   }
 
   function handleConfirmDelete() {
@@ -105,11 +137,12 @@ export default function DocumentLibraryPage() {
   // Search is server-side, so the count is always the server's total result count.
   const count = totalElements
 
-  // Clears every filter including the search box (the box's local state lives
-  // here, so it must be reset alongside the Redux filters).
+  // Clears every filter by emptying the query string. The box's local state is
+  // reset here too, so it clears immediately even if a typed-but-not-yet-debounced
+  // query hasn't reached the URL.
   function handleClearFilters() {
     setSearchInput('')
-    dispatch(resetFilters())
+    setSearchParams(new URLSearchParams())
   }
 
   return (
@@ -126,7 +159,7 @@ export default function DocumentLibraryPage() {
       <div className="flex flex-col gap-6 lg:flex-row">
         <FilterPanel
           filters={filters}
-          onChange={(partial) => dispatch(setFilters(partial))}
+          onChange={(partial) => applyFilters({ ...filters, ...partial })}
           onClear={handleClearFilters}
         />
 
@@ -173,7 +206,7 @@ export default function DocumentLibraryPage() {
                     onToggleFavorite={(doc) => toggleFavorite(doc.id, doc.versionNumber)}
                     onAction={(doc, kind) => setDialog({ kind, doc })}
                     sort={sort}
-                    onSortChange={(next) => dispatch(setFilters({ sort: next }))}
+                    onSortChange={(next) => applyFilters({ ...filters, sort: next })}
                   />
                 ) : (
                   <DocumentGrid
@@ -188,8 +221,8 @@ export default function DocumentLibraryPage() {
                   totalPages={totalPages}
                   isFirst={isFirst}
                   isLast={isLast}
-                  onPrev={() => void dispatch(loadDocuments({ page: page - 1 }))}
-                  onNext={() => void dispatch(loadDocuments({ page: page + 1 }))}
+                  onPrev={() => goToPage(page - 1)}
+                  onNext={() => goToPage(page + 1)}
                 />
               </>
             )}

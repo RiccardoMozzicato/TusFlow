@@ -50,7 +50,7 @@ export const DEFAULT_PAGE_SIZE = 12
 
 // The library shows everything the user can see: their own files plus those
 // shared at department and organization scope.
-const ALL_SHARING_SCOPES: SharingScope[] = [
+export const ALL_SHARING_SCOPES: SharingScope[] = [
   SharingScope.PERSONAL,
   SharingScope.DEPARTMENT,
   SharingScope.ORGANIZATION,
@@ -79,7 +79,7 @@ export interface DocumentFilters {
   ownership?: Ownership
 }
 
-const DEFAULT_FILTERS: DocumentFilters = {
+export const DEFAULT_FILTERS: DocumentFilters = {
   sort: 'createdAt,desc',
   sharingScope: ALL_SHARING_SCOPES,
 }
