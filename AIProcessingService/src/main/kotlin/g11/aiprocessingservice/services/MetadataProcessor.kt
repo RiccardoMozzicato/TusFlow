@@ -99,10 +99,10 @@ class MetadataProcessor(
     )
     override fun onMessage(
         message: String,
-        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long,
+        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long?,
     ) {
         log.debug("Received message from kafka \n {}" ,message)
-        pipelineMetrics.recordEventLag("file-outbox", receivedTimestamp)
+        receivedTimestamp?.let { pipelineMetrics.recordEventLag("file-outbox", it) }
 
         // Resume the upstream trace carried in the Debezium outbox payload body.
         // The RecordInterceptor approach fires too late (after Spring Kafka creates the

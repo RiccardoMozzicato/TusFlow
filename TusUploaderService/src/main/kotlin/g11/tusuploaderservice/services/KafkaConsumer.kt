@@ -27,10 +27,10 @@ class KafkaConsumer(
     )
     override fun consumeFileUploadCompleted(
         message: String,
-        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long,
+        @Header(name = KafkaHeaders.RECEIVED_TIMESTAMP, required = false) receivedTimestamp: Long?,
     ) {
         log.debug("Received Kafka message: {}", message)
-        metrics.recordEventLag("job-outbox", receivedTimestamp)
+        receivedTimestamp?.let { metrics.recordEventLag("job-outbox", it) }
 
         // Resume the upstream trace carried in the Debezium outbox payload body.
         val traceparent = extractTraceparentFromPayload(message)
