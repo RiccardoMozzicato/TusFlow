@@ -24,10 +24,24 @@ const SAMPLE_USER: UserDTO = {
 }
 
 describe('getUsers', () => {
-  it('requests a page of users', async () => {
+  it('requests a page of users with explicit page and size', async () => {
     mockedGet.mockResolvedValue({ data: { content: [] } })
-    await getUsers(2, 25)
+    await getUsers({ page: 2, size: 25 })
     expect(mockedGet).toHaveBeenCalledWith(API.users, { params: { page: 2, size: 25 } })
+  })
+
+  it('includes search and sort only when provided', async () => {
+    mockedGet.mockResolvedValue({ data: { content: [] } })
+    await getUsers({ page: 0, size: 10, search: 'rossi', sort: 'email,asc' })
+    expect(mockedGet).toHaveBeenCalledWith(API.users, {
+      params: { page: 0, size: 10, search: 'rossi', sort: 'email,asc' },
+    })
+  })
+
+  it('omits blank search and sort', async () => {
+    mockedGet.mockResolvedValue({ data: { content: [] } })
+    await getUsers({ page: 0, size: 10, search: '', sort: '' })
+    expect(mockedGet).toHaveBeenCalledWith(API.users, { params: { page: 0, size: 10 } })
   })
 })
 

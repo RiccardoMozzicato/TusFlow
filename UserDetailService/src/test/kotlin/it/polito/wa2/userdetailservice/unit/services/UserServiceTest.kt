@@ -33,6 +33,9 @@ import org.keycloak.representations.idm.UserRepresentation
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.Specification
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContext
 import org.springframework.security.core.context.SecurityContextHolder
@@ -82,14 +85,9 @@ class UserServiceTest {
         userService = UserService(userRepo, "file-management", keycloak)
     }
 
-    @Test
-    fun `getUsers() - successful`() {
-        // arrange
-        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
-        val filtersDTO: FiltersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
-        val pageable = PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize)
-        val page: Page<User> = PageImpl(users, pageable, users.size.toLong())
-
+    // Wires up a SecurityContext for the org-scoped (non-service-account) path,
+    // returning the given authenticated user from the repo.
+    private fun mockOrgScopedAuth(authenticatedUserId: UUID, authenticatedUser: User) {
         val jwt = mockk<Jwt>()
         val authentication = mockk<Authentication>()
         val securityContext = mockk<SecurityContext>()
@@ -98,9 +96,20 @@ class UserServiceTest {
         every { authentication.authorities } returns emptyList()
         every { jwt.subject } returns authenticatedUserId.toString()
         SecurityContextHolder.setContext(securityContext)
+        every { userRepo.findById(authenticatedUserId) } returns Optional.of(authenticatedUser)
+    }
 
-        every { userRepo.findById(authenticatedUserId) } returns Optional.of(users[0])
-        every { userRepo.findByOrganization("CloudFlare", pageable) } returns page
+    @Test
+    fun `getUsers() - successful, org-scoped with default sort`() {
+        // arrange
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+
+        val pageableSlot = slot<Pageable>()
+        every { userRepo.findAll(any<Specification<User>>(), capture(pageableSlot)) } answers {
+            PageImpl(users, pageableSlot.captured, users.size.toLong())
+        }
 
         // act
         val result = userService.getUsers(filtersDTO)
@@ -109,9 +118,104 @@ class UserServiceTest {
         assertEquals(2, result.totalElements)
         TestCase.assertTrue(result.content.all { it is UserDTO })
         assertEquals("John Doe", result.content[0].fullName)
-        assertEquals("Mary Smith", result.content[1].fullName)
+        // default sort is fullName ascending
+        assertEquals(Sort.by(Sort.Direction.ASC, "fullName"), pageableSlot.captured.sort)
         verify { userRepo.findById(authenticatedUserId) }
-        verify { userRepo.findByOrganization("CloudFlare", pageable) }
+        verify { userRepo.findAll(any<Specification<User>>(), any<Pageable>()) }
+        verify(exactly = 0) { userRepo.findByOrganization(any(), any()) }
+    }
+
+    @Test
+    fun `getUsers() - service account is not org-scoped`() {
+        // arrange: a service-account authority skips the org lookup entirely
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
+        val authentication = mockk<Authentication>()
+        val securityContext = mockk<SecurityContext>()
+        every { securityContext.authentication } returns authentication
+        every { authentication.authorities } returns listOf(
+            org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_serviceaccount-fileservice"),
+        )
+        SecurityContextHolder.setContext(securityContext)
+
+        every { userRepo.findAll(any<Specification<User>>(), any<Pageable>()) } returns
+            PageImpl(users, PageRequest.of(0, 10), users.size.toLong())
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        assertEquals(2, result.totalElements)
+        verify(exactly = 0) { userRepo.findById(any()) }
+        verify { userRepo.findAll(any<Specification<User>>(), any<Pageable>()) }
+    }
+
+    @Test
+    fun `getUsers() - honors a valid sort field and direction`() {
+        // arrange
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val filtersDTO = FiltersDTO(
+            pageNumber = 0,
+            pageSize = 10,
+            sortField = "email",
+            sortDirection = Sort.Direction.DESC,
+        )
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+
+        val pageableSlot = slot<Pageable>()
+        every { userRepo.findAll(any<Specification<User>>(), capture(pageableSlot)) } answers {
+            PageImpl(users, pageableSlot.captured, users.size.toLong())
+        }
+
+        // act
+        userService.getUsers(filtersDTO)
+
+        // assert
+        assertEquals(Sort.by(Sort.Direction.DESC, "email"), pageableSlot.captured.sort)
+    }
+
+    @Test
+    fun `getUsers() - falls back to fullName for an unknown sort field`() {
+        // arrange: a bogus field must not reach JPA (which would 500)
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val filtersDTO = FiltersDTO(
+            pageNumber = 0,
+            pageSize = 10,
+            sortField = "bogus; DROP TABLE users",
+            sortDirection = Sort.Direction.ASC,
+        )
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+
+        val pageableSlot = slot<Pageable>()
+        every { userRepo.findAll(any<Specification<User>>(), capture(pageableSlot)) } answers {
+            PageImpl(users, pageableSlot.captured, users.size.toLong())
+        }
+
+        // act
+        userService.getUsers(filtersDTO)
+
+        // assert
+        assertEquals(Sort.by(Sort.Direction.ASC, "fullName"), pageableSlot.captured.sort)
+    }
+
+    @Test
+    fun `getUsers() - passes the search term through to the specification`() {
+        // arrange — the spec is opaque here, so we assert the query still runs with
+        // a non-null spec; spec matching behavior is covered by UserSpecificationsTest.
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10, search = "mary")
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+
+        val specSlot = slot<Specification<User>>()
+        every { userRepo.findAll(capture(specSlot), any<Pageable>()) } returns
+            PageImpl(listOf(users[1]), PageRequest.of(0, 10), 1)
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        assertEquals(1, result.totalElements)
+        assertEquals("Mary Smith", result.content[0].fullName)
+        TestCase.assertTrue(specSlot.isCaptured)
     }
 
     @Test

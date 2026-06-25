@@ -1,21 +1,15 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, fireEvent, within, act } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SharedWithMePage from './SharedWithMePage'
 import type { SharedDocument, SharePermission } from '@/features/shared/types'
-import type { SharedFilters } from '@/features/shared/useSharedFiles'
 
 const downloadMock = vi.fn()
-const setFiltersMock = vi.fn()
-const resetFiltersMock = vi.fn()
-
-const DEFAULT_FILTERS: SharedFilters = { sort: 'createdAt,desc', permissions: ['edit', 'view'] }
 
 let sharedState: {
   documents: SharedDocument[]
   status: 'loading' | 'succeeded' | 'failed'
   error: string | null
-  filters: SharedFilters
   pageInfo: {
     page: number
     totalElements: number
@@ -25,15 +19,18 @@ let sharedState: {
   }
 }
 
-vi.mock('@/features/shared/useSharedFiles', () => ({
-  useSharedFiles: () => ({
-    ...sharedState,
-    setFilters: setFiltersMock,
-    resetFilters: resetFiltersMock,
-    goToPage: vi.fn(),
-    reload: vi.fn(),
-  }),
-}))
+// The page owns filters/page via the URL and passes them to the hook, which only
+// fetches. We assert the URL the page writes, so the hook is stubbed to ignore
+// its inputs and return the canned state.
+vi.mock('@/features/shared/useSharedFiles', async () => {
+  const actual = await vi.importActual<typeof import('@/features/shared/useSharedFiles')>(
+    '@/features/shared/useSharedFiles',
+  )
+  return {
+    ...actual,
+    useSharedFiles: () => ({ ...sharedState, reload: vi.fn() }),
+  }
+})
 
 vi.mock('@/features/shared/useSharedDownload', () => ({
   useSharedDownload: () => ({ downloadingId: null, error: null, download: downloadMock }),
@@ -63,10 +60,19 @@ const DOCS = [
   doc('3', 'Roadmap', 'edit'),
 ]
 
-function renderPage() {
+// Surfaces the router's current query string so tests can assert what the page
+// writes into the URL (its single source of truth).
+let currentSearch = ''
+function LocationProbe() {
+  currentSearch = useLocation().search
+  return null
+}
+
+function renderPage(initialEntry = '/') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <SharedWithMePage />
+      <LocationProbe />
     </MemoryRouter>,
   )
 }
@@ -74,15 +80,17 @@ function renderPage() {
 describe('SharedWithMePage', () => {
   beforeEach(() => {
     downloadMock.mockClear()
-    setFiltersMock.mockClear()
-    resetFiltersMock.mockClear()
+    currentSearch = ''
     sharedState = {
       documents: DOCS,
       status: 'succeeded',
       error: null,
-      filters: DEFAULT_FILTERS,
       pageInfo: { page: 0, totalElements: 3, totalPages: 1, isFirst: true, isLast: true },
     }
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders all shared documents by default', () => {
@@ -93,28 +101,37 @@ describe('SharedWithMePage', () => {
     expect(screen.getByText('Showing 3 of 3 shared documents')).toBeInTheDocument()
   })
 
-  it('narrows to editable shares when only Can edit is left checked', () => {
+  it('writes perm=edit to the URL when only Can edit is left checked', () => {
     renderPage()
     // Both boxes start checked (= any). Unchecking "Can view" leaves just edit.
     fireEvent.click(screen.getByRole('checkbox', { name: 'Can view' }))
-    expect(setFiltersMock).toHaveBeenCalledWith({ permissions: ['edit'] })
+    expect(currentSearch).toBe('?perm=edit')
   })
 
-  it('allows unchecking both permission boxes (empty set)', () => {
-    sharedState.filters = { sort: 'createdAt,desc', permissions: ['edit'] }
-    renderPage()
-    // Only "Can edit" is checked; unchecking it must leave an empty set, not snap back.
+  it('writes an empty perm (show nothing) when both boxes are unchecked', () => {
+    // Start with only "Can edit" checked via the URL.
+    renderPage('/?perm=edit')
     fireEvent.click(screen.getByRole('checkbox', { name: 'Can edit' }))
-    expect(setFiltersMock).toHaveBeenCalledWith({ permissions: [] })
+    expect(currentSearch).toBe('?perm=')
   })
 
-  it('filters by the search box', () => {
+  it('commits the debounced search query into the URL', () => {
+    vi.useFakeTimers()
     renderPage()
     fireEvent.change(screen.getByPlaceholderText('Search shared documents…'), {
       target: { value: 'road' },
     })
-    expect(screen.getByText('Roadmap')).toBeInTheDocument()
-    expect(screen.queryByText('Q4 Projections')).not.toBeInTheDocument()
+    // The query is only committed after the debounce window elapses.
+    expect(currentSearch).toBe('')
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
+    expect(currentSearch).toBe('?search=road')
+  })
+
+  it('seeds the search box from the URL', () => {
+    renderPage('/?search=strategy')
+    expect(screen.getByPlaceholderText('Search shared documents…')).toHaveValue('strategy')
   })
 
   it('shows an empty state when nothing is shared', () => {
@@ -122,13 +139,21 @@ describe('SharedWithMePage', () => {
       documents: [],
       status: 'succeeded',
       error: null,
-      filters: DEFAULT_FILTERS,
       pageInfo: { page: 0, totalElements: 0, totalPages: 0, isFirst: true, isLast: true },
     }
     renderPage()
-    expect(
-      screen.getByText('No documents have been shared with you yet.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('No documents have been shared with you yet.')).toBeInTheDocument()
+  })
+
+  it('shows a search-specific empty state when a query matches nothing', () => {
+    sharedState = {
+      documents: [],
+      status: 'succeeded',
+      error: null,
+      pageInfo: { page: 0, totalElements: 0, totalPages: 0, isFirst: true, isLast: true },
+    }
+    renderPage('/?search=nope')
+    expect(screen.getByText('No documents match your search.')).toBeInTheDocument()
   })
 
   it('triggers a download from the row action', () => {

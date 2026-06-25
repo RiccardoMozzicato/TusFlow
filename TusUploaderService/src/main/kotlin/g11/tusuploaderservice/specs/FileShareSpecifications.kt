@@ -31,6 +31,8 @@ object FileShareSpecifications {
      * @param dateTo      ISO-8601 upper bound (inclusive) on the file's createdAt.
      * @param excludeContentTypes keep only files whose current version's contentType matches
      *        none of these tokens (AND of NOT LIKE); used for the "Other" file-type bucket.
+     * @param search case-insensitive "contains" match on the shared file's current name
+     *        (lastFilename); LIKE operators in the term are escaped. Null/blank means no filter.
      */
     fun build(
         recipientId: UUID,
@@ -40,6 +42,7 @@ object FileShareSpecifications {
         dateFrom: String? = null,
         dateTo: String? = null,
         excludeContentTypes: Collection<String>? = null,
+        search: String? = null,
     ): Specification<FileShare> =
         Specification { root, query, cb ->
             val predicates = mutableListOf<Predicate>()
@@ -84,6 +87,24 @@ object FileShareSpecifications {
             if (dateTo != null) {
                 val toDate = Date.from(Instant.parse(dateTo))
                 predicates.add(cb.lessThanOrEqualTo(fileJoin.get<Date>("createdAt"), toDate))
+            }
+
+            // Free-text search on the shared file's current name (lastFilename):
+            // case-insensitive "contains", matching the Document Library. LIKE
+            // operators (%, _, \) in the term are escaped so user input can't
+            // alter the pattern.
+            if (!search.isNullOrBlank()) {
+                val escaped = search.trim()
+                    .replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_")
+                predicates.add(
+                    cb.like(
+                        cb.lower(fileJoin.get<String>("lastFilename")),
+                        "%${escaped.lowercase()}%",
+                        '\\',
+                    ),
+                )
             }
 
             cb.and(*predicates.toTypedArray())

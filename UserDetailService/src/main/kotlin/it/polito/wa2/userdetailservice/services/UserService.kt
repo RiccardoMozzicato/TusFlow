@@ -11,6 +11,7 @@ import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import it.polito.wa2.userdetailservice.repositories.UserRepository
+import it.polito.wa2.userdetailservice.specs.UserSpecifications
 import jakarta.transaction.Transactional
 import org.keycloak.admin.client.CreatedResponseUtil
 import org.keycloak.admin.client.Keycloak
@@ -20,6 +21,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.jwt.Jwt
@@ -37,6 +39,15 @@ class UserService(
 
     val log = LoggerFactory.getLogger(UserService::class.java)
 
+    companion object {
+        private const val DEFAULT_SORT_FIELD = "fullName"
+        // Direct User columns that may be sorted on; guards against arbitrary
+        // property names reaching the JPA sort and throwing.
+        private val SORTABLE_FIELDS = setOf(
+            "fullName", "email", "department", "role", "storageUsed", "createdAt",
+        )
+    }
+
     private fun getAuthenticatedUserId(): UUID {
         val authentication = SecurityContextHolder.getContext().authentication
         val jwt = authentication.principal as Jwt
@@ -46,27 +57,36 @@ class UserService(
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_admin','ROLE_manager','ROLE_staff', 'ROLE_serviceaccount-fileservice')")
     override fun getUsers(filtersDTO: FiltersDTO): Page<UserDTO> {
-        val pageable = PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize)
+        // Only direct, sortable columns are accepted; anything else (or null) falls
+        // back to fullName so a bad `sort` param can't 500 with an invalid property.
+        val sortField = filtersDTO.sortField?.takeIf { it in SORTABLE_FIELDS } ?: DEFAULT_SORT_FIELD
+        val pageable = PageRequest.of(
+            filtersDTO.pageNumber,
+            filtersDTO.pageSize,
+            Sort.by(filtersDTO.sortDirection, sortField),
+        )
 
-        // Service accounts have no row in userRepo, so skip the org-scoped lookup
+        // Service accounts have no row in userRepo, so they list every user (no org scope).
         val isServiceAccount = SecurityContextHolder.getContext().authentication.authorities
             .any { it.authority == "ROLE_serviceaccount-fileservice" }
 
-        if (isServiceAccount) {
-            log.debug("returning the list of users")
-            return userRepo.findAll(pageable).map { it.toDTO() }
+        val organization = if (isServiceAccount) {
+            null
+        } else {
+            val authenticatedUserId = getAuthenticatedUserId()
+            val authenticatedUser = userRepo.findById(authenticatedUserId).orElseThrow {
+                log.warn("authenticated user {} not found", authenticatedUserId)
+                UserNotFoundException("The user with id $authenticatedUserId not found")
+            }
+            authenticatedUser.organization
         }
 
-        val authenticatedUserId = getAuthenticatedUserId()
-        val authenticatedUser = userRepo.findById(authenticatedUserId).orElseThrow {
-            log.warn("authenticated user {} not found", authenticatedUserId)
-            UserNotFoundException("The user with id $authenticatedUserId not found")
-        }
-
-        log.debug("returning users page: page={}, size={}", filtersDTO.pageNumber, filtersDTO.pageSize)
-        val users = userRepo.findByOrganization(authenticatedUser.organization, pageable)
-
-        return users.map { it.toDTO() }
+        log.debug(
+            "returning users page: page={}, size={}, search={}, sort={},{}, orgScoped={}",
+            filtersDTO.pageNumber, filtersDTO.pageSize, filtersDTO.search, sortField, filtersDTO.sortDirection, organization != null,
+        )
+        val spec = UserSpecifications.buildUsers(organization, filtersDTO.search)
+        return userRepo.findAll(spec, pageable).map { it.toDTO() }
     }
 
     @Transactional

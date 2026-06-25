@@ -5,7 +5,14 @@ import { formatQuota } from '../userQuota'
 import type { UserDTO } from '../usersApi'
 import RoleBadge from './RoleBadge'
 
-const HEADERS = ['User', 'Department', 'Role', 'Storage']
+// `sortField` marks a column as click-to-sort; it maps to the backend `sort`
+// param's field (a direct User column). Columns without it are static.
+const COLUMNS: { label: string; sortField?: string }[] = [
+  { label: 'User', sortField: 'fullName' },
+  { label: 'Department', sortField: 'department' },
+  { label: 'Role', sortField: 'role' },
+  { label: 'Storage', sortField: 'storageUsed' },
+]
 
 function StorageCell({ user }: { user: UserDTO }) {
   const summary = storageSummary(user.storageUsed ?? 0, user.storageQuota ?? null)
@@ -111,21 +118,76 @@ export default function UsersTable({
   users,
   onEdit,
   onDelete,
+  sort,
+  onSortChange,
 }: {
   users: UserDTO[]
   onEdit: (user: UserDTO) => void
   onDelete: (user: UserDTO) => void
+  /** Current backend sort spec ('field,dir'); drives the column sort indicators. */
+  sort?: string
+  /** Requests a new sort spec (clicking a header); omit to make headers static. */
+  onSortChange?: (sort: string) => void
 }) {
+  // Active sort direction for a sortable column's field, or null when the table
+  // is sorted by something else. Clicking a header toggles asc/desc.
+  function sortDirFor(field: string): 'asc' | 'desc' | null {
+    if (!sort) return null
+    const [activeField, dir] = sort.split(',')
+    if (activeField !== field) return null
+    return dir === 'asc' ? 'asc' : 'desc'
+  }
+  function toggleSort(field: string) {
+    onSortChange?.(sortDirFor(field) === 'asc' ? `${field},desc` : `${field},asc`)
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-left">
         <thead>
           <tr className="border-b border-ds-outline-variant bg-ds-surface-container font-ds-label text-ds-label-md text-ds-on-surface-variant">
-            {HEADERS.map((header) => (
-              <th key={header} className="px-6 py-3 font-medium">
-                {header}
-              </th>
-            ))}
+            {COLUMNS.map((column) => {
+              // Sortable headers are interactive: clicking toggles asc/desc on the
+              // server, with an arrow showing the active direction and a muted hint
+              // icon otherwise so the column reads as clickable.
+              if (column.sortField && onSortChange) {
+                const dir = sortDirFor(column.sortField)
+                const name = column.label.toLowerCase()
+                return (
+                  <th key={column.label} className="px-6 py-3 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(column.sortField!)}
+                      aria-label={dir === 'asc' ? `Sort by ${name}, descending` : `Sort by ${name}, ascending`}
+                      aria-pressed={dir !== null}
+                      className={`group/sort flex items-center gap-1 font-ds-label text-ds-label-md font-medium transition-colors hover:text-ds-primary ${
+                        dir !== null ? 'text-ds-primary' : ''
+                      }`}
+                    >
+                      {column.label}
+                      {dir === null ? (
+                        <Icon
+                          name="unfold_more"
+                          aria-hidden
+                          className="text-[16px] text-ds-secondary transition-colors group-hover/sort:text-ds-primary"
+                        />
+                      ) : (
+                        <Icon
+                          name={dir === 'asc' ? 'arrow_drop_up' : 'arrow_drop_down'}
+                          aria-hidden
+                          className="text-[18px]"
+                        />
+                      )}
+                    </button>
+                  </th>
+                )
+              }
+              return (
+                <th key={column.label} className="px-6 py-3 font-medium">
+                  {column.label}
+                </th>
+              )
+            })}
             <th className="px-6 py-3 text-right font-medium">Actions</th>
           </tr>
         </thead>

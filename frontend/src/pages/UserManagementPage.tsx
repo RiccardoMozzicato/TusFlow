@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '@/components/Icon'
 import { useAppSelector } from '@/app/hooks'
+import { useDebouncedValue } from '@/lib/useDebouncedValue'
 import { selectCurrentUser } from '@/features/auth/authSlice'
 import LibraryPager from '@/features/documents/components/LibraryPager'
 import { useUserManagement } from '@/features/users/useUserManagement'
@@ -16,8 +17,14 @@ type Dialog =
   | { kind: 'delete'; user: UserDTO }
   | null
 
+// How long the search box waits after the last keystroke before querying the
+// server, so a burst of typing results in a single request.
+const SEARCH_DEBOUNCE_MS = 350
+
 // Admin-only console for managing organization users: list, create, change role
 // and storage quota, and remove. Reached via the gated /admin/users route.
+// Search (name/email) and column sort are server-side and reflected in the URL
+// (?search=…&sort=…&page=…), so the view is bookmarkable — mirroring the Library.
 export default function UserManagementPage() {
   const currentUser = useAppSelector(selectCurrentUser)
   const {
@@ -25,6 +32,8 @@ export default function UserManagementPage() {
     status,
     error,
     pageInfo,
+    filters,
+    applyFilters,
     goToPage,
     reload,
     isSaving,
@@ -36,6 +45,26 @@ export default function UserManagementPage() {
   } = useUserManagement()
 
   const [dialog, setDialog] = useState<Dialog>(null)
+
+  // The search box updates this local state immediately (responsive typing); the
+  // debounced value is committed into the URL's `search` filter.
+  const [searchInput, setSearchInput] = useState(filters.search ?? '')
+  const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
+
+  // Keep the box in sync when the query changes from outside (Back/Forward).
+  useEffect(() => {
+    setSearchInput(filters.search ?? '')
+  }, [filters.search])
+
+  // Commit the debounced query into the URL as a normalized value (trimmed,
+  // blank → undefined). Guarded so an unchanged query doesn't push a new entry.
+  useEffect(() => {
+    const next = debouncedSearch.trim() || undefined
+    if (next !== filters.search) applyFilters({ ...filters, search: next })
+    // applyFilters/filters are derived from the URL; depending on the committed
+    // value keeps this from re-firing on unrelated renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, filters.search])
 
   function openDialog(next: Dialog) {
     clearSaveError()
@@ -85,35 +114,54 @@ export default function UserManagementPage() {
       </section>
 
       <div className="overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest shadow-sm">
-        {isInitialLoading ? (
-          <p className="px-6 py-12 text-center font-ds-body text-ds-body-sm text-ds-secondary">
-            Loading users…
-          </p>
-        ) : status === 'failed' ? (
-          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <p className="font-ds-body text-ds-body-sm text-ds-error">
-              {error ?? 'Failed to load users.'}
-            </p>
-            <button
-              type="button"
-              onClick={reload}
-              className="inline-flex items-center rounded-ds border border-ds-outline-variant bg-ds-surface-container px-3 py-1.5 font-ds-label text-ds-label-sm text-ds-on-surface transition-colors hover:bg-ds-surface-container-high"
-            >
-              Retry
-            </button>
-          </div>
-        ) : users.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-            <Icon name="group_off" filled={false} className="text-[40px] text-ds-secondary" />
-            <p className="font-ds-body text-ds-body-sm text-ds-secondary">No users found.</p>
-          </div>
-        ) : (
-          <UsersTable
-            users={users}
-            onEdit={(user) => openDialog({ kind: 'edit', user })}
-            onDelete={(user) => openDialog({ kind: 'delete', user })}
+        <div className="flex items-center gap-2 border-b border-ds-outline-variant bg-ds-surface-bright px-6 py-3">
+          <Icon name="search" className="text-[20px] text-ds-on-surface-variant" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by name or email…"
+            className="w-full bg-transparent font-ds-body text-ds-body-sm text-ds-on-surface outline-none placeholder:text-ds-secondary"
           />
-        )}
+        </div>
+
+        {/* min-height keeps the card a consistent size whether it holds one row
+            or a full page, so it never collapses to a thin strip. */}
+        <div className="min-h-[28rem]">
+          {isInitialLoading ? (
+            <p className="px-6 py-12 text-center font-ds-body text-ds-body-sm text-ds-secondary">
+              Loading users…
+            </p>
+          ) : status === 'failed' ? (
+            <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+              <p className="font-ds-body text-ds-body-sm text-ds-error">
+                {error ?? 'Failed to load users.'}
+              </p>
+              <button
+                type="button"
+                onClick={reload}
+                className="inline-flex items-center rounded-ds border border-ds-outline-variant bg-ds-surface-container px-3 py-1.5 font-ds-label text-ds-label-sm text-ds-on-surface transition-colors hover:bg-ds-surface-container-high"
+              >
+                Retry
+              </button>
+            </div>
+          ) : users.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+              <Icon name="group_off" filled={false} className="text-[40px] text-ds-secondary" />
+              <p className="font-ds-body text-ds-body-sm text-ds-secondary">
+                {filters.search ? 'No users match your search.' : 'No users found.'}
+              </p>
+            </div>
+          ) : (
+            <UsersTable
+              users={users}
+              onEdit={(user) => openDialog({ kind: 'edit', user })}
+              onDelete={(user) => openDialog({ kind: 'delete', user })}
+              sort={filters.sort}
+              onSortChange={(next) => applyFilters({ ...filters, sort: next })}
+            />
+          )}
+        </div>
 
         <div className="flex items-center justify-between border-t border-ds-outline-variant bg-ds-surface-container-low px-6 py-3">
           <p className="font-ds-label text-ds-label-sm text-ds-secondary">

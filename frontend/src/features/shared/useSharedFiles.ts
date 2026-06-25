@@ -28,9 +28,11 @@ export interface SharedFilters {
   permissions: SharePermission[]
   /** Selected owner's user id; undefined means any owner. */
   ownerId?: string
+  /** Free-text query matched case-insensitively against the file name (substring). */
+  search?: string
 }
 
-const DEFAULT_FILTERS: SharedFilters = { sort: SORT_NEWEST, permissions: ['edit', 'view'] }
+export const DEFAULT_FILTERS: SharedFilters = { sort: SORT_NEWEST, permissions: ['edit', 'view'] }
 
 // The view's coarse permission bucket maps onto the backend permission level.
 const PERMISSION_TO_LEVEL: Record<SharePermission, PermissionLevel> = {
@@ -51,11 +53,7 @@ export interface UseSharedFiles {
   status: Status
   error: string | null
   pageInfo: SharedPageInfo
-  filters: SharedFilters
-  /** Merges a partial filter change and resets to page 0. */
-  setFilters: (partial: Partial<SharedFilters>) => void
-  resetFilters: () => void
-  goToPage: (page: number) => void
+  /** Re-runs the fetch for the same filters+page (Retry). */
   reload: () => void
 }
 
@@ -67,19 +65,20 @@ const EMPTY_PAGE_INFO: SharedPageInfo = {
   isLast: true,
 }
 
-// Loads files shared with the current user, one server page at a time, honoring
-// the active server-side filters. Any filter change re-queries from page 0.
-export function useSharedFiles(): UseSharedFiles {
-  const [page, setPage] = useState(0)
+// Loads files shared with the current user for the given filters and page, one
+// server page at a time. Filters and page are owned by the caller (the page reads
+// them from the URL), so this hook only fetches and exposes the result; any
+// change to the inputs re-queries.
+export function useSharedFiles(filters: SharedFilters, page: number): UseSharedFiles {
   // Bumped to re-run the fetch effect for the same page+filters (Retry).
   const [reloadToken, setReloadToken] = useState(0)
-  const [filters, setFiltersState] = useState<SharedFilters>(DEFAULT_FILTERS)
   const [documents, setDocuments] = useState<SharedDocument[]>([])
   const [pageInfo, setPageInfo] = useState<SharedPageInfo>(EMPTY_PAGE_INFO)
   const [status, setStatus] = useState<Status>('loading')
   const [error, setError] = useState<string | null>(null)
 
-  const { contentType, excludeContentTypes, dateFrom, dateTo, sort, permissions, ownerId } = filters
+  const { contentType, excludeContentTypes, dateFrom, dateTo, sort, permissions, ownerId, search } =
+    filters
   // Stable key for the exclusion list so the fetch effect doesn't re-run on every
   // render (arrays compare by reference); it changes only when the tokens change.
   const excludeKey = excludeContentTypes?.join(',') ?? ''
@@ -116,6 +115,7 @@ export function useSharedFiles(): UseSharedFiles {
       sort,
       permission: apiPermission,
       ownerId,
+      search,
     })
       .then((response) => {
         if (!isActive) return
@@ -138,33 +138,21 @@ export function useSharedFiles(): UseSharedFiles {
     return () => {
       isActive = false
     }
-  }, [page, reloadToken, contentType, excludeKey, dateFrom, dateTo, sort, showNothing, apiPermission, ownerId])
-
-  const setFilters = useCallback((partial: Partial<SharedFilters>) => {
-    setFiltersState((current) => ({ ...current, ...partial }))
-    setPage(0)
-  }, [])
-
-  const resetFilters = useCallback(() => {
-    setFiltersState(DEFAULT_FILTERS)
-    setPage(0)
-  }, [])
-
-  const goToPage = useCallback((next: number) => {
-    setPage((current) => (next < 0 || next === current ? current : next))
-  }, [])
+  }, [
+    page,
+    reloadToken,
+    contentType,
+    excludeKey,
+    dateFrom,
+    dateTo,
+    sort,
+    showNothing,
+    apiPermission,
+    ownerId,
+    search,
+  ])
 
   const reload = useCallback(() => setReloadToken((token) => token + 1), [])
 
-  return {
-    documents,
-    status,
-    error,
-    pageInfo,
-    filters,
-    setFilters,
-    resetFilters,
-    goToPage,
-    reload,
-  }
+  return { documents, status, error, pageInfo, reload }
 }

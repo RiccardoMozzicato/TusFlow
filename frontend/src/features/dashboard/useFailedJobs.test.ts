@@ -137,9 +137,9 @@ describe('useFailedJobs', () => {
     expect(socket.unsubscribe).toHaveBeenCalled()
   })
 
-  it('auto-drops a succeeded job from the list after the sweep delay', async () => {
+  it('keeps a succeeded job in the list so the user can still interact with it', async () => {
     // shouldAdvanceTime lets the mount fetch's microtasks resolve normally while
-    // still giving us manual control over the success-removal timer.
+    // any timers (there should be none on success) are under manual control.
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const socket = captureListener()
@@ -153,13 +153,13 @@ describe('useFailedJobs', () => {
 
       socket.emit('completed')
       expect(result.current.retryStates['job-1']?.status).toBe('succeeded')
-      // Row still present during the sweep window.
+
+      // No auto-removal: the row and its 'succeeded' state persist indefinitely
+      // (the row clears only on the next Refresh / reload).
+      act(() => vi.advanceTimersByTime(10000))
+
       expect(result.current.jobs).toEqual([JOB])
-
-      act(() => vi.advanceTimersByTime(1200))
-
-      expect(result.current.jobs).toEqual([])
-      expect(result.current.retryStates['job-1']).toBeUndefined()
+      expect(result.current.retryStates['job-1']?.status).toBe('succeeded')
     } finally {
       vi.useRealTimers()
     }

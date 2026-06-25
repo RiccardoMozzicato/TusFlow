@@ -38,14 +38,31 @@ export async function getCurrentUser(): Promise<UserDTO> {
   return data
 }
 
+export interface GetUsersParams {
+  page?: number
+  size?: number
+  /** Free-text query matched server-side against name and email; blank/omitted means no filter. */
+  search?: string
+  /** Sort spec as 'field,direction' (e.g. 'fullName,asc'); omitted means the backend default. */
+  sort?: string
+}
+
 /**
  * Fetches a page of users in the caller's organization (the backend scopes the
- * list by the authenticated user's org). Used to power share suggestions.
- * Defaults to a generous page so typical orgs fit in one request.
+ * list by the authenticated user's org), optionally filtered by `search` and
+ * ordered by `sort`. Empty `search`/`sort` are omitted so the URL stays clean
+ * and the backend applies its defaults. Used by the admin user list and to power
+ * share suggestions.
  */
-export async function getUsers(page = 0, size = 200): Promise<PageResponse<UserDTO>> {
+export async function getUsers(params: GetUsersParams = {}): Promise<PageResponse<UserDTO>> {
+  const { page = 0, size = 200, search, sort } = params
   const { data } = await http.get<PageResponse<UserDTO>>(API.users, {
-    params: { page, size },
+    params: {
+      page,
+      size,
+      ...(search ? { search } : {}),
+      ...(sort ? { sort } : {}),
+    },
   })
   return data
 }
@@ -58,7 +75,7 @@ export async function getUsers(page = 0, size = 200): Promise<PageResponse<UserD
 export async function fetchAllUsers(pageSize = 200, maxPages = 50): Promise<UserDTO[]> {
   const all: UserDTO[] = []
   for (let page = 0; page < maxPages; page += 1) {
-    const response = await getUsers(page, pageSize)
+    const response = await getUsers({ page, size: pageSize })
     all.push(...response.content)
     if (response.last || response.content.length === 0) break
   }

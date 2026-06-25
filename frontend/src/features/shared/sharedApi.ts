@@ -22,6 +22,8 @@ export interface SharedFilesParams {
   permission?: PermissionLevel
   /** Keep only files owned by this user id; omitted means any owner. */
   ownerId?: string
+  /** Free-text query matched case-insensitively against the file name (substring). */
+  search?: string
 }
 
 /**

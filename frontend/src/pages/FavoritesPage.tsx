@@ -71,6 +71,9 @@ export default function FavoritesPage() {
           />
         </div>
 
+        {/* min-height keeps the card a consistent size whether it holds one row
+            or a full page, so it never collapses to a thin strip. */}
+        <div className="min-h-[28rem]">
         {isInitialLoading ? (
           <p className="px-6 py-12 text-center font-ds-body text-ds-body-sm text-ds-secondary">
             Loading favorites…
@@ -106,6 +109,7 @@ export default function FavoritesPage() {
             onRemove={remove}
           />
         )}
+        </div>
 
         <div className="flex flex-col gap-2 border-t border-ds-outline-variant bg-ds-surface-container-low px-6 py-3">
           {actionError ? (

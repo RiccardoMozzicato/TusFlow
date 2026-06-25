@@ -44,6 +44,7 @@ interface FileServiceInterface {
         dateFrom: String? = null,
         dateTo: String? = null,
         excludeContentTypes: Collection<String>? = null,
+        search: String? = null,
         pageable: Pageable,
     ): Page<FileDTO>
     fun deleteFileShare(fileId: UUID, shareId: Long)

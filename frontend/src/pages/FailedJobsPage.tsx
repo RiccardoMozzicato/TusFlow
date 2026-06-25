@@ -167,7 +167,9 @@ export default function FailedJobsPage() {
       </section>
 
       <div className="overflow-hidden rounded-ds-xl border border-ds-outline-variant bg-ds-surface-container-lowest shadow-sm">
-        <div className="overflow-x-auto">
+        {/* min-height keeps the card a consistent size whether it holds one row
+            or a full page, so it never collapses to a thin strip. */}
+        <div className="min-h-[28rem] overflow-x-auto">
           <table className="w-full border-collapse text-left text-ds-body-sm">
             <thead>
               <tr className="border-b border-ds-outline-variant/50 bg-ds-surface-bright">

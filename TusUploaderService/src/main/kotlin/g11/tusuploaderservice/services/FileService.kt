@@ -725,11 +725,12 @@ class FileService(
         dateFrom: String?,
         dateTo: String?,
         excludeContentTypes: Collection<String>?,
+        search: String?,
         pageable: Pageable,
     ): Page<FileDTO> {
         log.debug(
-            "Retrieving files shared with current user - page: {}, size: {}, ownerId: {}, permission: {}, contentType: {}, excludeContentTypes: {}, dateFrom: {}, dateTo: {}",
-            pageable.pageNumber, pageable.pageSize, ownerId, permission, contentType, excludeContentTypes, dateFrom, dateTo,
+            "Retrieving files shared with current user - page: {}, size: {}, ownerId: {}, permission: {}, contentType: {}, excludeContentTypes: {}, dateFrom: {}, dateTo: {}, search: {}",
+            pageable.pageNumber, pageable.pageSize, ownerId, permission, contentType, excludeContentTypes, dateFrom, dateTo, search,
         )
 
         // Get user ID directly from JWT in SecurityContext
@@ -744,6 +745,7 @@ class FileService(
             dateFrom = dateFrom,
             dateTo = dateTo,
             excludeContentTypes = excludeContentTypes,
+            search = search,
         )
         val filesPage = fileShareRepository.findAll(spec, pageable)
         log.debug("Found {} shared files for user: {}", filesPage.totalElements, userId)

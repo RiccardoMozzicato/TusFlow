@@ -791,7 +791,8 @@ class FileController(
        parameters = [
            Parameter(name = "userId", description = "User UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
            Parameter(name = "page", description = "Page number (0-indexed)", schema = Schema(type = "integer", example = "0")),
-           Parameter(name = "size", description = "Page size", schema = Schema(type = "integer", example = "10"))
+           Parameter(name = "size", description = "Page size", schema = Schema(type = "integer", example = "10")),
+           Parameter(name = "search", description = "Free-text query matched case-insensitively against the file name (substring)", schema = Schema(type = "string", example = "report"))
        ]
    )
    @ApiResponse(
@@ -887,10 +888,11 @@ class FileController(
        @RequestParam(required = false) permission: PERMISSION_LEVEL?,
        @RequestParam(required = false) ownerId: UUID?,
        @RequestParam(required = false) excludeContentTypes: List<String>?,
+       @RequestParam(required = false) search: String?,
    ): ResponseEntity<Page<FileDTO>> {
        log.debug(
-           "API GET /api/v1/files/my-shared userOwnerId={} contentType={} excludeContentTypes={} dateFrom={} dateTo={} sort={} permission={} ownerId={}",
-           currentUserOwnerId(), contentType, excludeContentTypes, dateFrom, dateTo, sort, permission, ownerId,
+           "API GET /api/v1/files/my-shared userOwnerId={} contentType={} excludeContentTypes={} dateFrom={} dateTo={} sort={} permission={} ownerId={} search={}",
+           currentUserOwnerId(), contentType, excludeContentTypes, dateFrom, dateTo, sort, permission, ownerId, search,
        )
 
        // Parse sort; the shared listing is rooted at FileShare, so the sortable
@@ -908,6 +910,7 @@ class FileController(
            dateFrom = dateFrom,
            dateTo = dateTo,
            excludeContentTypes = excludeContentTypes,
+           search = search,
            pageable = pageable,
        )
        log.debug("Retrieved {} shared files for current user", sharedFiles.totalElements)

@@ -26,11 +26,6 @@ export interface RetryState {
   message?: string
 }
 
-// How long a succeeded row lingers before it auto-drops from the list. Long
-// enough for the 0.9s green sweep (index.css `ds-success-sweep`) to finish so
-// the user sees the confirmation before the row leaves.
-const SUCCESS_DISMISS_MS = 1200
-
 // A dead-lettered row lingers a few seconds so the user can read the terminal
 // "retries exhausted" message before it drops (it has left the FAILED list).
 const DEADLETTER_DISMISS_MS = 4000
@@ -84,13 +79,14 @@ function retryStateFromStatus(status: JobUpdateStatus): RetryState {
  * file's next terminal outcome to update the row to 'succeeded' or 'failed' as
  * soon as the job ends — no polling, no manual refresh.
  *
- * When that update resolves to 'succeeded' the job is no longer FAILED, so the row
- * auto-drops from the list shortly after (once the success sweep plays). When it
- * resolves to 'failed' again, the row's attempts bump by one in place (mirroring
- * the backend's per-retry increment), disabling Retry once the cap is reached.
- * If it resolves to 'deadlettered' (retries exhausted), the row shows a terminal
- * "given up" state and auto-drops after a few seconds, since the job has left the
- * FAILED set. Either way the list stays in sync without the user hitting Refresh.
+ * When that update resolves to 'succeeded' the row stays in place showing the
+ * "Reprocessed successfully" confirmation (with the file link still clickable),
+ * so the user can act on it; it clears on the next Refresh, since the job has
+ * left the FAILED set. When it resolves to 'failed' again, the row's attempts
+ * bump by one in place (mirroring the backend's per-retry increment), disabling
+ * Retry once the cap is reached. If it resolves to 'deadlettered' (retries
+ * exhausted), the row shows a terminal "given up" state and auto-drops after a
+ * few seconds, since the job has left the FAILED set.
  */
 export function useFailedJobs(): FailedJobsData {
   const [jobs, setJobs] = useState<FailedJob[] | null>(null)
@@ -126,9 +122,9 @@ export function useFailedJobs(): FailedJobsData {
   }, [])
 
   // Drops a job from the list (and its retry state) after `delayMs`, keeping the
-  // list in sync without a manual reload — used for terminal outcomes (a
-  // succeeded retry, or a dead-letter) that have left the FAILED set.
-  const scheduleRemoval = useCallback((jobId: string, delayMs: number = SUCCESS_DISMISS_MS) => {
+  // list in sync without a manual reload — used for a dead-lettered outcome,
+  // which has left the FAILED set after its terminal message has been shown.
+  const scheduleRemoval = useCallback((jobId: string, delayMs: number) => {
     const timer = setTimeout(() => {
       if (!isMountedRef.current) return
       removalTimersRef.current.delete(jobId)
@@ -205,8 +201,9 @@ export function useFailedJobs(): FailedJobsData {
             const next = retryStateFromStatus(update.status)
             closeStream(job.jobId)
             setRetryStates((prev) => ({ ...prev, [job.jobId]: next }))
-            // Succeeded jobs are no longer FAILED; auto-drop the row.
-            if (next.status === 'succeeded') scheduleRemoval(job.jobId)
+            // A succeeded job has left the FAILED set, but the row stays so the
+            // user can read the confirmation and follow the file link; it clears
+            // on the next Refresh.
             // A re-failed retry consumed one attempt; bump the row live.
             if (next.status === 'failed') bumpAttempts(job.jobId)
             // Dead-lettered: the final attempt was spent and the job is gone

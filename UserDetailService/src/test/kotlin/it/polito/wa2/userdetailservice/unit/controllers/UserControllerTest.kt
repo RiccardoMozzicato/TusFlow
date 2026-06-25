@@ -70,7 +70,7 @@ class UserControllerTest {
         )
         val page = PageImpl(users, PageRequest.of(0, 10), users.size.toLong())
 
-        every { userService.getUsers(FiltersDTO(0, 10)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users"))
@@ -83,7 +83,7 @@ class UserControllerTest {
             .andExpect(jsonPath("$.size").value(10))
             .andExpect(jsonPath("$.number").value(0))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) }
     }
 
     @Test
@@ -103,7 +103,7 @@ class UserControllerTest {
         )
         val page = PageImpl(users, PageRequest.of(1, 5), 10)
 
-        every { userService.getUsers(FiltersDTO(1, 5)) } returns page
+        every { userService.getUsers(FiltersDTO(1, 5, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(
@@ -117,7 +117,29 @@ class UserControllerTest {
             .andExpect(jsonPath("$.size").value(5))
             .andExpect(jsonPath("$.number").value(1))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(1, 5)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(1, 5, null, "fullName")) }
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers - parses search and sort params into the FiltersDTO`() {
+        // arrange
+        val page = PageImpl(emptyList<UserDTO>(), PageRequest.of(0, 10), 0)
+        every {
+            userService.getUsers(FiltersDTO(0, 10, "rossi", "email", org.springframework.data.domain.Sort.Direction.DESC))
+        } returns page
+
+        // act & assert
+        mockMvc.perform(
+            get("/api/v1/users")
+                .param("search", "rossi")
+                .param("sort", "email,desc")
+        )
+            .andExpect(status().isOk)
+
+        verify(exactly = 1) {
+            userService.getUsers(FiltersDTO(0, 10, "rossi", "email", org.springframework.data.domain.Sort.Direction.DESC))
+        }
     }
 
     @Test
@@ -137,14 +159,14 @@ class UserControllerTest {
         )
         val page = PageImpl(users, PageRequest.of(0, 10), 1)
 
-        every { userService.getUsers(FiltersDTO(0, 10)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.content.length()").value(1))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) }
     }
 
     @Test
@@ -164,14 +186,14 @@ class UserControllerTest {
         )
         val page = PageImpl(users, PageRequest.of(0, 10), 1)
 
-        every { userService.getUsers(FiltersDTO(0, 10)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.content.length()").value(1))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) }
     }
 
     @Test
@@ -189,7 +211,7 @@ class UserControllerTest {
         // arrange
         val page = PageImpl<UserDTO>(emptyList(), PageRequest.of(0, 10), 0)
 
-        every { userService.getUsers(FiltersDTO(0, 10)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users"))
@@ -198,7 +220,7 @@ class UserControllerTest {
             .andExpect(jsonPath("$.content.length()").value(0))
             .andExpect(jsonPath("$.totalElements").value(0))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) }
     }
 
     // GET /api/v1/users/{id} tests

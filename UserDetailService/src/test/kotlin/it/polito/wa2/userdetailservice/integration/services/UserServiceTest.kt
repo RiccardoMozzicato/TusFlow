@@ -141,6 +141,85 @@ class UserServiceTest: IntegrationTest() {
     }
 
     @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers() - search matches name case-insensitively within the org`() {
+        // arrange: admin is in "Polytechnic University of Turin" (Mario, Riccardo, Samuele)
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10, search = "ROSSI")
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        Assertions.assertEquals(1, result.totalElements)
+        Assertions.assertEquals("Mario Rossi", result.content[0].fullName)
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers() - search matches email substring within the org`() {
+        // arrange: two org users have a @test.local email (Riccardo, Samuele)
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10, search = "test.local")
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        Assertions.assertEquals(2, result.totalElements)
+        Assertions.assertTrue(result.content.all { it.email.contains("test.local") })
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers() - search is scoped to the caller's organization`() {
+        // arrange: "alice" exists but in a different org (Tech Solutions Inc.)
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10, search = "alice")
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        Assertions.assertEquals(0, result.totalElements)
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers() - sorts by email ascending`() {
+        // arrange
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+        val filtersDTO = FiltersDTO(
+            pageNumber = 0,
+            pageSize = 10,
+            sortField = "email",
+            sortDirection = org.springframework.data.domain.Sort.Direction.ASC,
+        )
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert: emails come back in ascending order
+        val emails = result.content.map { it.email }
+        Assertions.assertEquals(emails.sorted(), emails)
+    }
+
+    @Test
+    @WithMockUser(roles = ["serviceaccount-fileservice"])
+    fun `getUsers() - service account sees users across organizations`() {
+        // arrange: service account is not org-scoped, so it sees every user
+        setupJwtAuthentication("service-account", listOf("serviceaccount-fileservice"))
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert: all six seeded users, spanning multiple organizations
+        Assertions.assertEquals(6, result.totalElements)
+        Assertions.assertTrue(result.content.map { it.organization }.distinct().size > 1)
+    }
+
+    @Test
     @WithMockUser(roles = ["staff", "manager"])
     fun `getUser() - successful for staff and manager`() {
         // arrange

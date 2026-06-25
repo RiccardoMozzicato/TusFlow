@@ -16,6 +16,7 @@ import it.polito.wa2.userdetailservice.validators.UserUpdateValidation
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
+import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
 import org.springframework.security.access.prepost.PreAuthorize
@@ -69,6 +70,20 @@ class UserController(
                 required = false,
                 example = "10",
                 schema = Schema(type = "integer", defaultValue = "10", format = "int32")
+            ),
+            Parameter(
+                name = "search",
+                description = "Free-text query matched case-insensitively against the user's name and email",
+                required = false,
+                example = "rossi",
+                schema = Schema(type = "string")
+            ),
+            Parameter(
+                name = "sort",
+                description = "Sort spec as 'field,direction' (fields: fullName, email, department, role, storageUsed, createdAt)",
+                required = false,
+                example = "fullName,asc",
+                schema = Schema(type = "string", defaultValue = "fullName,asc")
             )
         ]
     )
@@ -105,10 +120,16 @@ class UserController(
     @ResponseStatus(HttpStatus.OK)
     fun getUsers(
         @RequestParam(defaultValue = "0") page: UInt,
-        @RequestParam(defaultValue = "10") size: UInt
+        @RequestParam(defaultValue = "10") size: UInt,
+        @RequestParam(required = false) search: String?,
+        @RequestParam(defaultValue = "fullName,asc") sort: String
     ): Page<UserDTO> {
-        log.debug("API GET /api/v1/users userOwnerId={} page={} size={}", currentUserOwnerId(), page, size)
-        return userService.getUsers(FiltersDTO(page.toInt(), size.toInt()))
+        log.debug("API GET /api/v1/users userOwnerId={} page={} size={} search={} sort={}", currentUserOwnerId(), page, size, search, sort)
+        // Parse sort parameter as "field,direction"; blank field falls back in the service.
+        val sortParts = sort.split(",")
+        val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() }
+        val sortDirection = if (sortParts.getOrNull(1)?.lowercase() == "desc") Sort.Direction.DESC else Sort.Direction.ASC
+        return userService.getUsers(FiltersDTO(page.toInt(), size.toInt(), search, sortField, sortDirection))
     }
 
     //region Swagger Documentation
