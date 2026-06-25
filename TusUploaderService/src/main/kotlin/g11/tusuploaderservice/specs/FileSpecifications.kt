@@ -90,8 +90,9 @@ object FileSpecifications {
          *
          * Nota: questa query NON usa `distinct`. Per evitare la moltiplicazione di righe
          * che imporrebbe il distinct (incompatibile con l'ORDER BY su una colonna non
-         * selezionata in Postgres) la condizione "condiviso con me" dello scope PERSONAL
-         * usa un subquery EXISTS invece di un LEFT JOIN su file_shares.
+         * selezionata in Postgres) la condizione "condiviso con me" di TUTTI gli scope
+         * usa un subquery EXISTS invece di un LEFT JOIN su file_shares: senza il join un
+         * file condiviso con più utenti non gonfia né le righe né la count.
          */
         fun buildFilesByScopes(
             contentType: String?,
@@ -153,12 +154,21 @@ object FileSpecifications {
                     predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), toDate))
                 }
 
-                // Un singolo LEFT JOIN su shares, riusato da ogni scope: uno share esplicito
-                // dà visibilità sul file dentro il suo scope, a prescindere dalla membership.
-                // Così richiedendo DEPARTMENT si vede anche un file DEPARTMENT condiviso con
-                // l'utente che non appartiene a quel department (idem ORGANIZATION).
-                val shares = root.join<File, FileShare>("shares", JoinType.LEFT)
-                val sharedWithUser = cb.equal(shares.get<UUID>("userID"), userId)
+                // Share esplicito sul file per l'utente corrente, espresso come EXISTS correlato
+                // (non un LEFT JOIN su file_shares) così la query non moltiplica le righe quando
+                // un file è condiviso con più utenti: niente inflazione della count e nessun
+                // bisogno di `distinct` (incompatibile con l'ORDER BY su colonne non selezionate
+                // in Postgres). Riusato da ogni scope: uno share dà visibilità sul file dentro il
+                // suo scope, a prescindere dalla membership (es. un file DEPARTMENT condiviso con
+                // chi non appartiene a quel department, idem ORGANIZATION).
+                val sharedWithUser = query!!.subquery(Int::class.java).let { sub ->
+                    val share = sub.from(FileShare::class.java)
+                    sub.select(cb.literal(1)).where(
+                        cb.equal(share.get<File>("file").get<UUID>("uuid"), root.get<UUID>("uuid")),
+                        cb.equal(share.get<UUID>("userID"), userId),
+                    )
+                    cb.exists(sub)
+                }
 
                 // Un predicato per ogni scope richiesto, combinati in OR. In ciascuno la regola
                 // di accesso "per ruolo/membership" è messa in OR con lo share esplicito.
@@ -183,26 +193,13 @@ object FileSpecifications {
                 val scopeField = root.get<SharingScope>("sharingScope")
                 val scopePredicates = sharingScopes.map { scope ->
                     when (scope) {
-                        SharingScope.PERSONAL -> {
-                            // Owner O condiviso con l'utente. La condivisione è espressa
-                            // con un EXISTS correlato (non un LEFT JOIN) così la query non
-                            // moltiplica le righe e può fare a meno del distinct.
-                            val sharedWithUser = query!!.subquery(Int::class.java).let { sub ->
-                                val share = sub.from(FileShare::class.java)
-                                sub.select(cb.literal(1)).where(
-                                    cb.equal(share.get<File>("file").get<UUID>("uuid"), root.get<UUID>("uuid")),
-                                    cb.equal(share.get<UUID>("userID"), userId),
-                                )
-                                cb.exists(sub)
-                            }
-                            cb.and(
-                                cb.equal(scopeField, SharingScope.PERSONAL),
-                                cb.or(
-                                    cb.equal(root.get<UUID>("ownerId"), userId),
-                                    sharedWithUser,
-                                )
-                            )
-                        }
+                        SharingScope.PERSONAL -> cb.and(
+                            cb.equal(scopeField, SharingScope.PERSONAL),
+                            cb.or(
+                                cb.equal(root.get<UUID>("ownerId"), userId),
+                                sharedWithUser,
+                            ),
+                        )
 
                         SharingScope.DEPARTMENT -> {
                             // Membership: stessa organization e (admin: qualunque department;
