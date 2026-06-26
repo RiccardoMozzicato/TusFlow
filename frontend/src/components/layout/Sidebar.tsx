@@ -2,6 +2,7 @@ import { NavLink, Link } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import { selectCurrentUser } from '@/features/auth/authSlice'
 import { selectSidebarCollapsed, toggleSidebar } from '@/features/ui/uiSlice'
+import { selectChatOpen, toggleChat } from '@/features/chat/chatSlice'
 import { isAdmin, highestRole, ROLE_LABELS } from '@/features/profile/roles'
 import { LOGOUT_URL } from '@/config'
 import Icon from '@/components/Icon'
@@ -78,6 +79,7 @@ export default function Sidebar({ displayName }: SidebarProps) {
   const dispatch = useAppDispatch()
   const collapsed = useAppSelector(selectSidebarCollapsed)
   const user = useAppSelector(selectCurrentUser)
+  const chatOpen = useAppSelector(selectChatOpen)
   // Show the most-privileged role the user holds, not whatever Keycloak happens
   // to list first (which could read "manager" for an admin).
   const role = ROLE_LABELS[highestRole(user?.roles)]
@@ -127,6 +129,18 @@ export default function Sidebar({ displayName }: SidebarProps) {
 
       <div className="flex flex-col gap-2">
         {NAV_ITEMS.map((item) => renderNavItem(item, collapsed))}
+        {/* RAG assistant: toggles the chat modal. Styled like a nav item, active while open. */}
+        <button
+          type="button"
+          onClick={() => dispatch(toggleChat())}
+          title="Ask your documents"
+          aria-label={chatOpen ? 'Close assistant' : 'Open assistant'}
+          aria-expanded={chatOpen}
+          className={navLinkClass(chatOpen, collapsed)}
+        >
+          <Icon name="smart_toy" filled={chatOpen} />
+          {!collapsed && <span>Assistant</span>}
+        </button>
       </div>
 
       <div className="mt-auto flex flex-col gap-3">
