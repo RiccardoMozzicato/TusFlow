@@ -42,6 +42,27 @@ spring:
           - "text/event-stream;charset=UTF-8"
           - "application/javascript;charset=UTF-8"
         routes:
+          - id: tus-openapi
+            uri: http://localhost:8081
+            predicates:
+              - Path=/docs/openapi/tus
+            filters:
+              - SetPath=/v3/api-docs
+
+          - id: user-openapi
+            uri: http://localhost:8082
+            predicates:
+              - Path=/docs/openapi/users
+            filters:
+              - SetPath=/v3/api-docs
+
+          - id: ai-openapi
+            uri: http://localhost:8083
+            predicates:
+              - Path=/docs/openapi/ai
+            filters:
+              - SetPath=/v3/api-docs
+
           - id: file-service
             uri: http://localhost:8081
             predicates:
@@ -77,6 +98,19 @@ spring:
             filters:
               - AddRequestHeader=X-Debug, true
 
+springdoc:
+  swagger-ui:
+    urls:
+      - name: API Gateway
+        url: /v3/api-docs
+      - name: TusUploaderService
+        url: /docs/openapi/tus
+      - name: UserDetailService
+        url: /docs/openapi/users
+      - name: AIProcessingService
+        url: /docs/openapi/ai
+    urls-primary-name: API Gateway
+
 # use the production url, not the development one
 UI_URL: "http://localhost:5173"
 
@@ -99,4 +133,3 @@ management:
       # Emit histogram buckets so Grafana can compute real p95/p99 + heatmaps.
       percentiles-histogram:
         http.server.requests: true
-

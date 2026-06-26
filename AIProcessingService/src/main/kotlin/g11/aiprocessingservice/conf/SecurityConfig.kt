@@ -23,7 +23,8 @@ class SecurityConfig {
     fun securityFilterChain(httpSecurity: HttpSecurity): SecurityFilterChain {
         return httpSecurity
             .authorizeHttpRequests {
-                    it.anyRequest().authenticated()
+                it.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                    .anyRequest().authenticated()
             }
             // Stateless Bearer-token resource server behind the gateway: every request is
             // authenticated by JWT, which is immune to CSRF, and the service is never reached

@@ -72,6 +72,12 @@ spring:
       name: user
       password: password
 
+springdoc:
+  default-response-status: false
+  remove-broken-reference-definitions: true
+  override-with-generic-response: false
+  show-actuator: false
+
 
 # AI Document Processing Configuration
 ai:

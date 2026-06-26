@@ -40,6 +40,8 @@ class SecurityConfig ( val crr : ClientRegistrationRepository){
         httpSecurity.
                 authorizeHttpRequests{
                         it.requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/docs/openapi/**").permitAll()
                         .requestMatchers("/api/auth/userinfo").permitAll()
                         .requestMatchers("/login").permitAll()
                         .requestMatchers("/ui/**", "/ui").permitAll()

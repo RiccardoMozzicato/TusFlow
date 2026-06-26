@@ -8,7 +8,6 @@ import g11.tusuploaderservice.exceptions.TusContentTypeException
 import g11.tusuploaderservice.exceptions.UploadLengthException
 import g11.tusuploaderservice.exceptions.InvalidFormatException
 import g11.tusuploaderservice.metrics.TusMetrics
-import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.FileServiceInterface
 import g11.tusuploaderservice.services.TusServiceInterface
 import io.swagger.v3.oas.annotations.Operation
@@ -38,7 +37,6 @@ import g11.tusuploaderservice.utils.parseMetadataHeader
 import g11.tusuploaderservice.utils.getUserIdFromJwt
 import io.micrometer.tracing.Tracer
 import org.springframework.web.bind.annotation.RequestParam
-import kotlin.text.get
 
 
 @RestController
@@ -112,7 +110,7 @@ class TusController(
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -137,21 +135,59 @@ class TusController(
         res.setHeader("Access-Control-Expose-Headers", tus.exposeHeaders?.joinToString(separator = ","))
 
     }
-    //region Swagger Do   @ApiResponse(
-    //       responseCode = "404",
-    //       description = "File not found. Returned when the specified file UUID does not exist.",
-    //       content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
-    //   )cumentation
+    //region Swagger Documentation
     @Operation(
         tags = [ "File Handling" ],
         summary = "Create a new upload",
-        description = "Creates a new file upload resource on the server and returns its location.",
+        description = "Creates a new TUS upload resource for a client-generated file id and returns the resumable upload location. Supports regular creation, deferred length and creation-with-upload.",
         parameters = [
             Parameter(
-                name = "Tus-Resumable",
-                description = "Tus-Version",
-                schema = Schema(type = "string"),
+                name = "fileId",
+                description = "Client-generated file UUID. The same id is used later to resume, inspect or terminate the upload.",
+                schema = Schema(type = "string", format = "uuid"),
                 required = true,
+                `in` = ParameterIn.QUERY
+            ),
+            Parameter(
+                name = "sharingScope",
+                description = "Initial visibility scope for the file. Defaults to PERSONAL when omitted.",
+                schema = Schema(type = "string", allowableValues = ["PERSONAL", "DEPARTMENT", "ORGANIZATION"], defaultValue = "PERSONAL"),
+                required = false,
+                `in` = ParameterIn.QUERY
+            ),
+            Parameter(
+                name = "Tus-Resumable",
+                description = "TUS protocol version. Must match the server-supported version.",
+                schema = Schema(type = "string", example = "1.0.0"),
+                required = true,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Length",
+                description = "Total upload size in bytes. Required unless Upload-Defer-Length is used.",
+                schema = Schema(type = "integer", format = "int64", example = "10485760"),
+                required = false,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Defer-Length",
+                description = "Set to 1 when the upload length is not known at creation time.",
+                schema = Schema(type = "integer", example = "1"),
+                required = false,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Metadata",
+                description = "Comma-separated TUS metadata. Values must be base64 encoded, for example: filename cmVwb3J0LnBkZg==,filetype YXBwbGljYXRpb24vcGRm",
+                schema = Schema(type = "string"),
+                required = false,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Checksum",
+                description = "Optional checksum header for creation-with-upload: '<algorithm> <base64-digest>'.",
+                schema = Schema(type = "string", example = "sha-1 Kq5sNclPz7QV2+lfQIuc6R7oRu0="),
+                required = false,
                 `in` = ParameterIn.HEADER
             ),
             Parameter(
@@ -168,7 +204,7 @@ class TusController(
             Header(
                 name = "Location",
                 description = "URI of the newly created upload resource",
-                schema = Schema(type = "string", example = "http://localhost:8080/uploads/c22c49d6-04fd-444f-87ca-8e9e64f43f50")
+                schema = Schema(type = "string", example = "/api/v1/uploads/c22c49d6-04fd-444f-87ca-8e9e64f43f50")
             ),
             Header(
                 name = "Upload-Expires",
@@ -197,7 +233,7 @@ class TusController(
                       "title": "Missing required header",
                       "status": 400,
                       "detail": "Upload-Length header is required",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -220,7 +256,7 @@ class TusController(
                       "title": "Upload expired",
                       "status": 410,
                       "detail": "Upload has expired and is no longer available",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -243,7 +279,7 @@ class TusController(
                       "title": "Unsupported protocol version",
                       "status": 412,
                       "detail": "Tus-Resumable version not supported",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -266,7 +302,7 @@ class TusController(
                       "title": "Upload size exceeds limit",
                       "status": 413,
                       "detail": "Upload-Length must be lower than maximum allowed size",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -289,7 +325,7 @@ class TusController(
                       "title": "Invalid Content-Type",
                       "status": 415,
                       "detail": "Content-Type must be application/offset+octet-stream for creation-with-upload",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -312,7 +348,7 @@ class TusController(
                       "title": "Checksum validation failed",
                       "status": 460,
                       "detail": "Calculated checksum does not match provided checksum",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -335,7 +371,7 @@ class TusController(
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -438,9 +474,16 @@ class TusController(
         description = "Retrieve the current status of an upload including offset, length, metadata, and expiration.",
         parameters = [
             Parameter(
+                name = "id",
+                description = "Upload resource id, matching the file UUID used at creation time.",
+                schema = Schema(type = "string", format = "uuid"),
+                required = true,
+                `in` = ParameterIn.PATH
+            ),
+            Parameter(
                 name = "Tus-Resumable",
-                description = "Tus-Version",
-                schema = Schema(type = "string"),
+                description = "TUS protocol version.",
+                schema = Schema(type = "string", example = "1.0.0"),
                 required = true,
                 `in` = ParameterIn.HEADER
             ),
@@ -492,7 +535,7 @@ class TusController(
                       "title": "Resource not found",
                       "status": 404,
                       "detail": "Upload resource with the specified ID does not exist",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -515,7 +558,7 @@ class TusController(
                       "title": "Upload expired",
                       "status": 410,
                       "detail": "Upload has expired and is no longer available",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -538,7 +581,7 @@ class TusController(
                       "title": "Unsupported protocol version",
                       "status": 412,
                       "detail": "Tus-Resumable version not supported",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -561,7 +604,7 @@ class TusController(
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred during upload",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -609,23 +652,56 @@ class TusController(
         description = "Uploads a chunk of a specified file to the server.",
         parameters = [
             Parameter(
+                name = "id",
+                description = "Upload resource id.",
+                schema = Schema(type = "string", format = "uuid"),
+                required = true,
+                `in` = ParameterIn.PATH
+            ),
+            Parameter(
                 name = "Tus-Resumable",
-                description = "Tus-Version",
-                schema = Schema(type = "string"),
+                description = "TUS protocol version.",
+                schema = Schema(type = "string", example = "1.0.0"),
                 required = true,
                 `in` = ParameterIn.HEADER
             ),
             Parameter(
-                name = "Upload-Defer-Length",
-                schema = Schema(type = "integer"),
+                name = "Content-Type",
+                description = "Must be application/offset+octet-stream.",
+                schema = Schema(type = "string", example = "application/offset+octet-stream"),
+                required = true,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Offset",
+                description = "Byte offset where this chunk starts. Must match the server-side offset.",
+                schema = Schema(type = "integer", format = "int64", example = "2048"),
+                required = true,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Checksum",
+                description = "Optional checksum header: '<algorithm> <base64-digest>'.",
+                schema = Schema(type = "string", example = "sha-1 Kq5sNclPz7QV2+lfQIuc6R7oRu0="),
                 `in` = ParameterIn.HEADER
             ),
             Parameter(
                 name = "Upload-Length",
-                schema = Schema(type = "integer"),
+                description = "Optional final upload length when it was deferred at creation time.",
+                schema = Schema(type = "integer", format = "int64", example = "10485760"),
                 `in` = ParameterIn.HEADER
             )
-        ]
+        ],
+        requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Binary upload chunk starting at Upload-Offset.",
+            required = true,
+            content = [
+                Content(
+                    mediaType = "application/offset+octet-stream",
+                    schema = Schema(type = "string", format = "binary")
+                )
+            ]
+        )
     )
     @ApiResponse(
         responseCode = "204",
@@ -663,7 +739,7 @@ class TusController(
                       "title": "Invalid request",
                       "status": 400,
                       "detail": "Upload length exceeds maximum allowed size",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -686,7 +762,7 @@ class TusController(
                       "title": "Resource not found",
                       "status": 404,
                       "detail": "Upload resource with the specified ID does not exist",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -709,7 +785,7 @@ class TusController(
                       "title": "Offset mismatch",
                       "status": 409,
                       "detail": "Upload-Offset does not match current file offset",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -732,7 +808,7 @@ class TusController(
                       "title": "Upload expired",
                       "status": 410,
                       "detail": "Upload has expired and is no longer available",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -755,7 +831,7 @@ class TusController(
                       "title": "Unsupported protocol version",
                       "status": 412,
                       "detail": "Tus-Resumable version not supported",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -778,7 +854,7 @@ class TusController(
                       "title": "Upload size exceeds limit",
                       "status": 413,
                       "detail": "File length exceeds expected length",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -801,7 +877,7 @@ class TusController(
                       "title": "Invalid Content-Type",
                       "status": 415,
                       "detail": "Content-Type must be application/offset+octet-stream",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -824,7 +900,7 @@ class TusController(
                       "title": "Checksum validation failed",
                       "status": 460,
                       "detail": "Calculated checksum does not match provided checksum",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -847,7 +923,7 @@ class TusController(
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred during upload",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -869,10 +945,9 @@ class TusController(
     ) {
         log.debug("API PATCH /api/v1/uploads/{} userOwnerId={} uploadId={}", id, currentUserOwnerId(), id)
 
-    req.headerNames.toList().forEach { headerName ->
+        req.headerNames.toList().forEach { headerName ->
             log.debug("$headerName: ${req.getHeader(headerName)}")
         }
-        val contentLength = req.getHeader("Content-Length")
 
         val uuid: UUID
         try{
@@ -923,10 +998,17 @@ class TusController(
         description = "Terminates an upload and deletes all associated data including the file and metadata.",
         parameters = [
             Parameter(
-                name = "Tus-Resumable",
-                description = "Tus-Version",
-                schema = Schema(type = "string"),
+                name = "id",
+                description = "Upload resource id.",
+                schema = Schema(type = "string", format = "uuid"),
                 required = true,
+                `in` = ParameterIn.PATH
+            ),
+            Parameter(
+                name = "Tus-Resumable",
+                description = "TUS protocol version. Accepted when provided; this endpoint currently does not require the header.",
+                schema = Schema(type = "string", example = "1.0.0"),
+                required = false,
                 `in` = ParameterIn.HEADER
             ),
         ]
@@ -957,7 +1039,7 @@ class TusController(
                       "title": "Resource not found",
                       "status": 404,
                       "detail": "Upload resource with the specified ID does not exist",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -980,7 +1062,7 @@ class TusController(
                       "title": "Upload expired",
                       "status": 410,
                       "detail": "Upload has expired and is no longer available",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -1003,7 +1085,7 @@ class TusController(
                       "title": "Unsupported protocol version",
                       "status": 412,
                       "detail": "Tus-Resumable version not supported",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -1026,7 +1108,7 @@ class TusController(
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred during upload",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
