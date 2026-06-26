@@ -42,6 +42,8 @@ import java.io.InputStream
 import java.util.UUID
 import org.springframework.scheduling.annotation.Async
 import java.util.concurrent.CompletableFuture
+import kotlin.math.exp
+import kotlin.random.Random
 
 @Service
 class MetadataProcessor(
@@ -637,13 +639,22 @@ class MetadataProcessor(
                 log.warn("AI analysis backoff attempt {} failed for job {}: {}", attempt, job.id, e.message)
 
                 if (attempt < maxAttempts) {
-                    // Exponential backoff from the configured base, capped (default 1s, 2s, 4s, …
-                    // capped at 5s). Only reached on a fresh upload (maxAttempts > 1); retries run
-                    // once and never sleep. A base of 0 (tests) disables the sleep entirely.
-                    val delayMs = (analysisBackoffBaseMs * (1L shl (attempt - 1))).coerceAtMost(analysisBackoffCapMs)
-                    if (delayMs > 0) {
-                        log.info("Retrying in {}ms...", delayMs)
-                        Thread.sleep(delayMs)
+                    // Exponential backoff with equal jitter.
+                    // Backoff grows from the configured base (1s, 2s, 4s, ...)
+                    // and is capped at analysisBackoffCapMs. The actual sleep
+                    // duration is randomized between 50% and 100% of the capped backoff
+                    val exponentialBackoff = (analysisBackoffBaseMs * (1L shl (attempt - 1))).coerceAtMost(analysisBackoffCapMs)
+
+                    val equalJitter = if(exponentialBackoff > 0) {
+                        val half = exponentialBackoff/2
+                        half + Random.nextLong(half)
+                    } else {
+                        0L
+                    }
+
+                    if (equalJitter > 0) {
+                        log.info("Retrying in {}ms...", equalJitter)
+                        Thread.sleep(equalJitter)
                     }
                 }
 
