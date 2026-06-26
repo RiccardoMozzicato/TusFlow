@@ -1,11 +1,18 @@
 import Icon from '@/components/Icon'
+import { SharingScope } from '@/features/documents/documentsApi'
 import { formatBytes } from '../format'
 import type { MetadataField, StagedFile } from '../types'
+import type { ScopeOption } from '../uploadScopes'
 import MetadataEditor from './MetadataEditor'
+import StagedScopeSelector from './StagedScopeSelector'
 
 interface StagedUploadsProps {
   staged: StagedFile[]
+  scopes: ScopeOption[]
+  /** General scope that staged files inherit unless overridden per file. */
+  generalScope: SharingScope
   onMetadataChange: (id: string, fields: MetadataField[]) => void
+  onScopeChange: (id: string, scope?: SharingScope) => void
   onRemove: (id: string) => void
   onStart: (id: string) => void
   onStartAll: () => void
@@ -15,7 +22,10 @@ interface StagedUploadsProps {
 // attach free-form metadata, then start that file's upload (or start them all).
 export default function StagedUploads({
   staged,
+  scopes,
+  generalScope,
   onMetadataChange,
+  onScopeChange,
   onRemove,
   onStart,
   onStartAll,
@@ -80,6 +90,15 @@ export default function StagedUploads({
                   <Icon name="close" filled={false} className="text-[18px]" />
                 </button>
               </div>
+            </div>
+
+            <div className="mb-3">
+              <StagedScopeSelector
+                scopes={scopes}
+                generalScope={generalScope}
+                override={file.scopeOverride}
+                onChange={(scope) => onScopeChange(file.id, scope)}
+              />
             </div>
 
             <MetadataEditor
