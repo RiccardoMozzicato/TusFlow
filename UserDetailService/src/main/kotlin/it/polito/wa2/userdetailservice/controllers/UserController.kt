@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.ArraySchema
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.ExampleObject
 import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.media.SchemaProperty
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import it.polito.wa2.userdetailservice.dto.AvatarDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
@@ -631,6 +632,107 @@ class UserController(
         userService.updateUser(userDTO)
     }
 
+    //region Swagger Documentation
+    @Operation(
+        tags = [ "Avatar Handling" ],
+        summary = "Upload the current user's avatar",
+        description = "Upload (or replace) the avatar image of the authenticated user. The target user is read from the JWT subject, not from a path variable, so a user can only change their own avatar. The image is stored in MinIO and only `image/*` content types are accepted.",
+        requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Multipart form data with a single `file` part containing the image (content type must be image/*).",
+            required = true,
+            content = [
+                Content(
+                    mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+                    schema = Schema(type = "object", requiredProperties = ["file"]),
+                    schemaProperties = [
+                        SchemaProperty(
+                            name = "file",
+                            schema = Schema(type = "string", format = "binary", description = "The avatar image file")
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    @ApiResponse(
+        responseCode = "201",
+        description = "Created"
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "Authenticated user not found in the local user store",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Not Found",
+                            "status": 404,
+                            "detail": "user not found"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "415",
+        description = "Unsupported Media Type: the uploaded file is missing a content type or is not an image",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Unsupported avatar type",
+                            "status": 415,
+                            "detail": "Unsupported media type"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "500",
+        description = "Internal Server Error",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Internal Server Error",
+                            "status": 500,
+                            "detail": "An unexpected error occurred"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    //endregion
     @PostMapping("/me/avatar", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
@@ -640,6 +742,89 @@ class UserController(
         userService.updateAvatar(currentUserOwnerId(), dto)
     }
 
+    //region Swagger Documentation
+    @Operation(
+        tags = [ "Avatar Handling" ],
+        summary = "Get a user's avatar image",
+        description = "Stream the avatar image bytes of the user identified by their UUID. The bytes are proxied from MinIO through the gateway so MinIO is never reachable from the browser. The response carries an ETag and a no-cache Cache-Control header; clients append a `?v=` token (the user's updatedAt) to bust the cache after an upload. Returns 404 with no body when the user has no stored avatar, letting the frontend fall back to initials.",
+        parameters = [
+            Parameter(
+                name = "id",
+                description = "UUID of the user whose avatar is requested",
+                required = true,
+                example = "123e4567-e89b-12d3-a456-426614174000",
+                `in` = ParameterIn.PATH,
+                schema = Schema(type = "string", format = "uuid")
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "OK: the avatar image bytes, with the stored content type (e.g. image/png, image/jpeg)",
+        content = [
+            Content(
+                mediaType = "image/*",
+                schema = Schema(type = "string", format = "binary")
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "400",
+        description = "Bad Request",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Bad Request",
+                            "status": 400,
+                            "detail": "The provided id is not a UUID"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "Not Found: the user does not exist or has no stored avatar (no body in the latter case)"
+    )
+    @ApiResponse(
+        responseCode = "500",
+        description = "Internal Server Error",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Internal Server Error",
+                            "status": 500,
+                            "detail": "An unexpected error occurred"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    //endregion
     // Streams the avatar bytes from MinIO through the gateway so MinIO is never
     // reachable from the browser. Returns 404 (no body) when the user has no
     // avatar, letting the frontend fall back to initials.
@@ -657,6 +842,69 @@ class UserController(
         return ResponseEntity.ok().headers(headers).body(InputStreamResource(avatar.stream))
     }
 
+    //region Swagger Documentation
+    @Operation(
+        tags = [ "Avatar Handling" ],
+        summary = "Delete the current user's avatar",
+        description = "Remove the avatar image of the authenticated user. The target user is read from the JWT subject, so a user can only delete their own avatar. The object is removed from MinIO and the stored reference is cleared; the operation is a no-op when the user has no avatar.",
+    )
+    @ApiResponse(
+        responseCode = "204",
+        description = "No Content"
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "Authenticated user not found in the local user store",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Not Found",
+                            "status": 404,
+                            "detail": "user not found"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "500",
+        description = "Internal Server Error",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Internal Server Error",
+                            "status": 500,
+                            "detail": "An unexpected error occurred"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    //endregion
     @DeleteMapping("/me/avatar")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
