@@ -2,15 +2,14 @@ package g11.aiprocessingservice.unit.controllers
 
 import g11.aiprocessingservice.controllers.JobControllers
 import g11.aiprocessingservice.dto.JobKeyDTO
+import g11.aiprocessingservice.dto.JobStatusResponseDTO
 import g11.aiprocessingservice.dto.jobStatus
-import g11.aiprocessingservice.entities.Job
 import g11.aiprocessingservice.dto.FailedJobDTO
 import g11.aiprocessingservice.dto.JobStatsDTO
-import g11.aiprocessingservice.repositories.JobRepository
 import g11.aiprocessingservice.services.FailedJobServiceInterface
-import g11.aiprocessingservice.services.FileAccessService
 import g11.aiprocessingservice.services.JobStatsServiceInterface
-import g11.aiprocessingservice.services.MetadataProcessor
+import g11.aiprocessingservice.services.JobStatusServiceInterface
+import g11.aiprocessingservice.services.RetryOutcome
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -27,25 +26,20 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.jwt.Jwt
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.CompletableFuture
 import kotlin.test.assertEquals
 
 class JobControllersTest {
-    private lateinit var jobRepository: JobRepository
-    private lateinit var metadataProcessor: MetadataProcessor
     private lateinit var failedJobService: FailedJobServiceInterface
     private lateinit var jobStatsService: JobStatsServiceInterface
-    private lateinit var fileAccessService: FileAccessService
+    private lateinit var jobStatusService: JobStatusServiceInterface
     private lateinit var controller: JobControllers
 
     @BeforeEach
     fun setup() {
-        jobRepository = mockk()
-        metadataProcessor = mockk()
         failedJobService = mockk()
         jobStatsService = mockk()
-        fileAccessService = mockk()
-        controller = JobControllers(metadataProcessor, jobRepository, failedJobService, jobStatsService, fileAccessService)
+        jobStatusService = mockk()
+        controller = JobControllers(failedJobService, jobStatsService, jobStatusService)
 
         // The controller reads the caller's JWT from the SecurityContext to resolve permissions.
         val jwt = Jwt.withTokenValue(USER_TOKEN).header("alg", "none").subject("user").build()
@@ -80,63 +74,34 @@ class JobControllersTest {
         verify { jobStatsService.getStats(since, USER_TOKEN) }
     }
 
-    private fun makeJob(
-        jobId: UUID,
-        fileId: UUID,
-        version: Long,
-        status: jobStatus,
-        attempts: UInt = 0u,
-        payload: Map<String, Any>? = null,
-    ) =
-        Job(
-            jobid = jobId,
-            fileid = fileId,
-            version = version,
-            type = "AI_METADATA",
-            attempts = attempts,
-            payload = payload,
-            status = status,
-        )
-
     @Test
-    fun `batch returns latest status per pair and omits pairs without a job`() {
+    fun `batch delegates to the service and returns its result`() {
         val fileA = UUID.randomUUID()
-        val fileB = UUID.randomUUID()
-        // Two jobs for (fileA, v1): the greater jobid wins, mirroring the single lookup.
-        val older = UUID(0, 1)
-        val newer = UUID(0, 2)
-        every { jobRepository.findByFileidIn(any()) } returns listOf(
-            makeJob(older, fileA, 1, jobStatus.PENDING),
-            makeJob(newer, fileA, 1, jobStatus.COMPLETED),
+        val keys = listOf(JobKeyDTO(fileA, 1))
+        val expected = listOf(
+            JobStatusResponseDTO(
+                jobId = UUID(0, 2),
+                fileId = fileA,
+                version = 1,
+                status = jobStatus.COMPLETED,
+            ),
         )
+        every { jobStatusService.getJobStatusBatch(keys) } returns expected
 
-        val response = controller.getJobStatusBatch(
-            listOf(JobKeyDTO(fileA, 1), JobKeyDTO(fileB, 1)),
-        )
+        val response = controller.getJobStatusBatch(keys)
 
-        val body = response.body!!
-        assertEquals(1, body.size) // fileB has no job → omitted
-        assertEquals(fileA, body[0].fileId)
-        assertEquals(1, body[0].version)
-        assertEquals(jobStatus.COMPLETED, body[0].status)
+        assertEquals(expected, response.body)
+        verify { jobStatusService.getJobStatusBatch(keys) }
     }
 
     @Test
-    fun `batch returns an empty list for an empty body without querying`() {
-        val response = controller.getJobStatusBatch(emptyList())
-
-        assertEquals(emptyList(), response.body)
-        verify(exactly = 0) { jobRepository.findByFileidIn(any()) }
-    }
-
-    @Test
-    fun `batch rejects an oversized request`() {
+    fun `batch rejects an oversized request without calling the service`() {
         val keys = (1..201).map { JobKeyDTO(UUID.randomUUID(), 1) }
 
         val response = controller.getJobStatusBatch(keys)
 
         assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
-        verify(exactly = 0) { jobRepository.findByFileidIn(any()) }
+        verify(exactly = 0) { jobStatusService.getJobStatusBatch(any()) }
     }
 
     @Test
@@ -176,66 +141,57 @@ class JobControllersTest {
     }
 
     @Test
-    fun `retry rejects a file the user cannot write and does not start processing`() {
+    fun `retry maps NO_WRITE_ACCESS to 403`() {
         val fileId = UUID.randomUUID()
         val res = mockk<HttpServletResponse>(relaxed = true)
-        every { fileAccessService.getWritableFileIds(listOf(fileId), USER_TOKEN) } returns emptySet()
+        every { failedJobService.retryFailedJob(fileId, 1, USER_TOKEN) } returns RetryOutcome.NO_WRITE_ACCESS
 
-        controller.retryFailedJob(fileId, version = 1, res = res, maxUserRetries = 4u)
+        controller.retryFailedJob(fileId, version = 1, res = res)
 
         verify { res.sendError(HttpServletResponse.SC_FORBIDDEN, any()) }
-        verify(exactly = 0) { jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(any(), any()) }
-        verify(exactly = 0) { metadataProcessor.retryFailedJobAsync(any()) }
     }
 
     @Test
-    fun `retry at the cap returns 403 and does not start processing`() {
+    fun `retry maps JOB_NOT_FOUND to 404`() {
         val fileId = UUID.randomUUID()
         val res = mockk<HttpServletResponse>(relaxed = true)
-        every { fileAccessService.getWritableFileIds(listOf(fileId), USER_TOKEN) } returns setOf(fileId)
-        // attempts == cap (4) → blocked: the 4 user retries are spent.
-        every {
-            jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, 1)
-        } returns makeJob(UUID(0, 9), fileId, 1, jobStatus.FAILED, attempts = 4u)
+        every { failedJobService.retryFailedJob(fileId, 1, USER_TOKEN) } returns RetryOutcome.JOB_NOT_FOUND
 
-        controller.retryFailedJob(fileId, version = 1, res = res, maxUserRetries = 4u)
+        controller.retryFailedJob(fileId, version = 1, res = res)
+
+        verify { res.sendError(HttpServletResponse.SC_NOT_FOUND, any()) }
+    }
+
+    @Test
+    fun `retry maps MAX_RETRIES_REACHED to 403`() {
+        val fileId = UUID.randomUUID()
+        val res = mockk<HttpServletResponse>(relaxed = true)
+        every { failedJobService.retryFailedJob(fileId, 1, USER_TOKEN) } returns RetryOutcome.MAX_RETRIES_REACHED
+
+        controller.retryFailedJob(fileId, version = 1, res = res)
 
         verify { res.sendError(HttpServletResponse.SC_FORBIDDEN, any()) }
-        verify(exactly = 0) { metadataProcessor.retryFailedJobAsync(any()) }
     }
 
     @Test
-    fun `retry accepts a writable failed job within the cap`() {
+    fun `retry maps NOT_FAILED to 409`() {
         val fileId = UUID.randomUUID()
-        val jobId = UUID(0, 7)
         val res = mockk<HttpServletResponse>(relaxed = true)
-        every { fileAccessService.getWritableFileIds(listOf(fileId), USER_TOKEN) } returns setOf(fileId)
-        every {
-            jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, 1)
-        } returns makeJob(jobId, fileId, 1, jobStatus.FAILED, attempts = 1u)
-        every { metadataProcessor.retryFailedJobAsync(jobId) } returns CompletableFuture.completedFuture(null)
+        every { failedJobService.retryFailedJob(fileId, 1, USER_TOKEN) } returns RetryOutcome.NOT_FAILED
 
-        controller.retryFailedJob(fileId, version = 1, res = res, maxUserRetries = 4u)
+        controller.retryFailedJob(fileId, version = 1, res = res)
 
-        verify { metadataProcessor.retryFailedJobAsync(jobId) }
-        verify { res.status = HttpServletResponse.SC_ACCEPTED }
+        verify { res.sendError(HttpServletResponse.SC_CONFLICT, any()) }
     }
 
     @Test
-    fun `retry at the last remaining attempt is accepted`() {
+    fun `retry maps ACCEPTED to 202`() {
         val fileId = UUID.randomUUID()
-        val jobId = UUID(0, 8)
         val res = mockk<HttpServletResponse>(relaxed = true)
-        every { fileAccessService.getWritableFileIds(listOf(fileId), USER_TOKEN) } returns setOf(fileId)
-        // attempts 3 < cap 4 → still allowed (this is the 4th and final user retry).
-        every {
-            jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, 1)
-        } returns makeJob(jobId, fileId, 1, jobStatus.FAILED, attempts = 3u)
-        every { metadataProcessor.retryFailedJobAsync(jobId) } returns CompletableFuture.completedFuture(null)
+        every { failedJobService.retryFailedJob(fileId, 1, USER_TOKEN) } returns RetryOutcome.ACCEPTED
 
-        controller.retryFailedJob(fileId, version = 1, res = res, maxUserRetries = 4u)
+        controller.retryFailedJob(fileId, version = 1, res = res)
 
-        verify { metadataProcessor.retryFailedJobAsync(jobId) }
         verify { res.status = HttpServletResponse.SC_ACCEPTED }
     }
 

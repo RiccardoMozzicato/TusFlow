@@ -1,10 +1,20 @@
 package g11.aiprocessingservice.services
 
 import g11.aiprocessingservice.dto.JobDTO
+import g11.aiprocessingservice.dto.JobKeyDTO
+import g11.aiprocessingservice.dto.JobStatusResponseDTO
 import g11.aiprocessingservice.dto.MetadataDTO
 import java.util.*
 
 interface JobStatusServiceInterface {
+
+    /**
+     * Current AI-job status for many (fileId, version) keys in one call, so the document library can
+     * flag each card. The latest job per key is selected (findFirst...OrderByJobidDesc semantics);
+     * keys without a job are omitted from the result (= "no AI job"). An empty input returns empty
+     * without querying.
+     */
+    fun getJobStatusBatch(keys: List<JobKeyDTO>): List<JobStatusResponseDTO>
 
     /**
      * Marks a job as COMPLETED with enhanced metadata from AI analysis.

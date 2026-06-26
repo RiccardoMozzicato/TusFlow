@@ -2,7 +2,9 @@ package g11.aiprocessingservice.services
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import g11.aiprocessingservice.dto.JobDTO
+import g11.aiprocessingservice.dto.JobKeyDTO
 import g11.aiprocessingservice.dto.JobStatusMessage
+import g11.aiprocessingservice.dto.JobStatusResponseDTO
 import g11.aiprocessingservice.dto.MetadataDTO
 import g11.aiprocessingservice.dto.jobStatus
 import g11.aiprocessingservice.entities.JobOutbox
@@ -26,6 +28,29 @@ class JobStatusService(
 ) : JobStatusServiceInterface {
     private val log = LoggerFactory.getLogger(JobStatusService::class.java)
     private val objectMapper = jacksonObjectMapper()
+
+
+    @Transactional(readOnly = true)
+    override fun getJobStatusBatch(keys: List<JobKeyDTO>): List<JobStatusResponseDTO> {
+        if (keys.isEmpty()) return emptyList()
+
+        // Latest job per (fileid, version), mirroring findFirst...OrderByJobidDesc.
+        val latestByKey = jobRepository.findByFileidIn(keys.map { it.fileId }.distinct())
+            .groupBy { it.fileid to it.version }
+            .mapValues { (_, jobs) -> jobs.maxBy { it.jobid } }
+
+        return keys.distinct().mapNotNull { key ->
+            latestByKey[key.fileId to key.version]?.let { job ->
+                JobStatusResponseDTO(
+                    jobId = job.jobid,
+                    fileId = job.fileid,
+                    version = job.version,
+                    status = job.status,
+                    payload = job.payload,
+                )
+            }
+        }
+    }
 
 
     @Transactional

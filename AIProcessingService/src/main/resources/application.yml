@@ -166,7 +166,7 @@ app:
       # Langfuse evaluation scores on RAG query traces (off by default; all best-effort/async).
       # relevance is cheap (mean source similarity); groundedness adds one LLM-judge call per query.
       # Reuses the OTLP Basic auth header; base-url is the Langfuse host (no /api path).
-      enabled: ${RAG_SCORING_ENABLED:true}
+      enabled: ${RAG_SCORING_ENABLED:false}
       relevance: ${RAG_SCORING_RELEVANCE:true}
       groundedness: ${RAG_SCORING_GROUNDEDNESS:true}
       langfuse-base-url: ${LANGFUSE_BASE_URL:https://cloud.langfuse.com}

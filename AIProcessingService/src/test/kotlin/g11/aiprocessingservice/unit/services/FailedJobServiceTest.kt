@@ -2,9 +2,14 @@ package g11.aiprocessingservice.unit.services
 
 import g11.aiprocessingservice.dto.jobStatus
 import g11.aiprocessingservice.entities.Job
+import g11.aiprocessingservice.exceptions.JobNotFailedException
+import g11.aiprocessingservice.exceptions.JobNotFoundException
 import g11.aiprocessingservice.repositories.JobRepository
+import g11.aiprocessingservice.services.AuthServiceInterface
 import g11.aiprocessingservice.services.FailedJobService
-import g11.aiprocessingservice.services.FileAccessService
+import g11.aiprocessingservice.services.FileAccessServiceInterface
+import g11.aiprocessingservice.services.MetadataProcessorInterface
+import g11.aiprocessingservice.services.RetryOutcome
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -14,13 +19,19 @@ import org.junit.jupiter.api.Test
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
+import org.springframework.web.client.RestClient
+import java.util.Optional
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class FailedJobServiceTest {
     private lateinit var jobRepository: JobRepository
-    private lateinit var fileAccessService: FileAccessService
+    private lateinit var fileAccessService: FileAccessServiceInterface
+    private lateinit var metadataProcessor: MetadataProcessorInterface
+    private lateinit var authService: AuthServiceInterface
+    private lateinit var fileServiceClient: RestClient
     private lateinit var service: FailedJobService
 
     private val token = "user-jwt"
@@ -29,7 +40,17 @@ class FailedJobServiceTest {
     fun setup() {
         jobRepository = mockk()
         fileAccessService = mockk()
-        service = FailedJobService(jobRepository, fileAccessService, maxUserRetries = 4)
+        metadataProcessor = mockk(relaxed = true)
+        authService = mockk()
+        fileServiceClient = mockk()
+        service = FailedJobService(
+            jobRepository,
+            fileAccessService,
+            metadataProcessor,
+            authService,
+            fileServiceClient,
+            maxUserRetries = 4,
+        )
     }
 
     private fun makeJob(
@@ -38,6 +59,7 @@ class FailedJobServiceTest {
         version: Long,
         attempts: UInt = 0u,
         payload: Map<String, Any>? = null,
+        status: jobStatus = jobStatus.FAILED,
     ) = Job(
         jobid = jobId,
         fileid = fileId,
@@ -45,7 +67,7 @@ class FailedJobServiceTest {
         type = "AI_METADATA",
         attempts = attempts,
         payload = payload,
-        status = jobStatus.FAILED,
+        status = status,
     )
 
     @Test
@@ -134,5 +156,90 @@ class FailedJobServiceTest {
         verify(exactly = 0) {
             jobRepository.findByStatusAndFileidInOrderByUpdatedAtDesc(any(), any(), any())
         }
+    }
+
+    @Test
+    fun `retry rejects a file the user cannot write and does not start processing`() {
+        val fileId = UUID.randomUUID()
+        every { fileAccessService.getWritableFileIds(listOf(fileId), token) } returns emptySet()
+
+        val outcome = service.retryFailedJob(fileId, version = 1, userToken = token)
+
+        assertEquals(RetryOutcome.NO_WRITE_ACCESS, outcome)
+        verify(exactly = 0) { jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(any(), any()) }
+        verify(exactly = 0) { metadataProcessor.retryFailedJobAsync(any()) }
+    }
+
+    @Test
+    fun `retry returns not found when no job exists for the pair`() {
+        val fileId = UUID.randomUUID()
+        every { fileAccessService.getWritableFileIds(listOf(fileId), token) } returns setOf(fileId)
+        every { jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, 1) } returns null
+
+        val outcome = service.retryFailedJob(fileId, version = 1, userToken = token)
+
+        assertEquals(RetryOutcome.JOB_NOT_FOUND, outcome)
+        verify(exactly = 0) { metadataProcessor.retryFailedJobAsync(any()) }
+    }
+
+    @Test
+    fun `retry at the cap is blocked and does not start processing`() {
+        val fileId = UUID.randomUUID()
+        every { fileAccessService.getWritableFileIds(listOf(fileId), token) } returns setOf(fileId)
+        // attempts == cap (4) → blocked: the 4 user retries are spent.
+        every {
+            jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, 1)
+        } returns makeJob(UUID(0, 9), fileId, 1, attempts = 4u)
+
+        val outcome = service.retryFailedJob(fileId, version = 1, userToken = token)
+
+        assertEquals(RetryOutcome.MAX_RETRIES_REACHED, outcome)
+        verify(exactly = 0) { metadataProcessor.retryFailedJobAsync(any()) }
+    }
+
+    @Test
+    fun `retry rejects a job that is not failed`() {
+        val fileId = UUID.randomUUID()
+        every { fileAccessService.getWritableFileIds(listOf(fileId), token) } returns setOf(fileId)
+        every {
+            jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, 1)
+        } returns makeJob(UUID(0, 9), fileId, 1, attempts = 1u, status = jobStatus.COMPLETED)
+
+        val outcome = service.retryFailedJob(fileId, version = 1, userToken = token)
+
+        assertEquals(RetryOutcome.NOT_FAILED, outcome)
+        verify(exactly = 0) { metadataProcessor.retryFailedJobAsync(any()) }
+    }
+
+    @Test
+    fun `retry accepts a writable failed job within the cap and starts processing`() {
+        val fileId = UUID.randomUUID()
+        val jobId = UUID(0, 7)
+        every { fileAccessService.getWritableFileIds(listOf(fileId), token) } returns setOf(fileId)
+        every {
+            jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, 1)
+        } returns makeJob(jobId, fileId, 1, attempts = 1u)
+
+        val outcome = service.retryFailedJob(fileId, version = 1, userToken = token)
+
+        assertEquals(RetryOutcome.ACCEPTED, outcome)
+        verify { metadataProcessor.retryFailedJobAsync(jobId) }
+    }
+
+    @Test
+    fun `prepareRetry throws when the job does not exist`() {
+        val jobId = UUID.randomUUID()
+        every { jobRepository.findById(jobId) } returns Optional.empty()
+
+        assertFailsWith<JobNotFoundException> { service.prepareRetry(jobId) }
+    }
+
+    @Test
+    fun `prepareRetry throws when the job is not failed`() {
+        val jobId = UUID.randomUUID()
+        every { jobRepository.findById(jobId) } returns
+            Optional.of(makeJob(jobId, UUID.randomUUID(), 1, status = jobStatus.PENDING))
+
+        assertFailsWith<JobNotFailedException> { service.prepareRetry(jobId) }
     }
 }

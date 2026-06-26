@@ -68,13 +68,13 @@ class MetadataProcessor(
     @Value("\${ai.retry.analysis-backoff-cap-ms:5000}") private val analysisBackoffCapMs: Long,
     @Value("\${ai.retry.max-user-retries:4}") private val maxUserRetries: Int,
     @Value("\${ai.retry.simulate-llm-offline:false}") private val simulateLlmOffline: Boolean,
-    private val retryJobService: RetryJobService,
+    private val failedJobService: FailedJobServiceInterface,
     private val textExtractionService: TextExtractionService,
     private val supportedContentTypes: SupportedContentTypes,
     private val pipelineTracing: g11.aiprocessingservice.tracing.PipelineTracing,
     private val analysisMetrics: AnalysisMetrics,
     private val pipelineMetrics: PipelineMetrics,
-) : KafkaInterface {
+) : KafkaInterface, MetadataProcessorInterface {
     private val log = LoggerFactory.getLogger(g11.aiprocessingservice.services.MetadataProcessor::class.java)
     private val objectMapper = jacksonObjectMapper()
 
@@ -210,7 +210,7 @@ class MetadataProcessor(
             log.error("Failed to process job {}: {}", jobId, e.message, e)
 
             // Terminal check. `attempts` counts user retries only (incremented in
-            // RetryJobService.prepareRetry). Once the user has spent all of them, dead-letter the
+            // FailedJobService.prepareRetry). Once the user has spent all of them, dead-letter the
             // job (audit row + terminal DEAD_LETTERED status); otherwise mark it FAILED so it stays
             // in the retryable failed-jobs list. The automatic Kafka path never increments attempts,
             // so it always takes the FAILED branch — its retry routing is owned by @RetryableTopic.
@@ -226,8 +226,8 @@ class MetadataProcessor(
 
 
     @Async
-    fun retryFailedJobAsync(jobId: UUID): CompletableFuture<Void> {
-        val jobDto = retryJobService.prepareRetry(jobId)
+    override fun retryFailedJobAsync(jobId: UUID): CompletableFuture<Void> {
+        val jobDto = failedJobService.prepareRetry(jobId)
         // prepareRetry reset the job to PENDING; mirror that onto the live channel so the Failed Jobs
         // row (and any open Library/Dashboard view) shows it back "in progress" right away.
         jobStatusService.notifyJobPending(jobDto)
