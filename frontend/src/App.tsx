@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
+import {useEffect, useState} from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { useAppDispatch } from '@/app/hooks'
-import { loadCurrentUser } from '@/features/auth/authSlice'
+import {useAppDispatch, useAppSelector} from '@/app/hooks'
+import {loadCurrentUser, selectCurrentUser} from '@/features/auth/authSlice'
 import { useSessionHeartbeat } from '@/features/health/useSessionHeartbeat'
 import { useJobsRealtime } from '@/features/realtime/useJobsRealtime'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -18,9 +18,13 @@ import ProfilePage from '@/pages/ProfilePage'
 import AdminPage from '@/pages/AdminPage'
 import UserManagementPage from '@/pages/UserManagementPage'
 import { ROLES } from '@/features/profile/roles'
+import {getCurrentUser, type UserDTO} from "@/features/users/usersApi.ts";
 
 export default function App() {
   const dispatch = useAppDispatch()
+  const user = useAppSelector(selectCurrentUser)
+  const [userDTO, setUserDTO] = useState<UserDTO | null>(null)
+  const [updateUserDTO, setUpdateUserDTO] = useState<boolean>(true)
 
   // Bootstrap auth once on mount: ask the gateway who the user is.
   useEffect(() => {
@@ -30,6 +34,18 @@ export default function App() {
   // Periodically probe the gateway while authenticated: detects session expiry
   // (→ redirect to login) and backend reachability (→ status indicator).
   useSessionHeartbeat()
+
+  useEffect(() => {
+    async function retrieveCurrentUser() {
+        setUpdateUserDTO(false)
+        return await getCurrentUser()
+    }
+
+    if(updateUserDTO) {
+        retrieveCurrentUser().then(user => setUserDTO(user))
+    }
+
+  }, [updateUserDTO]);
 
   // Open the live jobs socket once authenticated; mirrors AI outcomes onto the
   // documents slice so the Library updates without a refetch.
@@ -43,7 +59,7 @@ export default function App() {
         <Route
           element={
             <ProtectedRoute>
-              <AppLayout />
+              <AppLayout displayName={userDTO?.fullName || user?.username || 'unknown user' } />
             </ProtectedRoute>
           }
         >
@@ -54,12 +70,12 @@ export default function App() {
           <Route path="upload" element={<UploadPage />} />
           <Route path="shared" element={<SharedWithMePage />} />
           <Route path="favorites" element={<FavoritesPage />} />
-          <Route path="profile" element={<ProfilePage />} />
+          <Route path="profile" element={<ProfilePage updateUser={() => setUpdateUserDTO(true)} />} />
           <Route
             path="admin"
             element={
               <RequireRole role={ROLES.admin}>
-                <AdminPage />
+                <AdminPage updateUser={() => setUpdateUserDTO(true)} />
               </RequireRole>
             }
           />

@@ -1,5 +1,6 @@
 package it.polito.wa2.userdetailservice.controllers
 
+import it.polito.wa2.userdetailservice.exceptions.AvatarTypeUnsupported
 import it.polito.wa2.userdetailservice.exceptions.SelfDeletionNotAllowedException
 import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
@@ -58,6 +59,14 @@ class GlobalExceptionHandler: ResponseEntityExceptionHandler() {
     fun handleStorageQuotaBelowUsed(exception: StorageQuotaBelowUsedException): ProblemDetail {
         val problem = ProblemDetail.forStatus(HttpStatus.CONFLICT)
         problem.title = "Storage Quota Conflict"
+        problem.detail = exception.message
+        return problem
+    }
+
+    @ExceptionHandler(AvatarTypeUnsupported::class)
+    fun handleAvatarTypeUnsupported(exception: AvatarTypeUnsupported): ProblemDetail {
+        val problem = ProblemDetail.forStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+        problem.title = "Unsupported avatar type"
         problem.detail = exception.message
         return problem
     }

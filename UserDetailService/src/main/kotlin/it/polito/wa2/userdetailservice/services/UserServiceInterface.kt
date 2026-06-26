@@ -1,5 +1,7 @@
 package it.polito.wa2.userdetailservice.services
 
+import it.polito.wa2.userdetailservice.dto.AvatarContentDTO
+import it.polito.wa2.userdetailservice.dto.AvatarDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
@@ -13,6 +15,8 @@ interface UserServiceInterface {
     fun getUsersBatch(ids: List<UUID>): Map<UUID, UserDTO>
     fun createUser(user: UserCreationDTO)
     fun updateUser(user: UserDTO)
+    fun updateAvatar(userId: String, avatar: AvatarDTO)
+    fun getAvatarContent(userId: UUID): AvatarContentDTO?
+    fun deleteAvatar(userId: String)
     fun deleteUser(id: UUID)
-
 }

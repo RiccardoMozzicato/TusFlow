@@ -5,6 +5,7 @@ import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import it.polito.wa2.userdetailservice.dto.AvatarContentDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
@@ -16,6 +17,7 @@ import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import it.polito.wa2.userdetailservice.repositories.UserRepository
 import it.polito.wa2.userdetailservice.services.UserService
+import it.polito.wa2.userdetailservice.services.minioServiceInterface
 import jakarta.ws.rs.core.Response
 import junit.framework.TestCase
 import org.junit.jupiter.api.Assertions
@@ -40,6 +42,7 @@ import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContext
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.jwt.Jwt
+import java.io.ByteArrayInputStream
 import java.net.URI
 import java.time.Instant
 import java.util.Date
@@ -51,6 +54,7 @@ import kotlin.test.assertEquals
 class UserServiceTest {
     private lateinit var userRepo: UserRepository
     private lateinit var keycloak: Keycloak
+    private lateinit var minioService: minioServiceInterface
     private lateinit var userService: UserService
 
     private val users: List<User> = listOf(
@@ -82,7 +86,8 @@ class UserServiceTest {
     fun setup() {
         userRepo = mockk()
         keycloak = mockk()
-        userService = UserService(userRepo, "file-management", keycloak)
+        minioService = mockk()
+        userService = UserService(userRepo, minioService, "file-management", keycloak)
     }
 
     // Wires up a SecurityContext for the org-scoped (non-service-account) path,
@@ -97,6 +102,19 @@ class UserServiceTest {
         every { jwt.subject } returns authenticatedUserId.toString()
         SecurityContextHolder.setContext(securityContext)
         every { userRepo.findById(authenticatedUserId) } returns Optional.of(authenticatedUser)
+    }
+
+    // updateUser() syncs name/email back to Keycloak; stub that chain so the
+    // success-path tests don't fall into the "Error updating user" catch block.
+    private fun mockKeycloakUserUpdate(userId: UUID) {
+        val realmResource = mockk<RealmResource>()
+        val usersResource = mockk<UsersResource>()
+        val userResource = mockk<UserResource>()
+        every { keycloak.realm(any()) } returns realmResource
+        every { realmResource.users() } returns usersResource
+        every { usersResource.get(userId.toString()) } returns userResource
+        every { userResource.toRepresentation() } returns UserRepresentation()
+        justRun { userResource.update(any()) }
     }
 
     @Test
@@ -501,6 +519,8 @@ class UserServiceTest {
         every { userRepo.findById(userId) } returns Optional.of(existingUser)
         every { userRepo.getUserByEmail("john.smith@gmail.com") } returns Optional.empty()
 
+        mockKeycloakUserUpdate(userId)
+
         // act
         userService.updateUser(updatedUserDTO)
 
@@ -542,6 +562,8 @@ class UserServiceTest {
         )
 
         every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        mockKeycloakUserUpdate(userId)
 
         // act
         userService.updateUser(updatedUserDTO)
@@ -663,6 +685,8 @@ class UserServiceTest {
 
         every { userRepo.findById(userId) } returns Optional.of(existingUser)
 
+        mockKeycloakUserUpdate(userId)
+
         // act
         userService.updateUser(updatedUserDTO)
 
@@ -743,6 +767,8 @@ class UserServiceTest {
 
         every { userRepo.findById(userId) } returns Optional.of(existingUser)
 
+        mockKeycloakUserUpdate(userId)
+
         // act
         userService.updateUser(updatedUserDTO)
 
@@ -778,6 +804,8 @@ class UserServiceTest {
         )
 
         every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        mockKeycloakUserUpdate(userId)
 
         // act
         userService.updateUser(updatedUserDTO)
@@ -1033,5 +1061,70 @@ class UserServiceTest {
         verify { userRepo.deleteById(userId) }
         verify { userResource.remove() }
         verify(exactly = 1) { userRepo.save(userToDelete) } // Rollback attempted
+    }
+
+    @Test
+    fun `getAvatarContent() - returns null when user has no avatar`() {
+        // arrange
+        val userId = users[0].id
+        val user = users[0].apply { imageObjectKey = null }
+        every { userRepo.findById(userId) } returns Optional.of(user)
+
+        // act
+        val result = userService.getAvatarContent(userId)
+
+        // assert
+        assertEquals(null, result)
+        verify(exactly = 0) { minioService.getAvatar(any()) }
+    }
+
+    @Test
+    fun `getAvatarContent() - delegates to minio when avatar is set`() {
+        // arrange
+        val userId = users[0].id
+        val objectKey = "$userId/avatar.webp"
+        val user = users[0].apply { imageObjectKey = objectKey }
+        val expected = AvatarContentDTO(ByteArrayInputStream(byteArrayOf(1, 2)), "image/webp", "etag")
+        every { userRepo.findById(userId) } returns Optional.of(user)
+        every { minioService.getAvatar(objectKey) } returns expected
+
+        // act
+        val result = userService.getAvatarContent(userId)
+
+        // assert
+        assertEquals(expected, result)
+        verify(exactly = 1) { minioService.getAvatar(objectKey) }
+    }
+
+    @Test
+    fun `deleteAvatar() - removes object and clears key`() {
+        // arrange
+        val userId = users[1].id
+        val objectKey = "$userId/avatar.webp"
+        val user = users[1].apply { imageObjectKey = objectKey }
+        every { userRepo.findById(userId) } returns Optional.of(user)
+        justRun { minioService.removeAvatar(objectKey) }
+
+        // act
+        userService.deleteAvatar(userId.toString())
+
+        // assert
+        assertEquals(null, user.imageObjectKey)
+        verify(exactly = 1) { minioService.removeAvatar(objectKey) }
+    }
+
+    @Test
+    fun `deleteAvatar() - no-op on minio when no avatar set`() {
+        // arrange
+        val userId = users[1].id
+        val user = users[1].apply { imageObjectKey = null }
+        every { userRepo.findById(userId) } returns Optional.of(user)
+
+        // act
+        userService.deleteAvatar(userId.toString())
+
+        // assert
+        assertEquals(null, user.imageObjectKey)
+        verify(exactly = 0) { minioService.removeAvatar(any()) }
     }
 }

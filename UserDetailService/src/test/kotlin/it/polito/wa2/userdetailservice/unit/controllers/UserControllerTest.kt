@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.verify
 import it.polito.wa2.userdetailservice.controllers.UserController
+import it.polito.wa2.userdetailservice.dto.AvatarContentDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
@@ -24,6 +25,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
+import java.io.ByteArrayInputStream
 import java.util.UUID
 
 /**
@@ -551,5 +553,62 @@ class UserControllerTest {
             .andExpect(status().isNotFound)
 
         verify(exactly = 1) { userService.deleteUser(userId) }
+    }
+
+    // GET /api/v1/users/{id}/avatar tests
+    @Test
+    @WithMockUser(roles = ["staff"])
+    fun `getUserAvatar - streams image bytes with content type`() {
+        // arrange
+        val userId = UUID.randomUUID()
+        val bytes = byteArrayOf(1, 2, 3, 4)
+        every { userService.getAvatarContent(userId) } returns
+            AvatarContentDTO(ByteArrayInputStream(bytes), "image/webp", "abc123")
+
+        // act & assert
+        mockMvc.perform(get("/api/v1/users/$userId/avatar"))
+            .andExpect(status().isOk)
+            .andExpect(content().contentTypeCompatibleWith("image/webp"))
+            .andExpect(header().string("ETag", "\"abc123\""))
+            .andExpect(content().bytes(bytes))
+
+        verify(exactly = 1) { userService.getAvatarContent(userId) }
+    }
+
+    @Test
+    @WithMockUser(roles = ["staff"])
+    fun `getUserAvatar - 404 when no avatar set`() {
+        // arrange
+        val userId = UUID.randomUUID()
+        every { userService.getAvatarContent(userId) } returns null
+
+        // act & assert
+        mockMvc.perform(get("/api/v1/users/$userId/avatar"))
+            .andExpect(status().isNotFound)
+
+        verify(exactly = 1) { userService.getAvatarContent(userId) }
+    }
+
+    @Test
+    fun `getUserAvatar - unauthorized without authentication`() {
+        // act & assert
+        mockMvc.perform(get("/api/v1/users/${UUID.randomUUID()}/avatar"))
+            .andExpect(status().isUnauthorized)
+
+        verify(exactly = 0) { userService.getAvatarContent(any()) }
+    }
+
+    // DELETE /api/v1/users/me/avatar tests
+    @Test
+    @WithMockUser(roles = ["staff"])
+    fun `deleteUserAvatar - successful removal returns 204`() {
+        // arrange
+        justRun { userService.deleteAvatar(any()) }
+
+        // act & assert
+        mockMvc.perform(delete("/api/v1/users/me/avatar").with(csrf()))
+            .andExpect(status().isNoContent)
+
+        verify(exactly = 1) { userService.deleteAvatar(any()) }
     }
 }

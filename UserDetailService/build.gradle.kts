@@ -40,6 +40,9 @@ dependencies {
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
 
+    // minio
+    implementation("io.minio:minio-admin:8.5.7")
+
     // security
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
     implementation("org.springframework.boot:spring-boot-starter-security")
@@ -61,6 +64,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
+    testImplementation("org.testcontainers:minio")
     testImplementation("com.github.dasniko:testcontainers-keycloak:3.6.0")
     testImplementation("io.jsonwebtoken:jjwt-api:0.12.3")
     testRuntimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")

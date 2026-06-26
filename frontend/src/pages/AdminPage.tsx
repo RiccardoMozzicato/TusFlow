@@ -5,15 +5,15 @@ import { ROLE_BADGE_CLASSES, ROLE_LABELS, ROLES } from '@/features/profile/roles
 import ProfileHeader from '@/features/profile/components/ProfileHeader'
 import SystemOverview from '@/features/profile/components/SystemOverview'
 import ManagementLinks from '@/features/profile/components/ManagementLinks'
-import AdminActionsTable from '@/features/profile/components/AdminActionsTable'
 import OverviewModal from '@/features/profile/components/OverviewModal'
 import UsersOverviewList from '@/features/profile/components/UsersOverviewList'
 import DepartmentsOverviewList from '@/features/profile/components/DepartmentsOverviewList'
 import { buildOverviewStats, buildStorageInfo } from '@/features/profile/adminOverview'
-import { ADMIN_ACTIONS, MANAGEMENT_LINKS } from '@/features/profile/mockData'
+import { MANAGEMENT_LINKS } from '@/features/profile/mockData'
 import { useOrgStats } from '@/features/users/useOrgStats'
 
 type OverviewDetail = 'users' | 'departments' | null
+const USER_MANAGEMENT_LINKS = MANAGEMENT_LINKS.filter((link) => link.to === '/admin/users')
 
 // Renders the organization overview, swapping between loading / error / data.
 // The Total Users and Departments tiles open a detail list modal.
@@ -78,27 +78,40 @@ function OverviewSection() {
   )
 }
 
+interface AdminPageProps {
+  updateUser: () => void
+}
+
 // Full admin console. Reachable only via the role-gated /admin route, so the
 // current user is guaranteed to hold the admin role.
-export default function AdminPage() {
+export default function AdminPage({ updateUser }: AdminPageProps) {
   const user = useAppSelector(selectCurrentUser)
-  const displayName = user?.fullName || user?.username || 'Administrator'
+  const [showProfileModal, setShowProfileModal] = useState(false)
+
+  const toggleShowProfileModal = () => {
+    setShowProfileModal((current) => !current)
+  }
+
+  if (!user) return null
 
   return (
     <div className="mx-auto max-w-[1160px] space-y-8">
       <ProfileHeader
-        name={displayName}
+        user={user}
+        showProfileModal={showProfileModal}
+        toggleShowProfileModal={toggleShowProfileModal}
+        updateUser={updateUser}
         roleLabel={ROLE_LABELS[ROLES.admin]}
         roleBadgeClassName={ROLE_BADGE_CLASSES[ROLES.admin]}
-        department={user?.department ?? ''}
-        email={user?.email ?? ''}
-        organization={user?.organization}
+        department={user.department ?? ''}
+        organization={user.organization}
         actions={
           <button
             type="button"
-            className="rounded-ds-lg bg-ds-primary px-6 py-3 font-ds-label text-ds-label-md text-ds-on-primary transition-opacity hover:opacity-90"
+            onClick={toggleShowProfileModal}
+            className="rounded-ds-lg border border-ds-outline px-6 py-3 font-ds-label text-ds-label-md text-ds-primary transition-colors hover:bg-ds-surface-container"
           >
-            System Settings
+            Edit Profile
           </button>
         }
       />
@@ -107,10 +120,8 @@ export default function AdminPage() {
         <div className="space-y-6 lg:col-span-2">
           <OverviewSection />
         </div>
-        <ManagementLinks links={MANAGEMENT_LINKS} />
+        <ManagementLinks links={USER_MANAGEMENT_LINKS} />
       </div>
-
-      <AdminActionsTable actions={ADMIN_ACTIONS} />
     </div>
   )
 }

@@ -69,6 +69,7 @@ export default function UserFormModal({
       ? (user!.role as UserRole)
       : 'ROLE_staff',
   )
+
   // Pick a sensible unit for an existing quota, then express the value in it.
   const initialUnit = bestUnitFor(user?.storageQuota)
   const [quotaUnit, setQuotaUnit] = useState<StorageUnit>(initialUnit)

@@ -8,6 +8,7 @@ import org.springframework.boot.test.util.TestPropertyValues
 import org.springframework.context.ApplicationContextInitializer
 import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.test.context.ContextConfiguration
+import org.testcontainers.containers.MinIOContainer
 import org.testcontainers.containers.PostgreSQLContainer
 
 private const val REALM_FILE = "keycloak/file-management-realm.json"
@@ -19,6 +20,10 @@ data class RealmUser(val username: String, val password: String)
 abstract class IntegrationTest {
     companion object {
         private val db = PostgreSQLContainer<Nothing>("postgres:15")
+
+        // minioService eagerly checks/creates its bucket in an init block on
+        // startup, so the context can't load without a reachable MinIO.
+        private val minio = MinIOContainer("minio/minio:RELEASE.2024-01-16T16-07-38Z")
 
         val keycloakContainer: KeycloakContainer = KeycloakContainer("quay.io/keycloak/keycloak:26.4")
             .withRealmImportFile(REALM_FILE)
@@ -52,6 +57,7 @@ abstract class IntegrationTest {
         override fun initialize(applicationContext: ConfigurableApplicationContext) {
             db.start()
             keycloakContainer.start()
+            minio.start()
             val keycloakBaseUrl = keycloakContainer.authServerUrl.trimEnd('/')
             TestPropertyValues.of(
                 "spring.datasource.url=${db.jdbcUrl}",
@@ -61,6 +67,9 @@ abstract class IntegrationTest {
                 "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=$keycloakBaseUrl/realms/$realmName/protocol/openid-connect/certs",
                 "spring.security.oauth2.resourceserver.jwt.issuer-uri=$keycloakBaseUrl/realms/$realmName",
                 "spring.security.oauth2.client.provider.keycloak.issuer-uri=$keycloakBaseUrl/realms/$realmName",
+                "minio.url=${minio.s3URL}",
+                "minio.access-key=${minio.userName}",
+                "minio.secret-key=${minio.password}",
             ).applyTo(applicationContext.environment)
         }
     }

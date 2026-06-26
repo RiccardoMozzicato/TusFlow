@@ -70,11 +70,14 @@ function renderNavItem(item: NavItem, collapsed: boolean) {
   )
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+  displayName: string
+}
+
+export default function Sidebar({ displayName }: SidebarProps) {
   const dispatch = useAppDispatch()
   const collapsed = useAppSelector(selectSidebarCollapsed)
   const user = useAppSelector(selectCurrentUser)
-  const displayName = user?.fullName || user?.username || 'Unknown user'
   // Show the most-privileged role the user holds, not whatever Keycloak happens
   // to list first (which could read "manager" for an admin).
   const role = ROLE_LABELS[highestRole(user?.roles)]
@@ -134,9 +137,11 @@ export default function Sidebar() {
             <Link
               to="/profile"
               title={`${displayName} — view profile`}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-ds-full bg-ds-primary font-ds-label text-ds-label-md font-bold text-ds-on-primary transition-opacity hover:opacity-80"
+              className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-ds-full bg-ds-primary font-ds-label text-ds-label-md font-bold text-ds-on-primary transition-opacity hover:opacity-80"
             >
-              {initialsOf(displayName)}
+              {user?.photoProfileUrl
+                ? <img src={user.photoProfileUrl} alt={displayName} className="h-full w-full object-cover" />
+                : initialsOf(displayName)}
             </Link>
             <button
               type="button"
@@ -155,8 +160,10 @@ export default function Sidebar() {
               className="flex min-w-0 flex-grow items-center gap-3 rounded-ds-lg transition-colors hover:opacity-80"
               title="View profile"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-ds-full bg-ds-primary font-ds-label text-ds-label-md font-bold text-ds-on-primary">
-                {initialsOf(displayName)}
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-ds-full bg-ds-primary font-ds-label text-ds-label-md font-bold text-ds-on-primary">
+                {user?.photoProfileUrl
+                  ? <img src={user.photoProfileUrl} alt={displayName} className="h-full w-full object-cover" />
+                  : initialsOf(displayName)}
               </div>
               <div className="flex min-w-0 flex-col">
                 <span className="truncate font-ds-label text-ds-label-md font-bold text-ds-on-surface">

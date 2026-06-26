@@ -66,3 +66,8 @@ management:
       percentiles-histogram:
         http.server.requests: true
 
+minio:
+  url: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  users-bucket: users

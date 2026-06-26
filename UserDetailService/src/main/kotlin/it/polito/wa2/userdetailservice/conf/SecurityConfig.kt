@@ -47,6 +47,9 @@
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/v1/users/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users", "/api/v1/users/").hasAnyRole("admin", "manager", "staff", "serviceaccount-fileservice")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/me/avatar").hasAnyRole("admin", "manager", "staff")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/users/me/avatar").hasAnyRole("admin", "manager", "staff")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/*/avatar").hasAnyRole("admin", "manager", "staff")
                         .requestMatchers("/api/v1/users/**").hasAnyRole("admin", "serviceaccount-fileservice")
                         .anyRequest().authenticated()
                 }.oauth2ResourceServer {

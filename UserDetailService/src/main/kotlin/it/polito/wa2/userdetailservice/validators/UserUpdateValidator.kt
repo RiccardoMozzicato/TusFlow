@@ -23,7 +23,7 @@ class UserUpdateValidator: ConstraintValidator<UserUpdateValidation, UserDTO> {
             return false
         }
 
-        val nullableAllowed = listOf("department", "storageQuota")
+        val nullableAllowed = listOf("department", "storageQuota", "photoProfileUrl")
 
         for(property in value::class.memberProperties) {
             if(property.name !in nullableAllowed && property.call(value) == null){

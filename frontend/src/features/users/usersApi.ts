@@ -1,7 +1,8 @@
 import { http } from '@/api/axios'
-import { API } from '@/config'
+import {API, XSRF_COOKIE_NAME} from '@/config'
 import type { PageResponse } from '@/features/documents/documentsApi'
 import type { UserRole } from './userRoles'
+import {getCookie} from "@/lib/cookies.ts";
 
 // Shape returned by GET /api/v1/users/me (UserDetailService UserDTO).
 export interface UserDTO {
@@ -15,7 +16,9 @@ export interface UserDTO {
   /** Storage quota in bytes; null/absent means no quota (unlimited). */
   storageQuota?: number | null
   /** Bytes currently used. */
-  storageUsed?: number
+  storageUsed?: number,
+  /** Gateway-relative avatar path served by the backend (MinIO stays internal); null/absent when unset. */
+  photoProfileUrl?: string | null
 }
 
 // Body for POST /api/v1/users (UserDetailService UserCreationDTO). The full name
@@ -99,4 +102,31 @@ export async function updateUser(user: UserDTO): Promise<void> {
 /** Deletes a user by id (admin only). */
 export async function deleteUser(id: string): Promise<void> {
   await http.delete(`${API.users}/${id}`)
+}
+
+/** Uploads a new avatar for the current user (multipart). Needs the CSRF token. */
+export async function updatePhotoProfile(file: File): Promise<void> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const headers: Record<string, string> = { 'Content-Type': 'multipart/form-data' }
+    const xsrfToken = getCookie(XSRF_COOKIE_NAME)
+    if (xsrfToken) headers['X-XSRF-TOKEN'] = xsrfToken
+
+    await http.post(`${API.users}/me/avatar`, formData, {
+        withCredentials: true,
+        headers
+    })
+}
+
+/** Removes the current user's avatar (clears the MinIO object + key). Needs CSRF. */
+export async function deletePhotoProfile(): Promise<void> {
+    const headers: Record<string, string> = {}
+    const xsrfToken = getCookie(XSRF_COOKIE_NAME)
+    if (xsrfToken) headers['X-XSRF-TOKEN'] = xsrfToken
+
+    await http.delete(`${API.users}/me/avatar`, {
+        withCredentials: true,
+        headers,
+    })
 }
