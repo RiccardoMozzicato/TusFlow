@@ -110,6 +110,9 @@ class KafkaListenerTest : IntegrationTest() {
         justRun { jobStatusService.markJobAsFailed(any(), any(), any()) }
         justRun { jobStatusService.markJobAsCompleted(any(), any(), any()) }
         justRun { jobStatusService.markJobAsUnsupported(any(), any(), any()) }
+        // Non-terminal live pings emitted while a job is queued / analysis starts.
+        justRun { jobStatusService.notifyJobPending(any()) }
+        justRun { jobStatusService.notifyJobProcessing(any()) }
 
         // Mock per i ChatClient AI - crea un oggetto MetadataDTO valido
         val mockMetadata = g11.aiprocessingservice.dto.MetadataDTO(

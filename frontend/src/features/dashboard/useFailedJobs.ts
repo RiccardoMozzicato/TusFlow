@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isAxiosError } from 'axios'
 import { getFailedJobs, retryJob, type FailedJob } from '@/features/documents/jobsApi'
-import { onJobUpdate, type JobUpdateStatus } from '@/features/realtime/jobsSocket'
+import { isTerminalJobStatus, onJobUpdate, type TerminalJobStatus } from '@/features/realtime/jobsSocket'
 
 // Per-job retry lifecycle, tracked separately from the list so a retry never
 // mutates the loaded jobs in place.
@@ -56,7 +56,7 @@ function retryErrorMessage(error: unknown): string {
 }
 
 // Translates a terminal job status into the row's RetryState.
-function retryStateFromStatus(status: JobUpdateStatus): RetryState {
+function retryStateFromStatus(status: TerminalJobStatus): RetryState {
   switch (status) {
     case 'completed':
       return { status: 'succeeded' }
@@ -198,6 +198,9 @@ export function useFailedJobs(): FailedJobsData {
           const unsubscribe = onJobUpdate((update) => {
             if (!isMountedRef.current) return
             if (update.fileId !== job.fileId || update.version !== job.version) return
+            // Ignore the non-terminal pending/processing pings: the row stays
+            // 'reprocessing' until this retry reaches its terminal outcome.
+            if (!isTerminalJobStatus(update.status)) return
             const next = retryStateFromStatus(update.status)
             closeStream(job.jobId)
             setRetryStates((prev) => ({ ...prev, [job.jobId]: next }))

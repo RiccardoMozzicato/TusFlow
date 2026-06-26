@@ -5,6 +5,7 @@ import { selectSidebarCollapsed, toggleSidebar } from '@/features/ui/uiSlice'
 import { isAdmin, highestRole, ROLE_LABELS } from '@/features/profile/roles'
 import { LOGOUT_URL } from '@/config'
 import Icon from '@/components/Icon'
+import ServiceStatusIndicator from '@/components/ServiceStatusIndicator'
 import { initialsOf } from '@/lib/initials'
 
 interface NavItem {
@@ -130,6 +131,7 @@ export default function Sidebar({ displayName }: SidebarProps) {
 
       <div className="mt-auto flex flex-col gap-3">
         {isAdmin(user?.roles) && renderNavItem(ADMIN_NAV_ITEM, collapsed)}
+        <ServiceStatusIndicator collapsed={collapsed} />
         {collapsed ? (
           <div className="flex flex-col items-center gap-3">
             <Link

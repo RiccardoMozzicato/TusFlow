@@ -2,16 +2,24 @@ import { Client, type IMessage } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 
 // Single per-user STOMP-over-WebSocket connection to AIProcessingService (routed
-// through the gateway at /api/v1/jobs/ws). AIProcessingService pushes one message
-// per terminal AI-job transition to the owning user's /user/queue/jobs destination,
-// so a single subscription drives the live updates across Library, Dashboard and
-// Failed Jobs — no per-file streams, no polling.
+// through the gateway at /api/v1/jobs/ws). AIProcessingService pushes a message per
+// AI-job transition to the owning user's /user/queue/jobs destination — the two
+// non-terminal progress pings (pending/processing) plus the terminal outcome — so a
+// single subscription drives the live updates across Library, Dashboard and Failed
+// Jobs — no per-file streams, no polling.
 //
 // SockJS is used because the servlet gateway does not proxy the raw WebSocket
 // upgrade; it falls back to HTTP streaming transports, which the gateway proxies.
 
-// Terminal job outcomes the backend can emit (lower-cased from the jobStatus enum).
-export type JobUpdateStatus = 'completed' | 'unsupported' | 'failed' | 'deadlettered'
+// Terminal job outcomes the backend persists and broadcasts (lower-cased jobStatus enum).
+export type TerminalJobStatus = 'completed' | 'unsupported' | 'failed' | 'deadlettered'
+
+// Non-terminal progress pings: the job was (re)queued, or analysis actively started. The
+// persisted/aggregate status stays PENDING for both (PROCESSING is a live-only refinement),
+// so the frontend counts 'processing' as a pending job — see JOB_STATUS_BY_UPDATE.
+export type ProgressJobStatus = 'pending' | 'processing'
+
+export type JobUpdateStatus = TerminalJobStatus | ProgressJobStatus
 
 export interface JobUpdate {
   fileId: string
@@ -25,10 +33,26 @@ export interface JobUpdate {
 
 // Maps the backend jobStatus enum name onto the frontend's lower-cased token.
 const STATUS_BY_ENUM: Record<string, JobUpdateStatus> = {
+  PENDING: 'pending',
+  PROCESSING: 'processing',
   COMPLETED: 'completed',
   UNSUPPORTED: 'unsupported',
   FAILED: 'failed',
   DEAD_LETTERED: 'deadlettered',
+}
+
+// The statuses that end a job: they carry metadata/error and finish the timeline. Consumers
+// that only act on the final outcome (upload queue, failed-jobs retry) gate on this so the new
+// pending/processing pings don't trip their terminal handling.
+const TERMINAL_STATUSES: ReadonlySet<JobUpdateStatus> = new Set<JobUpdateStatus>([
+  'completed',
+  'unsupported',
+  'failed',
+  'deadlettered',
+])
+
+export function isTerminalJobStatus(status: JobUpdateStatus): status is TerminalJobStatus {
+  return TERMINAL_STATUSES.has(status)
 }
 
 type Listener = (update: JobUpdate) => void

@@ -1,4 +1,4 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
+import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from '@/app/store'
 import { getCurrentUser } from '@/features/users/usersApi'
 import {fetchUserInfo} from './authApi'
@@ -32,7 +32,23 @@ export const loadCurrentUser = createAsyncThunk<UserInfo | null>(
 const authSlice = createSlice({
   name: 'auth',
   initialState,
-  reducers: {},
+  reducers: {
+    // Driven by the session heartbeat (useSessionHeartbeat), not the bootstrap thunk.
+    // A 401 probe means the gateway session is gone: flip to anonymous so the already-
+    // mounted ProtectedRoute redirects to login. Kept separate from loadCurrentUser
+    // so a transient network error (thunk rejected) can't masquerade as expiry.
+    sessionExpired(state) {
+      state.status = 'anonymous'
+      state.user = null
+      state.error = null
+    },
+    // A 200 probe: keep the user authenticated and refresh their fields.
+    sessionRefreshed(state, action: PayloadAction<UserInfo>) {
+      state.status = 'authenticated'
+      state.user = action.payload
+      state.error = null
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(loadCurrentUser.pending, (state) => {
@@ -55,6 +71,8 @@ const authSlice = createSlice({
       })
   },
 })
+
+export const { sessionExpired, sessionRefreshed } = authSlice.actions
 
 export default authSlice.reducer
 

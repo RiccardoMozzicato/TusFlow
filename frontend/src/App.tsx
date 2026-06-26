@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import {useAppDispatch, useAppSelector} from '@/app/hooks'
 import {loadCurrentUser, selectCurrentUser} from '@/features/auth/authSlice'
+import { useSessionHeartbeat } from '@/features/health/useSessionHeartbeat'
 import { useJobsRealtime } from '@/features/realtime/useJobsRealtime'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import RequireRole from '@/components/RequireRole'
@@ -29,6 +30,10 @@ export default function App() {
   useEffect(() => {
     void dispatch(loadCurrentUser())
   }, [dispatch])
+
+  // Periodically probe the gateway while authenticated: detects session expiry
+  // (→ redirect to login) and backend reachability (→ status indicator).
+  useSessionHeartbeat()
 
   useEffect(() => {
     async function retrieveCurrentUser() {

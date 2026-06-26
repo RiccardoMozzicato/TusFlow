@@ -30,5 +30,21 @@ interface JobStatusServiceInterface {
      * and writes a dead_letter_events audit row.
      */
     fun markJobAsDeadLettered(jobId: UUID, job: JobDTO, errorMessage: String, exceptionType: String?)
+
+    /**
+     * Non-terminal live ping that a job has just (re)entered the PENDING queue, pushed over STOMP to
+     * the owning user so the Library/Dashboard indicator turns "in progress" without a REST refetch.
+     * Broadcast-only: the job is already persisted as PENDING, so there is no status write and no
+     * outbox event. Best-effort, like the terminal broadcasts.
+     */
+    fun notifyJobPending(job: JobDTO)
+
+    /**
+     * Non-terminal live ping that AI analysis has actively started (PROCESSING), pushed over STOMP to
+     * the owning user. Broadcast-only by design: the persisted status stays PENDING, since the
+     * aggregate "pending" bucket counts PENDING + PROCESSING alike and the frontend folds 'processing'
+     * back into the pending indicator — so PROCESSING is a live-only refinement with nothing to write.
+     */
+    fun notifyJobProcessing(job: JobDTO)
 }
 

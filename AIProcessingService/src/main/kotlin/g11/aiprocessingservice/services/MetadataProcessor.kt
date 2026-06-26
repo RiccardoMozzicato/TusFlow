@@ -157,6 +157,10 @@ class MetadataProcessor(
                 return
             }
 
+            // The job is queued (PENDING) and about to be picked up: ping the owner's live channel so
+            // the Library/Dashboard indicator turns "in progress" immediately, before analysis starts.
+            jobStatusService.notifyJobPending(job)
+
             // Process the job. The offset is committed by the container (AckMode.RECORD) only when
             // this method returns normally; if processing throws, @RetryableTopic forwards the record
             // to the retry topic without blocking this consumer thread.
@@ -224,6 +228,9 @@ class MetadataProcessor(
     @Async
     fun retryFailedJobAsync(jobId: UUID): CompletableFuture<Void> {
         val jobDto = retryJobService.prepareRetry(jobId)
+        // prepareRetry reset the job to PENDING; mirror that onto the live channel so the Failed Jobs
+        // row (and any open Library/Dashboard view) shows it back "in progress" right away.
+        jobStatusService.notifyJobPending(jobDto)
         log.info("Calling getMetadata() for $jobDto")
         getMetadata(jobDto)
         return CompletableFuture.completedFuture(null)
@@ -323,6 +330,10 @@ class MetadataProcessor(
                 outcome = AnalysisOutcome.UNSUPPORTED
                 return null
             }
+
+            // Past the content-type gate: analysis is actually starting. Ping the owner's live channel
+            // with PROCESSING (unsupported types short-circuit above and never reach this point).
+            jobStatusService.notifyJobProcessing(job)
 
             val fileToAnalyze = pipelineMetrics.recordDownload("analysis") { downloadFile(job.fileId, job.version) }
             // Call downloadFile expect to receive an InputStream
