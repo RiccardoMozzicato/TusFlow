@@ -58,12 +58,6 @@ export default function ProfileBanner({ name, title, subtitle, photoProfileUrl, 
               >
                 Edit Profile
               </button>
-              <button
-                type="button"
-                className="rounded-ds-lg bg-ds-primary px-6 py-3 font-ds-label text-ds-label-md text-ds-on-primary transition-opacity hover:opacity-90"
-              >
-                Account Settings
-              </button>
             </div>
           </div>
         </div>

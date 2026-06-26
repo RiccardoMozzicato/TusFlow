@@ -1,10 +1,16 @@
 import Icon from '@/components/Icon'
-import type { WorkspaceCounter, WorkspaceStorage } from '../../types'
+import type { StorageSummary } from '@/features/users/storageSummary'
 
 interface WorkspaceCardProps {
-  counter: WorkspaceCounter
-  storage: WorkspaceStorage
+  /** Owned-document count; null while loading or on error. */
+  documentCount: number | null
+  /** Storage usage view model; null while loading or on error. */
+  storage: StorageSummary | null
+  /** Set when the underlying fetch failed. */
+  error?: string | null
 }
+
+const PLACEHOLDER = '—'
 
 function TileHeader({ label, icon }: { label: string; icon: string }) {
   return (
@@ -17,8 +23,14 @@ function TileHeader({ label, icon }: { label: string; icon: string }) {
   )
 }
 
-// Staff "My Workspace" card: document count + storage usage tiles.
-export default function WorkspaceCard({ counter, storage }: WorkspaceCardProps) {
+// Staff "My Workspace" card: owned-document count + storage usage tiles, fed by
+// live data (see useWorkspaceStats). Renders placeholders while loading and an
+// error caption when the fetch failed.
+export default function WorkspaceCard({ documentCount, storage, error }: WorkspaceCardProps) {
+  const countLabel = documentCount === null ? PLACEHOLDER : documentCount.toLocaleString()
+  const storageUsed = storage ? storage.usedLabel : PLACEHOLDER
+  const storageSuffix = storage ? (storage.quotaLabel ? `/ ${storage.quotaLabel}` : 'used') : ''
+
   return (
     <div className="rounded-ds-xl border border-ds-outline-variant bg-white p-8 shadow-sm transition-shadow hover:shadow-md">
       <div className="mb-8 flex items-start justify-between">
@@ -33,30 +45,29 @@ export default function WorkspaceCard({ counter, storage }: WorkspaceCardProps) 
         <Icon name="work" filled={false} className="text-ds-primary-container" />
       </div>
 
+      {error ? (
+        <p className="mb-6 font-ds-body text-ds-body-sm text-ds-error">{error}</p>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
         <div className="flex flex-col gap-4 rounded-ds-xl bg-ds-surface-container-low p-6">
-          <TileHeader label={counter.label} icon={counter.icon} />
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-4xl font-bold text-ds-primary">{counter.value}</span>
-            <span className="font-ds-label text-ds-label-md text-ds-on-tertiary-container">
-              {counter.note}
-            </span>
-          </div>
+          <TileHeader label="Document Count" icon="description" />
+          <span className="text-4xl font-bold text-ds-primary">{countLabel}</span>
         </div>
 
         <div className="flex flex-col gap-4 rounded-ds-xl bg-ds-surface-container-low p-6">
-          <TileHeader label={storage.label} icon={storage.icon} />
+          <TileHeader label="Storage Used" icon="cloud_queue" />
           <div className="flex flex-col gap-1.5">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-4xl font-bold text-ds-primary">{storage.value}</span>
+              <span className="text-4xl font-bold text-ds-primary">{storageUsed}</span>
               <span className="font-ds-label text-ds-label-md text-ds-secondary">
-                {storage.unit}
+                {storageSuffix}
               </span>
             </div>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-ds-full bg-ds-outline-variant">
               <div
                 className="h-full bg-ds-primary"
-                style={{ width: `${Math.round(storage.fraction * 100)}%` }}
+                style={{ width: `${Math.round((storage?.fraction ?? 0) * 100)}%` }}
               />
             </div>
           </div>
