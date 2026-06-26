@@ -1,3 +1,5 @@
+import type { SharingScope } from '@/features/documents/documentsApi'
+
 export type UploadStatus =
   | 'uploading'
   | 'paused'
@@ -59,4 +61,6 @@ export interface StagedFile {
   iconClassName: string
   /** User-entered key/value metadata sent as tus `Upload-Metadata`. */
   metadata: MetadataField[]
+  /** Per-file scope override; when undefined the file inherits the general scope. */
+  scopeOverride?: SharingScope
 }

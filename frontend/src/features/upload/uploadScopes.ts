@@ -4,13 +4,32 @@ import { isAdmin, isManager } from '@/features/profile/roles'
 export interface ScopeOption {
   value: SharingScope
   label: string
+  /** Material Symbols icon name for the scope. */
+  icon: string
+  /** One-line explanation of who can access files shared at this scope. */
+  description: string
 }
 
 // All sharing scopes, in increasing visibility order.
 export const ALL_SCOPE_OPTIONS: ScopeOption[] = [
-  { value: SharingScope.PERSONAL, label: 'Personal' },
-  { value: SharingScope.DEPARTMENT, label: 'Department' },
-  { value: SharingScope.ORGANIZATION, label: 'Organization' },
+  {
+    value: SharingScope.PERSONAL,
+    label: 'Personal',
+    icon: 'person',
+    description: 'Only you can access these files.',
+  },
+  {
+    value: SharingScope.DEPARTMENT,
+    label: 'Department',
+    icon: 'groups',
+    description: 'Your department can access these files.',
+  },
+  {
+    value: SharingScope.ORGANIZATION,
+    label: 'Organization',
+    icon: 'corporate_fare',
+    description: 'Everyone in the organization can access these files.',
+  },
 ]
 
 /**

@@ -87,11 +87,13 @@ export interface UseUploadQueue {
   /** Files selected but not yet uploaded, awaiting metadata + confirmation. */
   staged: StagedFile[]
   summary: UploadSummary
-  addFiles: (files: File[], scope: SharingScope) => void
+  addFiles: (files: File[]) => void
   updateStagedMetadata: (id: string, fields: MetadataField[]) => void
+  /** Sets a staged file's per-file scope override; undefined clears it (inherit general). */
+  setStagedScope: (id: string, scope?: SharingScope) => void
   removeStaged: (id: string) => void
-  startStaged: (id: string) => void
-  startAllStaged: () => void
+  startStaged: (id: string, scope: SharingScope) => void
+  startAllStaged: (scope: SharingScope) => void
   pause: (id: string) => void
   resume: (id: string) => void
   cancel: (id: string) => void
@@ -120,10 +122,10 @@ export function useUploadQueue(): UseUploadQueue {
   itemsRef.current = items
 
   // Mirror of `staged` for startAll, plus the real File handles (non-serializable,
-  // so kept out of state) and the scope captured when each file was selected.
+  // so kept out of state). The scope is resolved at upload time, not here.
   const stagedRef = useRef<StagedFile[]>(staged)
   stagedRef.current = staged
-  const stagedSources = useRef(new Map<string, { file: File; scope: SharingScope }>())
+  const stagedSources = useRef(new Map<string, { file: File }>())
 
   const controllers = useRef(new Map<string, UploadController>())
   // Per-upload teardown for the jobs-socket listener + its safety timeout.
@@ -322,14 +324,15 @@ export function useUploadQueue(): UseUploadQueue {
     [beginUpload, currentUserId],
   )
 
-  // Selecting files stages them (no upload yet) so the user can attach metadata.
-  const addFiles = useCallback((files: File[], scope: SharingScope) => {
+  // Selecting files stages them (no upload yet) so the user can attach metadata
+  // and optionally override the scope. The effective scope is resolved at upload.
+  const addFiles = useCallback((files: File[]) => {
     if (files.length === 0) return
 
     const newStaged: StagedFile[] = files.map((file) => {
       const id = newId()
       const chip = fileTypeChip(file.type)
-      stagedSources.current.set(id, { file, scope })
+      stagedSources.current.set(id, { file })
       return {
         id,
         name: file.name,
@@ -349,27 +352,40 @@ export function useUploadQueue(): UseUploadQueue {
     )
   }, [])
 
+  // Sets/clears a staged file's per-file scope override; undefined means inherit
+  // the general scope chosen at upload time.
+  const setStagedScope = useCallback((id: string, scope?: SharingScope) => {
+    setStaged((prev) =>
+      prev.map((file) => (file.id === id ? { ...file, scopeOverride: scope } : file)),
+    )
+  }, [])
+
   const removeStaged = useCallback((id: string) => {
     stagedSources.current.delete(id)
     setStaged((prev) => prev.filter((file) => file.id !== id))
   }, [])
 
   const startStaged = useCallback(
-    (id: string) => {
+    (id: string, generalScope: SharingScope) => {
       const source = stagedSources.current.get(id)
       const stagedFile = stagedRef.current.find((file) => file.id === id)
       if (!source || !stagedFile) return
 
-      launchUpload(source.file, source.scope, toMetadataRecord(stagedFile.metadata))
+      // A per-file override wins; otherwise the file inherits the general scope.
+      const scope = stagedFile.scopeOverride ?? generalScope
+      launchUpload(source.file, scope, toMetadataRecord(stagedFile.metadata))
       stagedSources.current.delete(id)
       setStaged((prev) => prev.filter((file) => file.id !== id))
     },
     [launchUpload],
   )
 
-  const startAllStaged = useCallback(() => {
-    stagedRef.current.forEach((file) => startStaged(file.id))
-  }, [startStaged])
+  const startAllStaged = useCallback(
+    (generalScope: SharingScope) => {
+      stagedRef.current.forEach((file) => startStaged(file.id, generalScope))
+    },
+    [startStaged],
+  )
 
   const pause = useCallback(
     (id: string) => {
@@ -542,6 +558,7 @@ export function useUploadQueue(): UseUploadQueue {
     summary,
     addFiles,
     updateStagedMetadata,
+    setStagedScope,
     removeStaged,
     startStaged,
     startAllStaged,
