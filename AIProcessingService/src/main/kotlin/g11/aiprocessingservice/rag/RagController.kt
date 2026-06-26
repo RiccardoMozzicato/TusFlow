@@ -16,7 +16,7 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/rag")
 class RagController(
-    private val ragService: RagService,
+    private val ragService: RagServiceInterface,
     private val userContext: RagUserContext,
     private val ragProperties: RagProperties,
 ) {

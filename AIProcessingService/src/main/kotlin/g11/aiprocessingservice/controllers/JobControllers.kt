@@ -4,17 +4,12 @@ import g11.aiprocessingservice.dto.FailedJobDTO
 import g11.aiprocessingservice.dto.JobKeyDTO
 import g11.aiprocessingservice.dto.JobStatsDTO
 import g11.aiprocessingservice.dto.JobStatusResponseDTO
-import g11.aiprocessingservice.dto.jobStatus
-import g11.aiprocessingservice.exceptions.JobNotFailedException
-import g11.aiprocessingservice.exceptions.JobNotFoundException
-import g11.aiprocessingservice.repositories.JobRepository
 import g11.aiprocessingservice.services.FailedJobServiceInterface
-import g11.aiprocessingservice.services.FileAccessService
 import g11.aiprocessingservice.services.JobStatsServiceInterface
-import g11.aiprocessingservice.services.MetadataProcessor
+import g11.aiprocessingservice.services.JobStatusServiceInterface
+import g11.aiprocessingservice.services.RetryOutcome
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.format.annotation.DateTimeFormat
@@ -31,11 +26,9 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/v1/jobs")
 class JobControllers(
-    private val metadataProcessor: MetadataProcessor,
-    private val jobRepository: JobRepository,
     private val failedJobService: FailedJobServiceInterface,
     private val jobStatsService: JobStatsServiceInterface,
-    private val fileAccessService: FileAccessService,
+    private val jobStatusService: JobStatusServiceInterface,
 ) {
     private val log = LoggerFactory.getLogger(this::class.java)
 
@@ -66,28 +59,10 @@ class JobControllers(
     fun getJobStatusBatch(
         @RequestBody keys: List<JobKeyDTO>
     ): ResponseEntity<List<JobStatusResponseDTO>> {
-        if (keys.isEmpty()) return ResponseEntity.ok(emptyList())
         if (keys.size > MAX_BATCH_KEYS) {
             return ResponseEntity.badRequest().build()
         }
-
-        // Latest job per (fileid, version), mirroring findFirst...OrderByJobidDesc.
-        val latestByKey = jobRepository.findByFileidIn(keys.map { it.fileId }.distinct())
-            .groupBy { it.fileid to it.version }
-            .mapValues { (_, jobs) -> jobs.maxBy { it.jobid } }
-
-        val responses = keys.distinct().mapNotNull { key ->
-            latestByKey[key.fileId to key.version]?.let { job ->
-                JobStatusResponseDTO(
-                    jobId = job.jobid,
-                    fileId = job.fileid,
-                    version = job.version,
-                    status = job.status,
-                    payload = job.payload
-                )
-            }
-        }
-        return ResponseEntity.ok(responses)
+        return ResponseEntity.ok(jobStatusService.getJobStatusBatch(keys))
     }
 
     /**
@@ -131,47 +106,23 @@ class JobControllers(
         @RequestParam fileId: UUID,
         @RequestParam version: Long,
         res: HttpServletResponse,
-        @Value("\${ai.retry.max-user-retries:4}") maxUserRetries: UInt
     ) {
         log.debug("API POST /api/v1/jobs userOwnerId={} fileId={} version={}", currentUserOwnerId(), fileId, version)
 
-        // Only allow retrying jobs whose file the caller can modify (same authoritative
-        // write-access policy as the failed-jobs list); otherwise the listing scope would be
-        // cosmetic and any user could retry any job by fileId/version. Check just this one file.
-        if (fileId !in fileAccessService.getWritableFileIds(listOf(fileId), currentUserToken())) {
-            res.sendError(HttpServletResponse.SC_FORBIDDEN, "no write access to this file")
-            return
+        // The write-access policy, retry cap and FAILED-state checks all live in the service; the
+        // controller only maps the resulting outcome onto a transport-level response.
+        when (failedJobService.retryFailedJob(fileId, version, currentUserToken())) {
+            RetryOutcome.NO_WRITE_ACCESS ->
+                res.sendError(HttpServletResponse.SC_FORBIDDEN, "no write access to this file")
+            RetryOutcome.JOB_NOT_FOUND ->
+                res.sendError(HttpServletResponse.SC_NOT_FOUND, "job not found")
+            RetryOutcome.MAX_RETRIES_REACHED ->
+                res.sendError(HttpServletResponse.SC_FORBIDDEN, "max attempts number reached")
+            RetryOutcome.NOT_FAILED ->
+                res.sendError(HttpServletResponse.SC_CONFLICT, "job is not failed")
+            RetryOutcome.ACCEPTED ->
+                res.status = HttpServletResponse.SC_ACCEPTED
         }
-
-        val job = jobRepository.findFirstByFileidAndVersionOrderByJobidDesc(fileId, version)
-
-        if (job == null) {
-            log.warn("Retry requested for non-existing job, file {} v{}", fileId, version)
-            res.sendError(HttpServletResponse.SC_NOT_FOUND, "job not found")
-            return
-        } else if (job.attempts >= maxUserRetries) {
-            log.info("Retry denied for job {}, maximum retries reached", job.jobid)
-            // attempts counts user retries already spent; once it reaches the cap, no more are
-            // allowed (the next failure would dead-letter the job anyway).
-            res.sendError(HttpServletResponse.SC_FORBIDDEN, "max attempts number reached")
-            return
-        }
-
-        val jobId: UUID = job.jobid
-
-        // Validazione veloce: se non è FAILED, rispondi subito con 409, senza avviare nulla
-        if (job.status != jobStatus.FAILED) {
-            log.info("Retry denied for job {}: the status '{}' is not failed", job.jobid, job.status)
-            res.sendError(HttpServletResponse.SC_CONFLICT, "job is not failed")
-            return
-        }
-
-        log.info("Retrying failed job {}", jobId)
-
-        // fire-and-forget
-        metadataProcessor.retryFailedJobAsync(jobId)
-
-        res.status = HttpServletResponse.SC_ACCEPTED
     }
 
     private companion object {

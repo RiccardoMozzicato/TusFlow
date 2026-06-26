@@ -15,7 +15,7 @@ import java.util.UUID
 @Service
 class FileAccessService(
     @Qualifier("TusUploaderService") private val fileServiceClient: RestClient
-) {
+) : FileAccessServiceInterface {
     private val log = LoggerFactory.getLogger(this.javaClass)
 
     /**
@@ -25,7 +25,7 @@ class FileAccessService(
      * @param userToken The user's JWT token (NOT the service account token)
      * @return Set of file UUIDs that the user can access
      */
-    fun getAccessibleFileIds(userId: UUID, userToken: String): Set<String> {
+    override fun getAccessibleFileIds(userId: UUID, userToken: String): Set<String> {
         try {
             // A single all-scopes `/api/v1/files` query returns every file readable by the user.
             // The PERSONAL scope already ORs owned files with files shared with the user, so this
@@ -55,7 +55,7 @@ class FileAccessService(
      * @param userToken The user's JWT token (NOT the service account token)
      * @return Subset of [candidateIds] the user can modify; empty on any downstream error (fail-safe)
      */
-    fun getWritableFileIds(candidateIds: Collection<UUID>, userToken: String): Set<UUID> {
+    override fun getWritableFileIds(candidateIds: Collection<UUID>, userToken: String): Set<UUID> {
         if (candidateIds.isEmpty()) return emptySet()
         return try {
             // The endpoint caps each request at MAX_WRITABLE_CANDIDATES, so split larger candidate

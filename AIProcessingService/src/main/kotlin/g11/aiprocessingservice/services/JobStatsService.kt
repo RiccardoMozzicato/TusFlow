@@ -10,7 +10,7 @@ import java.time.Instant
 @Service
 class JobStatsService(
     private val jobRepository: JobRepository,
-    private val fileAccessService: FileAccessService,
+    private val fileAccessService: FileAccessServiceInterface,
 ) : JobStatsServiceInterface {
 
     override fun getStats(since: Instant?, userToken: String): JobStatsDTO {

@@ -9,7 +9,7 @@ import g11.aiprocessingservice.rag.streaming.RagStreamPublisher
 import g11.aiprocessingservice.rag.tools.RagToolContextKeys
 import g11.aiprocessingservice.rag.tools.RagTools
 import g11.aiprocessingservice.rag.tools.RetrievedSourcesCapture
-import g11.aiprocessingservice.services.FileAccessService
+import g11.aiprocessingservice.services.FileAccessServiceInterface
 import g11.aiprocessingservice.tracing.RagTracing
 import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
@@ -37,13 +37,13 @@ class RagService(
     @Qualifier("ragChatClient") private val chatClient: ChatClient,
     private val advisorFactory: RagAdvisorFactory,
     private val ragTools: RagTools,
-    private val fileAccessService: FileAccessService,
+    private val fileAccessService: FileAccessServiceInterface,
     private val userContext: RagUserContext,
     private val conversationResolver: ConversationResolver,
     private val ragTracing: RagTracing,
     private val streamPublisher: RagStreamPublisher,
     private val scoringService: RagScoringService,
-) {
+) : RagServiceInterface {
     private val log = LoggerFactory.getLogger(this.javaClass)
 
     private companion object {
@@ -66,7 +66,7 @@ class RagService(
      * @param conversationId client-minted conversation id (a fresh one is used if null/invalid)
      * @param topK number of top similar chunks the content-search tool retrieves per call
      */
-    fun queryWithRag(userQuery: String, conversationId: String?, topK: Int = 5): RagResponse {
+    override fun queryWithRag(userQuery: String, conversationId: String?, topK: Int): RagResponse {
         val userId = userContext.currentUserId()
         val userToken = userContext.currentToken()
         val memoryKey = conversationResolver.memoryKey(userId, conversationId)
@@ -140,7 +140,7 @@ class RagService(
      * the answer is generated before the first chunk is sent rather than truly token-by-token.
      */
     @Async
-    fun streamQuery(
+    override fun streamQuery(
         userQuery: String,
         conversationId: String?,
         topK: Int,

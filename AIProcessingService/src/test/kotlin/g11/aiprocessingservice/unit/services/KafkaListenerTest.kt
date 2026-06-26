@@ -34,7 +34,7 @@ class KafkaListenerTest {
     private lateinit var pdfAnalysisChatClient: ChatClient
     private lateinit var imageChatClient: ChatClient
     private lateinit var jobStatusService: JobStatusServiceInterface
-    private lateinit var retryJobService: RetryJobService
+    private lateinit var failedJobService: FailedJobServiceInterface
     private lateinit var promptTemplate: Resource
     private lateinit var kafkaTemplate: org.springframework.kafka.core.KafkaTemplate<String, String>
     private lateinit var tracer: io.micrometer.tracing.Tracer
@@ -55,7 +55,7 @@ class KafkaListenerTest {
         // Relaxed: the processor now also emits non-terminal PENDING/PROCESSING pings
         // (notifyJobPending / notifyJobProcessing) that individual tests don't stub.
         jobStatusService = mockk(relaxed = true)
-        retryJobService = mockk(relaxed = true)
+        failedJobService = mockk(relaxed = true)
         promptTemplate = mockk()
         kafkaTemplate = mockk(relaxed = true)
         tracer = mockk(relaxed = true)
@@ -89,7 +89,7 @@ class KafkaListenerTest {
             analysisBackoffCapMs = 0,
             maxUserRetries = 4,
             simulateLlmOffline = simulateLlmOffline,
-            retryJobService = retryJobService,
+            failedJobService = failedJobService,
             textExtractionService = TextExtractionService(),
             supportedContentTypes = SupportedContentTypes(
                 SupportedContentTypeProperties(
