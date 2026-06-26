@@ -35,6 +35,7 @@ class OpenAPIConfig (){
             Tag().name("User Handling").description("User profile, organization and role management endpoints.")
         ))
         .servers(listOf(
-            Server().url("http://localhost:8082").description("User detail service server")
+            Server().url("http://localhost:8082").description("UserDetailService direct endpoint"),
+            Server().url("http://localhost:8080").description("API Gateway")
         ))
 }

@@ -3,6 +3,7 @@ package it.polito.wa2.userdetailservice.controllers
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.enums.ParameterIn
+import io.swagger.v3.oas.annotations.media.ArraySchema
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.ExampleObject
 import io.swagger.v3.oas.annotations.media.Schema
@@ -55,7 +56,7 @@ class UserController(
     @Operation(
         tags = [ "User Handling" ],
         summary = "Get the list of users",
-        description = "Retrieve a paginated list of users visible to the authenticated principal. The result can be filtered by name/email and sorted by supported user fields.",
+        description = "Retrieve a paginated list of users visible to the authenticated principal. Regular users, managers and admins are scoped to users in their own organization; the file-service account can list users across organizations. The result can be filtered by name/email and sorted by supported user fields.",
         parameters = [
             Parameter(
                 name = "page",
@@ -103,19 +104,42 @@ class UserController(
         description = "Forbidden"
     )
     @ApiResponse(
+        responseCode = "404",
+        description = "Authenticated user not found in the local user store",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Not Found",
+                            "status": 404,
+                            "detail": "The user with id 123e4567-e89b-12d3-a456-426614174000 not found"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
         responseCode = "500",
         description = "Internal Server Error",
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Internal Server Error",
-                            "message": "An unexpected error occurred"
+                            "type": "about:blank",
+                            "title": "Internal Server Error",
+                            "status": 500,
+                            "detail": "An unexpected error occurred"
                         }
                         """
                     )
@@ -144,7 +168,7 @@ class UserController(
     @Operation(
         tags = [ "User Handling" ],
         summary = "Get user details",
-        description = "Retrieve details of a specific user by their UUID.",
+        description = "Retrieve details of a specific user by their UUID. This endpoint is restricted to admins and the file-service account.",
         parameters = [
             Parameter(
                 name = "id",
@@ -188,14 +212,15 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Bad Request",
-                            "message": "The provided id is not a UUID"
+                            "type": "about:blank",
+                            "title": "Bad Request",
+                            "status": 400,
+                            "detail": "The provided id is not a UUID"
                         }
                         """
                     )
@@ -209,14 +234,15 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Not Found",
-                            "message": "The user with id 123e4567-e89b-12d3-a456-426614174000 not found"
+                            "type": "about:blank",
+                            "title": "Not Found",
+                            "status": 404,
+                            "detail": "The user with id 123e4567-e89b-12d3-a456-426614174000 not found"
                         }
                         """
                     )
@@ -238,14 +264,15 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Internal Server Error",
-                            "message": "An unexpected error occurred"
+                            "type": "about:blank",
+                            "title": "Internal Server Error",
+                            "status": 500,
+                            "detail": "An unexpected error occurred"
                         }
                         """
                     )
@@ -266,14 +293,14 @@ class UserController(
     @Operation(
         tags = [ "User Handling" ],
         summary = "Get users by id batch",
-        description = "Retrieve multiple users by UUID. This endpoint is intended for service-to-service lookups such as resolving file owners and sharing recipients.",
+        description = "Retrieve multiple users by UUID. This endpoint is restricted to admins and the file-service account and is intended for service-to-service lookups such as resolving file owners and sharing recipients.",
         requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "List of user UUIDs to retrieve",
             required = true,
             content = [
                 Content(
                     mediaType = "application/json",
-                    schema = Schema(type = "array", implementation = UUID::class),
+                    array = ArraySchema(schema = Schema(type = "string", format = "uuid")),
                     examples = [
                         ExampleObject(
                             value = """
@@ -341,7 +368,7 @@ class UserController(
     @Operation(
         tags = [ "User Handling" ],
         summary = "Create a new user",
-        description = "Create a new user with the provided details.",
+        description = "Create a new user with the provided details. This endpoint is restricted to admins.",
         requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "New user details. The user is created in Keycloak and then persisted in the UserDetailService database.",
             required = true,
@@ -375,19 +402,19 @@ class UserController(
         description = "Bad Request",
         content = [
             Content(
-            mediaType = "application/json",
-            schema = Schema(implementation = ProblemDetail::class),
-            examples = [
-                ExampleObject(
-                    value = """
-                                    {
-                                        "type": "about:blank",
-                                        "title": "Bad Request",
-                                        "status": 400,
-                                        "detail": "Failed to read request",
-                                        "instance": "/api/v1/users"
-                                    }
-                                """
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Bad Request",
+                            "status": 400,
+                            "detail": "Failed to read request",
+                            "instance": "/api/v1/users"
+                        }
+                        """
                     )
                 ]
             )
@@ -402,40 +429,20 @@ class UserController(
         description = "Forbidden"
     )
     @ApiResponse(
-        responseCode = "409",
-        description = "Conflict",
-        content = [
-            Content(
-                mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
-                examples = [
-                    ExampleObject(
-                        value = """
-                        {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Conflict Error",
-                            "message": "This user already exists"
-                        }
-                        """
-                    )
-                ]
-            )
-        ]
-    )
-    @ApiResponse(
         responseCode = "500",
-        description = "Internal Server Error",
+        description = "Internal Server Error, including failures returned by Keycloak during user creation",
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Internal Server Error",
-                            "message": "An unexpected error occurred"
+                            "type": "about:blank",
+                            "title": "Internal Server Error",
+                            "status": 500,
+                            "detail": "An unexpected error occurred"
                         }
                         """
                     )
@@ -456,7 +463,7 @@ class UserController(
     @Operation(
         tags = [ "User Handling" ],
         summary = "Update an existing user",
-        description = "Update the details of an existing user identified by their UUID.",
+        description = "Update the details of an existing user identified by their UUID. This endpoint is restricted to admins.",
         parameters = [
             Parameter(
                 name = "id",
@@ -503,14 +510,15 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Bad Request",
-                            "message": "The provided id is not a UUID"
+                            "type": "about:blank",
+                            "title": "Bad Request",
+                            "status": 400,
+                            "detail": "The provided id is not a UUID"
                         }
                         """
                     )
@@ -532,14 +540,15 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Not Found",
-                            "message": "User with id 123e4567-e89b-12d3-a456-426614174000 not found"
+                            "type": "about:blank",
+                            "title": "Not Found",
+                            "status": 404,
+                            "detail": "User with id 123e4567-e89b-12d3-a456-426614174000 not found"
                         }
                         """
                     )
@@ -549,18 +558,19 @@ class UserController(
     )
     @ApiResponse(
         responseCode = "409",
-        description = "Conflict",
+        description = "Conflict caused by an ID mismatch, duplicate email, or storage quota lower than the user's current usage",
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Conflict Error",
-                            "message": "Another user with that email already exists"
+                            "type": "about:blank",
+                            "title": "Conflict Error",
+                            "status": 409,
+                            "detail": "Another user with that email already exists"
                         }
                         """
                     )
@@ -574,14 +584,15 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Internal Server Error",
-                            "message": "An unexpected error occurred"
+                            "type": "about:blank",
+                            "title": "Internal Server Error",
+                            "status": 500,
+                            "detail": "An unexpected error occurred"
                         }
                         """
                     )
@@ -609,7 +620,7 @@ class UserController(
     @Operation(
         tags = [ "User Handling" ],
         summary = "Delete a user",
-        description = "Delete an existing user identified by their UUID.",
+        description = "Delete an existing user identified by their UUID. This endpoint is restricted to admins and rejects attempts to delete the authenticated user's own account.",
         parameters = [
             Parameter(
                 name = "id",
@@ -631,14 +642,41 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Bad Request",
-                            "message": "The provided id is not a UUID"
+                            "type": "about:blank",
+                            "title": "Bad Request",
+                            "status": 400,
+                            "detail": "The provided id is not a UUID"
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = ProblemDetail::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "type": "about:blank",
+                            "title": "Forbidden",
+                            "status": 403,
+                            "detail": "Cannot delete your own user account"
                         }
                         """
                     )
@@ -652,14 +690,15 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Not Found",
-                            "message": "User with id 123e4567-e89b-12d3-a456-426614174000 not found"
+                            "type": "about:blank",
+                            "title": "Not Found",
+                            "status": 404,
+                            "detail": "User with id 123e4567-e89b-12d3-a456-426614174000 not found"
                         }
                         """
                     )
@@ -673,14 +712,15 @@ class UserController(
         content = [
             Content(
                 mediaType = "application/json",
-                schema = Schema(implementation = ErrorDetails::class),
+                schema = Schema(implementation = ProblemDetail::class),
                 examples = [
                     ExampleObject(
                         value = """
                         {
-                            "timestamp": "2024-01-01T12:00:00Z",
-                            "error": "Internal Server Error",
-                            "message": "An unexpected error occurred"
+                            "type": "about:blank",
+                            "title": "Internal Server Error",
+                            "status": 500,
+                            "detail": "An unexpected error occurred"
                         }
                         """
                     )
