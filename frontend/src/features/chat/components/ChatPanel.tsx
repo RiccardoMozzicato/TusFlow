@@ -16,6 +16,7 @@ import {
   streamToken,
 } from '../chatSlice'
 import { connectRagSocket, disconnectRagSocket, onRagEvent } from '@/features/realtime/ragSocket'
+import MarkdownMessage from './MarkdownMessage'
 import { initialsOf } from '@/lib/initials'
 import type { ChatMessage as ChatMessageModel, ChatSource } from '../types'
 
@@ -199,15 +200,20 @@ function AssistantTurn({ message, zoom }: { message: ChatMessageModel; zoom: num
         <div className="max-w-[95%] space-y-3">
           {showDots ? (
             <TypingDots />
-          ) : (
+          ) : message.isError ? (
             <p
-              className={`whitespace-pre-wrap break-words font-ds-body ${
-                message.isError ? 'text-ds-error' : 'text-ds-on-surface'
-              }`}
+              className="whitespace-pre-wrap break-words font-ds-body text-ds-error"
               style={messageTextStyle(zoom)}
             >
               {message.text}
             </p>
+          ) : (
+            <div
+              className="break-words font-ds-body text-ds-on-surface"
+              style={messageTextStyle(zoom)}
+            >
+              <MarkdownMessage text={message.text} />
+            </div>
           )}
           <SourceList sources={sources} />
         </div>
