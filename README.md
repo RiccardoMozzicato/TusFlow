@@ -1,966 +1,484 @@
-# File Management System with AI-Powered Metadata Enrichment
+# File Management System with AI-Powered Metadata Enrichment & RAG
 
-**Gruppo 11** - Laboratorio 5  
-**Web Applications II - Politecnico di Torino**
+**Gruppo 11** — Laboratorio 5
+**Web Applications II — Politecnico di Torino**
+
+A microservices-based document portal where files are uploaded with a resumable protocol, enriched
+automatically by an LLM (summary, tags, sensitivity — including **vision** analysis of images),
+indexed into a vector store, and explored through a **conversational RAG chat** that streams answers
+token-by-token. The whole pipeline is event-driven (Kafka + Debezium CDC + Transactional Outbox) and
+fully instrumented (Grafana LGTM for system telemetry, Langfuse for LLM traces).
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Event-Driven Pipeline](#event-driven-pipeline)
-3. [RAG (Retrieval-Augmented Generation) System](#-rag-retrieval-augmented-generation-system)
-4. [AI Metadata Generation](#ai-metadata-generation)
-5. [Transactional Outbox Pattern](#transactional-outbox-pattern)
-6. [Technology Stack](#technology-stack)
-7. [Services Overview](#services-overview)
-8. [Testing Strategy](#testing-strategy)
-9. [Configuration & Setup](#configuration--setup)
-10. [Features Implemented](#features-implemented)
-11. [Known Limitations](#known-limitations)
+1. [Architecture Overview](#-architecture-overview)
+2. [Event-Driven Pipeline](#-event-driven-pipeline)
+3. [Services Overview](#-services-overview)
+4. [AI Metadata Generation](#-ai-metadata-generation)
+5. [RAG (Retrieval-Augmented Generation) System](#-rag-retrieval-augmented-generation-system)
+6. [Realtime Channel (STOMP/SockJS)](#-realtime-channel-stompsockjs)
+7. [Transactional Outbox Pattern](#-transactional-outbox-pattern)
+8. [Observability (LGTM + Langfuse)](#-observability-lgtm--langfuse)
+9. [Technology Stack](#-technology-stack)
+10. [Testing Strategy](#-testing-strategy)
+11. [Configuration & Setup](#-configuration--setup)
+12. [Features Implemented](#-features-implemented)
+13. [Known Limitations](#-known-limitations)
+14. [Additional Documentation](#-additional-documentation)
 
 ---
 
 ## 🏗️ Architecture Overview
 
-This system implements a **microservices-based file management platform** with **AI-powered metadata enrichment**. The architecture is built on an **event-driven foundation** using Apache Kafka and the **Transactional Outbox Pattern** to ensure reliable, asynchronous communication between services.
+The platform is composed of **four Spring Boot / Kotlin microservices**, a **React SPA**, an
+**event backbone** (Kafka + Debezium), and an **observability stack** (LGTM + Langfuse). Each
+backend service owns its own database; services never call each other's DB. Cross-service workflows
+are asynchronous, driven by the **Transactional Outbox Pattern** and **Change Data Capture (CDC)**.
+
+> 📊 **Flow diagrams:** see [`docs/diagrams/architecture-flow.md`](docs/diagrams/architecture-flow.md)
+> for the end-to-end sequence (login → document availability) and the Debezium/Kafka CDC topology
+> (both render natively on GitHub).
 
 ### System Components
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          SYSTEM ARCHITECTURE                                │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                                SYSTEM ARCHITECTURE                                  │
+└────────────────────────────────────────────────────────────────────────────────────┘
 
-┌──────────────────┐         ┌──────────────────┐         ┌──────────────────┐
-│   Frontend       │         │   API Gateway    │         │   Keycloak       │
-│   (React + TS)   │────────▶│   (Spring MVC)   │◀────────│   (OAuth2)       │
-│   Port: 5173     │         │   Port: 8080     │         │   Port: 9090     │
-└──────────────────┘         └──────────────────┘         └──────────────────┘
-                                      │
-                                      │ Token Relay
-                                      │
-              ┌───────────────────────┼───────────────────────┐
-              │                       │                       │
-              ▼                       ▼                       ▼
-    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-    │ TusUploader     │    │ UserDetail      │    │ AIProcessing    │
-    │ Service         │    │ Service         │    │ Service         │
-    │ Port: 8081      │    │ Port: 8082      │    │ Port: 8083      │
-    └────┬────────┬───┘    └────────┬────────┘    └────┬───────┬────┘
-         │        │                  │                  │       │
-         │        │                  │                  │       │
-         │   ┌────▼──────────────────▼──────────────────▼───┐   │
-         │   │          Apache Kafka + Debezium CDC         │   │
-         │   │          (Event Streaming)                   │   │
-         │   │          Port: 9094                          │   │
-         │   └────┬──────────────────┬──────────────────┬───┘   │
-         │        │                  │                  │       │
-         │        │                  │                  │       │
-    ┌────▼────────▼───┐    ┌─────────▼──────┐    ┌────▼───────▼────┐
-    │ PostgreSQL      │    │ PostgreSQL     │    │ PostgreSQL      │
-    │ (filedb)        │    │ (userdb)       │    │ (aireqdb)       │
-    │ CDC enabled     │    │ Port: 5433     │    │ CDC enabled     │
-    │ Port: 5432      │    └────────────────┘    │ Port: 5435      │
-    └─────────────────┘                          └─────────────────┘
-         │                                                │
-         │ S3 API                                    Download files
-         │                                                │
-    ┌────▼────────────────────────────────────────────────▼─────┐
-    │                    MinIO (Object Storage)                 │
-    │                    S3-compatible API                      │
-    │                    Port: 9000                             │
-    └───────────────────────────────────────────────────────────┘
+      ┌──────────────────┐                                   ┌──────────────────┐
+      │   Frontend SPA   │   served at  /ui  (BFF session)   │    Keycloak      │
+      │ React 19 + Vite  │◀─────────────┐      ┌────────────▶│  OAuth2 / OIDC   │
+      │   :5173 (dev)    │              │      │             │     :9090        │
+      └──────────────────┘              ▼      │             └──────────────────┘
+                                 ┌──────────────────┐
+                                 │   API Gateway    │  confidential OIDC client
+                                 │ Spring Cloud GW  │  session cookie + CSRF
+                                 │   (MVC)  :8080   │  TokenRelay (Bearer)
+                                 └──────────────────┘
+                                          │  Bearer token on every hop
+              ┌───────────────────────────┼────────────────────────────┐
+              ▼                            ▼                            ▼
+    ┌──────────────────┐        ┌──────────────────┐        ┌──────────────────────┐
+    │  TusUploader     │        │  UserDetail      │        │  AIProcessing        │
+    │  Service :8081   │        │  Service :8082   │        │  Service :8083        │
+    │  uploads,        │        │  users, orgs,    │        │  metadata + vision,   │
+    │  versions,       │        │  quotas, avatars │        │  embeddings, RAG chat │
+    │  sharing, quota  │        │                  │        │  jobs, STOMP realtime │
+    └───────┬──────────┘        └────────┬─────────┘        └──────┬─────────┬──────┘
+            │                            │                         │         │
+            │      ┌─────────────────────┴─────────────────────────┘         │
+            │      │   Apache Kafka 4.1 + Kafka Connect / Debezium CDC        │
+            │      │   topics: file-outbox · job-outbox · embeddings-batch    │ STOMP push
+            │      └─────┬───────────────────────┬───────────────────┬────────┘ (/user/queue)
+            │            │                       │                   │
+    ┌───────▼────────┐  │  ┌─────────────────┐  │  ┌────────────────▼─────────────┐
+    │ PostgreSQL 15  │  │  │ PostgreSQL 15   │  │  │ PostgreSQL 15 + pgvector      │
+    │ filedb         │◀─┘  │ userdb          │  └─▶│ aireqdb (jobs, outbox,        │
+    │ CDC :5432      │     │ :5433           │     │ vector_store)  CDC :5435      │
+    └───────┬────────┘     └─────────────────┘     └───────────────────────────────┘
+            │ S3 API                                        ▲ embeddings via
+            ▼                                               │ Ollama / OpenWebUI
+    ┌───────────────────────────┐                   ┌───────┴───────────────┐
+    │  MinIO (S3 object store)  │                   │  Groq (LLM + vision)  │
+    │  uploads + files buckets  │                   │  Qwen3 chat models    │
+    │  :9000 (API) / :9001 (UI) │                   └───────────────────────┘
+    └───────────────────────────┘
+
+   Observability ── all services export OTLP traces + Micrometer metrics ──▶ Grafana LGTM (:3000)
+                    AIProcessingService additionally exports LLM/RAG traces ──▶ Langfuse (:3001)
 ```
 
 ### Key Architectural Principles
 
-1. **Event-Driven Architecture**: Asynchronous communication via Kafka for loose coupling
-2. **Transactional Outbox Pattern**: Ensures atomic write operations and event publication
-3. **Change Data Capture (CDC)**: Debezium monitors database changes and publishes to Kafka
-4. **Microservices**: Independent, scalable services with dedicated databases
-5. **OAuth2 Security**: Keycloak-based authentication and authorization
-6. **TUS Protocol**: Resumable file uploads with chunking support
+1. **Event-Driven Architecture** — asynchronous communication via Kafka for loose coupling
+2. **Transactional Outbox Pattern** — atomic DB write + event emission in a single transaction
+3. **Change Data Capture (CDC)** — Debezium tails the Postgres WAL and publishes outbox rows to Kafka
+4. **Database-per-service** — independent, dedicated databases; no shared schemas
+5. **OAuth2 / OIDC security** — Keycloak; the gateway is a confidential **BFF** that relays tokens
+6. **TUS protocol** — resumable, chunked uploads with checksum verification
+7. **Full observability** — distributed tracing, metrics, logs (LGTM) + dedicated LLM tracing (Langfuse)
 
 ---
 
 ## 🔄 Event-Driven Pipeline
 
-The system implements a sophisticated event-driven pipeline that ensures **reliable**, **asynchronous**, and **consistent** communication between the file upload service and the AI processing service.
-
-### Pipeline Flow Overview
+The system implements a **reliable, asynchronous, consistent** pipeline between the upload service
+and the AI service. The happy path from upload to "document fully enriched & searchable":
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        EVENT-DRIVEN PIPELINE FLOW                           │
-└─────────────────────────────────────────────────────────────────────────────┘
+1️⃣  FILE UPLOAD COMPLETION                       TusUploaderService
+    BEGIN TX
+      ├─ Save File + FileVersion (MERGE_PENDING)
+      ├─ INSERT files_outbox_events { eventType: "FILE_INSERTED", payload: {fileId, version, …} }
+      └─ INSERT files_outbox_events { eventType: "STORAGE_CONFIRMED", … }   ← quota accounting
+    COMMIT
+                            ▼
+2️⃣  CHANGE DATA CAPTURE                           Debezium (pgoutput)
+      └─ Tails WAL → unwrap → route → Kafka topic  file-outbox
+                            ▼
+3️⃣  AI CONSUMPTION                                AIProcessingService @KafkaListener("file-outbox")
+      ├─ Create Job (PENDING) and acknowledge
+      ├─ Download file from TusUploaderService (Bearer token)
+      ├─ Analyze content → summary · tags · sensitivity
+      │    • documents (PDF/DOCX/text) → text model
+      │    • images                    → vision model
+      └─ Publish "file-analyzed" (kicks off the embedding branch, independently)
+                            ▼
+4️⃣  AI RESULT PUBLICATION                         JobStatusService
+    BEGIN TX
+      ├─ Update Job (COMPLETED)
+      └─ INSERT job_outbox { event_type: "ANALYSIS_COMPLETED", payload: { metadata } }
+    COMMIT  →  Debezium  →  Kafka topic  job-outbox
+                            ▼
+5️⃣  METADATA UPDATE                               TusUploaderService @KafkaListener("job-outbox")
+      └─ Update FileVersion with AI metadata (summary, tags, sensitivity)
 
-1️⃣  FILE UPLOAD COMPLETION
-    ┌─────────────────────────────────────────────────────────────┐
-    │ TusUploaderService                                          │
-    │                                                             │
-    │  BEGIN TRANSACTION                                          │
-    │  ├─ Save FileVersion (status: MERGE_PENDING)               │
-    │  ├─ Save Upload (status: MERGE_PENDING)                    │
-    │  └─ INSERT into files_outbox_events                        │
-    │     {                                                       │
-    │       "eventType": "FILE_INSERTED",                        │
-    │       "payload": {                                         │
-    │         "fileId": "uuid",                                  │
-    │         "version": 1,                                      │
-    │         "filename": "document.pdf",                        │
-    │         "contentType": "application/pdf",                  │
-    │         "metadata": {...}                                  │
-    │       }                                                    │
-    │     }                                                      │
-    │  COMMIT TRANSACTION                                         │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-2️⃣  CHANGE DATA CAPTURE (CDC)
-    ┌─────────────────────────────────────────────────────────────┐
-    │ Debezium Connector                                          │
-    │                                                             │
-    │  ├─ Reads PostgreSQL Write-Ahead Log (WAL)                 │
-    │  ├─ Detects INSERT in files_outbox_events                  │
-    │  ├─ Extracts event payload                                 │
-    │  └─ Publishes to Kafka topic: file-outbox                  │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-3️⃣  AI PROCESSING SERVICE CONSUMPTION
-    ┌─────────────────────────────────────────────────────────────┐
-    │ AIProcessingService - KafkaListener                         │
-    │                                                             │
-    │  @KafkaListener(topics = ["file-outbox"])                  │
-    │  ├─ Receives event from Kafka                              │
-    │  ├─ Creates Job record (status: PENDING)                   │
-    │  ├─ Acknowledges Kafka message (removes from queue)        │
-    │  ├─ Downloads file from TusUploaderService                 │
-    │  ├─ Selects appropriate AI model (PDF vs Generic)          │
-    │  ├─ Analyzes file content (with retry logic)               │
-    │  └─ Extracts metadata:                                     │
-    │     • Summary (2 sentences)                                │
-    │     • Tags (5 keywords)                                    │
-    │     • Sensitivity (PUBLIC/INTERNAL/CONFIDENTIAL/...)       │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-4️⃣  AI RESULT PUBLICATION
-    ┌─────────────────────────────────────────────────────────────┐
-    │ AIProcessingService - JobStatusService                      │
-    │                                                             │
-    │  BEGIN TRANSACTION                                          │
-    │  ├─ Update Job (status: COMPLETED)                         │
-    │  └─ INSERT into job_outbox                                 │
-    │     {                                                       │
-    │       "event_type": "ANALYSIS_COMPLETED",                  │
-    │       "payload": {                                         │
-    │         "fileid": "uuid",                                  │
-    │         "version": 1,                                      │
-    │         "status": "COMPLETED",                             │
-    │         "metadata": {                                      │
-    │           "summary": "...",                                │
-    │           "tags": "tag1,tag2,...",                         │
-    │           "sensitivity": "CONFIDENTIAL"                    │
-    │         }                                                  │
-    │       }                                                    │
-    │     }                                                      │
-    │  COMMIT TRANSACTION                                         │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-5️⃣  METADATA UPDATE
-    ┌─────────────────────────────────────────────────────────────┐
-    │ TusUploaderService - KafkaConsumer                          │
-    │                                                             │
-    │  @KafkaListener(topics = ["job-outbox"])                   │
-    │  ├─ Receives analysis results                              │
-    │  ├─ Extracts enhanced metadata                             │
-    │  └─ Updates FileVersion with AI-generated metadata         │
-    │     (summary, tags, sensitivity)                           │
-    └─────────────────────────────────────────────────────────────┘
+  (parallel)  EMBEDDING BRANCH                     AIProcessingService
+      └─ Extract text → chunk → embed (Qwen3-Embedding-4B) → store in pgvector vector_store
 ```
+
+> **Ordering note:** AI **metadata** is committed (`ANALYSIS_COMPLETED` → `job_outbox`) *before* the
+> embedding branch is kicked off (`file-analyzed`). The two run independently — embeddings never gate
+> the metadata update.
 
 ### Event Flow Guarantees
 
-✅ **Atomicity**: Database writes and outbox events are in the same transaction  
-✅ **Durability**: Events are persisted before publication  
-✅ **At-least-once delivery**: Kafka ensures message delivery (idempotency handles duplicates)  
-✅ **Ordering**: Preserved through Kafka partitions  
-✅ **Fault tolerance**: Retry mechanisms at multiple levels  
+✅ **Atomicity** — DB writes and outbox events share one transaction
+✅ **Durability** — events are persisted before publication
+✅ **At-least-once delivery** — Kafka guarantees delivery; consumers are idempotent
+✅ **Ordering** — preserved per Kafka partition key
+✅ **Fault tolerance** — retries at multiple levels + Dead Letter Topic for poison messages
 
 ---
 
-## 🧠 RAG (Retrieval-Augmented Generation) System
+## 🎯 Services Overview
 
-The system implements a **Retrieval-Augmented Generation (RAG)** pipeline to enable intelligent document search and question-answering capabilities. Users can query their uploaded documents using natural language, and the system retrieves relevant context from the document embeddings before generating accurate answers.
+### 1. ApiGateway (Port 8080) — Backend-for-Frontend
 
-### RAG Architecture Overview
+Spring **Cloud Gateway (MVC)** acting as a confidential **OIDC BFF client** (`gateway-client`). It
+runs the Authorization-Code flow server-side, holds the **session cookie**, and **relays** the access
+token (`TokenRelay`) to downstream services so the SPA never handles tokens directly.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     RAG PIPELINE ARCHITECTURE                               │
-└─────────────────────────────────────────────────────────────────────────────┘
+**Responsibilities**
+- Single entry point; OAuth2 login/logout against Keycloak (RP-initiated)
+- Session + **CSRF** (`XSRF-TOKEN` cookie ↔ `X-XSRF-TOKEN` header)
+- Token relay (Bearer) to all backend services
+- Serves the SPA under `/ui` and exposes a session-introspection endpoint
+- **Aggregated OpenAPI / Swagger UI** for all services
 
-1️⃣  FILE UPLOAD & ANALYSIS
-    ┌─────────────────────────────────────────────────────────────┐
-    │ TusUploaderService                                          │
-    │  └─> Uploads file to MinIO                                 │
-    │  └─> Publishes FILE_INSERTED event to Kafka                │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-2️⃣  METADATA EXTRACTION
-    ┌─────────────────────────────────────────────────────────────┐
-    │ AIProcessingService - MetadataProcessor                     │
-    │  └─> Downloads file                                         │
-    │  └─> AI generates: summary, tags, sensitivity              │
-    │  └─> Publishes FILE_ANALYZED event to Kafka                │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-3️⃣  TEXT EXTRACTION & CHUNKING
-    ┌─────────────────────────────────────────────────────────────┐
-    │ AIProcessingService - EmbeddingProcessor                    │
-    │  └─> TextExtractionService: Extracts text from file        │
-    │  └─> ChunkingService: Splits into semantic chunks          │
-    │      • Chunk size: ~500 tokens                             │
-    │      • Overlap: 50 tokens (preserves context)              │
-    │  └─> Publishes batches to embeddings-batch topic           │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-4️⃣  EMBEDDING GENERATION
-    ┌─────────────────────────────────────────────────────────────┐
-    │ AIProcessingService - EmbeddingGenerator                    │
-    │  └─> Ollama nomic-embed-text model (768 dimensions)        │
-    │  └─> Generates vector embeddings for each chunk            │
-    │  └─> Stores in PostgreSQL pgvector:                        │
-    │      • vector_store: actual embeddings                     │
-    │      • file_version_embeddings: tracking table             │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-5️⃣  RAG QUERY
-    ┌─────────────────────────────────────────────────────────────┐
-    │ User Query: "What are the main topics in my documents?"     │
-    │                                                             │
-    │ RagService                                                  │
-    │  └─> 1. Convert query to embedding                         │
-    │  └─> 2. Vector similarity search (HNSW index)              │
-    │       • Filter by ownerId (user isolation)                 │
-    │       • TopK: 5 most similar chunks                        │
-    │  └─> 3. Retrieve relevant document chunks                  │
-    │  └─> 4. Build context prompt with retrieved chunks         │
-    │  └─> 5. LLM generates answer using context                 │
-    │  └─> 6. Return answer + source citations                   │
-    └─────────────────────────────────────────────────────────────┘
-```
+**Routes**
+| Path | Target | Filter |
+|------|--------|--------|
+| `/api/v1/files/**`, `/api/v1/uploads/**`, `/api/v1/outbox/**` | TusUploaderService :8081 | TokenRelay |
+| `/api/v1/users/**` | UserDetailService :8082 | TokenRelay |
+| `/api/v1/jobs/**` | AIProcessingService :8083 | TokenRelay |
+| `/api/rag/**` | AIProcessingService :8083 | TokenRelay |
+| `/api/auth/userinfo` | Gateway-owned (current session) | — |
+| `/ui`, `/ui/**` | Frontend (`UI_URL`) | — |
+| `/docs/openapi/{tus,users,ai}`, `/v3/api-docs` | Aggregated OpenAPI | — |
 
-### RAG Components
+> SockJS receive transports require incremental flushing, so the gateway sets
+> `spring.cloud.gateway.mvc.streaming-media-types` for `text/event-stream` and
+> `application/javascript` (charset included) — otherwise the realtime channel hangs.
 
-#### 1. Text Extraction & Chunking
+### 2. TusUploaderService (Port 8081)
 
-**TextExtractionService**
-- Extracts plain text from various formats:
-  - **PDF**: Apache PDFBox
-  - **Text files**: Direct UTF-8 reading
-  - **Other formats**: Extensible for future support
+**Responsibilities**
+- Resumable file uploads via the **TUS protocol** (creation, creation-with-upload, resumable, expiration, checksum, termination)
+- File **versioning** and metadata management
+- **MinIO** (S3) object storage
+- **Sharing** scopes & per-file ACLs; **favorites**; **per-user storage quota** enforcement
+- Outbox **publisher** (file lifecycle + storage events) and **consumer** of AI results
 
-**ChunkingService**
-- Uses Spring AI's `TokenTextSplitter`
-- Configuration:
-  ```yaml
-  chunk-size: 500 tokens (~2000 characters)
-  overlap: 50 tokens (10% overlap for context preservation)
-  ```
-- Each chunk includes metadata:
-  - `fileId`, `fileVersionId`, `version`
-  - `ownerUserId` (for access control)
-  - `filename`, `contentType`
-  - `summary`, `tags`, `sensitivity` (from AI analysis)
-  - `chunkIndex`, `chunkTokens`
+**Key Features**
+- ✅ TUS chunked/resumable uploads with SHA-1 / MD5 checksum verification
+- ✅ Content-Type auto-detection (Apache Tika)
+- ✅ File versioning with per-version metadata
+- ✅ Sharing scopes: `PERSONAL`, `DEPARTMENT`, `ORGANIZATION` + explicit user shares
+- ✅ Favorites (per file version)
+- ✅ Storage-quota reservation/confirmation/release via outbox events
+- ✅ Scheduled cleanup of expired uploads ("WALL-E" task)
 
-#### 2. Embedding Generation
+**Main endpoints**
+- `POST/HEAD/PATCH/DELETE /api/v1/uploads[/{id}]` — TUS lifecycle
+- `GET /api/v1/files` (list/filter), `GET /api/v1/files/{id}`, `…/download`, `…/preview`
+- `GET/PATCH /api/v1/files/generatedmetadata/{id}` — AI metadata
+- `GET/POST/PATCH/DELETE /api/v1/files/{id}/shares[/{shareId}]`, `GET /api/v1/files/my-shared`, `/my-uploads`, `POST /writable-ids`
+- `POST/GET /api/v1/files/{fileId}/versions[/…]`, favorite/unfavorite, `GET /api/v1/files/favorites`
 
-**Model**: Ollama `nomic-embed-text`
-- **Dimensions**: 768
-- **Strengths**: 
-  - High quality embeddings for semantic search
-  - Optimized for retrieval tasks
-  - Lower memory footprint than larger models
+**Database:** `uploads`, `files`, `file_versions`, `file_shares`, `file_version_favorites`, `files_outbox_events`
 
-**Vector Store**: PostgreSQL with pgvector extension
-- **Index Type**: HNSW (Hierarchical Navigable Small World)
-  - Fast approximate nearest neighbor search
-  - Optimized for large-scale similarity search
-- **Distance Metric**: Cosine similarity
-- **Schema**:
-  ```sql
-  CREATE TABLE vector_store (
-    id UUID PRIMARY KEY,
-    content TEXT,
-    metadata JSONB,
-    embedding vector(768)
-  );
-  
-  CREATE INDEX ON vector_store USING hnsw (embedding vector_cosine_ops);
-  ```
+### 3. UserDetailService (Port 8082)
 
-**Tracking Table**: `file_version_embeddings`
-```sql
-CREATE TABLE file_version_embeddings (
-  id BIGSERIAL PRIMARY KEY,
-  file_version_id BIGINT NOT NULL,
-  chunk_index INTEGER NOT NULL,
-  vector_store_id UUID NOT NULL,
-  content_preview TEXT,
-  chunk_tokens INTEGER,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
+**Responsibilities**
+- User profile management synced with Keycloak (org / department / role)
+- **Avatars** (upload / fetch / delete)
+- **Per-user storage quota** bookkeeping (consumes storage outbox events idempotently)
+- User search, listing, batch lookup
 
-#### 3. RAG Query Service
+**Main endpoints**
+- `GET /api/v1/users` (search/filter), `GET /api/v1/users/{id}`, `POST /api/v1/users/batch`
+- `POST/PUT /api/v1/users[/{id}]`, `DELETE /api/v1/users/{id}`
+- `GET /api/v1/users/me`, `POST/DELETE /api/v1/users/me/avatar`, `GET /api/v1/users/{id}/avatar`
 
-**RagService.kt**
-```kotlin
-fun queryWithRag(userQuery: String, filters: Map<String, String>, topK: Int = 5): RagResponse {
-    // 1. Build filter expression (user isolation)
-    val filterExpression = FilterExpressionBuilder()
-        .eq("ownerUserId", filters["ownerId"])
-        .build()
-    
-    // 2. Semantic search with filters
-    val searchRequest = SearchRequest.builder()
-        .topK(topK)
-        .filterExpression(filterExpression)
-        .build()
-    
-    // 3. Retrieve relevant document chunks
-    val documents = vectorStore.similaritySearch(searchRequest)
-    
-    // 4. LLM generates answer with retrieved context
-    val result = chatClient.prompt()
-        .advisors(
-            QuestionAnswerAdvisor.builder(vectorStore)
-                .searchRequest(searchRequest)
-                .build()
-        )
-        .user(userQuery)
-        .call()
-        .content()
-    
-    return RagResponse(answer = result, sources = documents)
-}
-```
+**Database:** `users` (profile + org/department + `storageUsed` / `storageQuota`)
 
-**API Endpoint**: `POST /api/rag/query`
-```json
-{
-  "query": "What are the main security policies in my documents?",
-  "filters": {
-    "ownerId": "user-uuid"
-  },
-  "topK": 5
-}
-```
+### 4. AIProcessingService (Port 8083)
 
-**Response**:
-```json
-{
-  "query": "What are the main security policies?",
-  "answer": "Based on your documents, the main security policies include...",
-  "sourcesCount": 5,
-  "sources": [
-    {
-      "content": "Full chunk text...",
-      "contentPreview": "Security policies require...",
-      "metadata": {
-        "fileId": "...",
-        "filename": "security-policy.pdf",
-        "chunkIndex": 3,
-        "similarity": 0.87
-      },
-      "similarity": 0.87
-    }
-  ]
-}
-```
+**Responsibilities**
+- **Document analysis** — AI metadata (summary, tags, sensitivity) for documents **and images (vision)**
+- **Text extraction** (PDF/DOCX/text) → **semantic chunking** → **embedding generation** → **pgvector** storage
+- **Conversational RAG** — natural-language Q&A over the user's accessible documents, **streamed** over STOMP
+- **Embedding deletion** — event-driven cleanup when files/versions are removed
+- **Job management** — pipeline state machine, retries, Dead Letter Topic
+- **Realtime push** — per-user STOMP/SockJS channel for job status and RAG tokens
+- **LLM observability** — Langfuse traces + optional evaluation scores
 
-### Embedding Deletion System
+**Main endpoints**
+- `POST /api/rag/query/stream` — start a streamed RAG query (answer pushed to `/user/queue/rag`)
+- `POST /api/v1/jobs/status/batch` — job statuses for many file versions
+- `GET /api/v1/jobs/stats` — dashboard counters
+- `GET /api/v1/jobs/failed` — list failed jobs
+- `POST /api/v1/jobs` — retry a failed job
+- WebSocket (SockJS) endpoint behind the gateway for `/user/queue/jobs` and `/user/queue/rag`
 
-When a file is deleted, the system automatically removes associated embeddings to maintain consistency and avoid orphaned data.
+**Database:** `jobs`, `job_outbox`, `vector_store` (pgvector), `file_version_embeddings`, `SPRING_AI_CHAT_MEMORY`
 
-#### Deletion Flow
+### 5. Frontend SPA (Port 5173 dev, served at `/ui`)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    EMBEDDING DELETION PIPELINE                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+React 19 + TypeScript + Vite 6 + Tailwind v4 + Redux Toolkit single-page app. It does **not** run
+the OIDC flow itself — it rides the gateway's BFF session (see [frontend/README.md](frontend/README.md)).
 
-1️⃣  USER DELETES FILE
-    ┌─────────────────────────────────────────────────────────────┐
-    │ DELETE /api/v1/files/{id}                                   │
-    │                                                             │
-    │ FileService.deleteFile()                                    │
-    │  BEGIN TRANSACTION                                          │
-    │  ├─> Retrieve fileVersionIds                               │
-    │  ├─> INSERT into files_outbox_events                       │
-    │  │   {                                                      │
-    │  │     "eventType": "FILE_DELETED",                        │
-    │  │     "payload": {                                        │
-    │  │       "fileId": "uuid",                                 │
-    │  │       "fileVersionIds": [101, 102],                     │
-    │  │       "deletedAt": "2025-01-06T...",                   │
-    │  │       "deletedBy": "user-uuid"                          │
-    │  │     }                                                   │
-    │  │   }                                                      │
-    │  ├─> fileRepository.deleteById(id)                         │
-    │  └─> storageService.deleteAllVersions(id)                  │
-    │  COMMIT TRANSACTION                                         │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-2️⃣  CDC PUBLISHES EVENT
-    ┌─────────────────────────────────────────────────────────────┐
-    │ Debezium Connector                                          │
-    │  └─> Detects INSERT in files_outbox_events                 │
-    │  └─> Publishes to Kafka topic: file-outbox                 │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-3️⃣  EMBEDDING DELETION
-    ┌─────────────────────────────────────────────────────────────┐
-    │ AIProcessingService - FileDeletionListener                  │
-    │                                                             │
-    │  @KafkaListener(topics = ["file-outbox"])                  │
-    │  ├─> Filter event: event_type == "FILE_DELETED"           │
-    │  ├─> Extract fileVersionIds from payload                   │
-    │  └─> For each fileVersionId:                               │
-    │      └─> EmbeddingDeletionService.deleteEmbeddings()       │
-    └─────────────────────────────────────────────────────────────┘
-                                ▼
-4️⃣  VECTOR STORE CLEANUP
-    ┌─────────────────────────────────────────────────────────────┐
-    │ EmbeddingDeletionService                                    │
-    │                                                             │
-    │  └─> Query: SELECT * FROM file_version_embeddings          │
-    │       WHERE file_version_id = ?                            │
-    │  └─> For each embedding record:                            │
-    │      ├─> vectorStore.delete(vectorStoreId)                 │
-    │      └─> embeddingRepository.deleteById(embeddingId)       │
-    │  └─> Result: All embeddings removed                        │
-    └─────────────────────────────────────────────────────────────┘
-```
-
-#### Deletion Components
-
-**FileDeletedEvent.kt**
-```kotlin
-data class FileDeletedEvent(
-    val fileId: UUID,
-    val deletedAt: String,
-    val deletedBy: UUID?,
-    val fileVersionIds: List<Long>
-)
-```
-
-**FileDeletionListener.kt**
-```kotlin
-@KafkaListener(topics = ["file-outbox"], groupId = "embedding-deletion-group")
-fun processFileDeletion(message: String, acknowledgment: Acknowledgment) {
-    val wrapper = objectMapper.readValue(message, OutboxEventWrapper::class.java)
-    
-    // Filter only FILE_DELETED events
-    if (wrapper.event_type != "FILE_DELETED") {
-        acknowledgment.acknowledge()
-        return
-    }
-    
-    val event = objectMapper.convertValue(wrapper.payload, FileDeletedEvent::class.java)
-    
-    // Delete embeddings for each version
-    event.fileVersionIds.forEach { fileVersionId ->
-        embeddingDeletionService.deleteEmbeddingsByFileVersionId(fileVersionId)
-    }
-    
-    acknowledgment.acknowledge()
-}
-```
-
-**EmbeddingDeletionService.kt**
-```kotlin
-@Transactional
-fun deleteEmbeddingsByFileVersionId(fileVersionId: Long) {
-    val embeddings = embeddingRepository.findByFileVersionIdOrderByChunkIndex(fileVersionId)
-    
-    log.info("Deleting ${embeddings.size} embeddings for fileVersion $fileVersionId")
-    
-    embeddings.forEach { embedding ->
-        try {
-            // Delete from vector store
-            vectorStore.delete(listOf(embedding.vectorStoreId.toString()))
-            
-            // Delete tracking record
-            embeddingRepository.delete(embedding)
-        } catch (e: Exception) {
-            log.error("Failed to delete embedding ${embedding.id}: ${e.message}")
-            // Continue with other embeddings
-        }
-    }
-    
-    log.info("Completed deletion for fileVersion $fileVersionId")
-}
-```
-
-#### Deletion Guarantees
-
-✅ **Event-Driven**: Asynchronous deletion using Kafka + CDC  
-✅ **Transactional**: File deletion and outbox event are atomic  
-✅ **Resilient**: Continues even if individual embeddings fail  
-✅ **Consistent**: Ensures vector store and tracking table stay in sync  
-✅ **Auditable**: All deletion events are logged  
-
-#### Idempotency Handling
-
-The deletion process is idempotent:
-- If an embedding is already deleted, the operation silently succeeds
-- Duplicate Kafka messages won't cause errors
-- Partial failures are handled gracefully
-
-### RAG Configuration
-
-**application.yml** (AIProcessingService)
-```yaml
-spring:
-  ai:
-    vectorstore:
-      pgvector:
-        index-type: hnsw               # Fast approximate nearest neighbor
-        distance-type: cosine_distance # Cosine similarity for semantic search
-        dimensions: 768                # nomic-embed-text embedding size
-        initialize-schema: false       # Managed by Flyway
-        table-name: vector_store
-    ollama:
-      base-url: http://localhost:11434
-      embedding:
-        options:
-          model: nomic-embed-text      # Embedding model
-```
-
-**Text Splitter Configuration**
-```yaml
-text-splitter:
-  chunk-size: 500      # Tokens per chunk
-  overlap: 50          # Token overlap between chunks
-```
-
-### RAG Limitations
-
-1. **Asynchronous Processing**
-   - Embeddings are not available immediately after upload
-   - Processing time: ~2-10 seconds depending on file size
-
-2. **Query Context Window**
-   - TopK default: 5 chunks
-   - Each chunk: ~500 tokens
-   - Total context: ~2,500 tokens max
-
-3. **Embedding Model Limitations**
-   - Maximum text length: ~512 tokens per chunk
-   - Language support: Primarily English (nomic-embed-text)
-
-4. **Deletion Latency**
-   - Embedding deletion is asynchronous
-   - May take a few seconds to complete
-   - No impact on file deletion completion
-
-### RAG Future Enhancements
-
-🔮 **Planned Improvements:**
-
-1. **Hybrid Search**: Combine vector search with keyword (BM25) search
-2. **Reranking**: Use cross-encoder model to rerank retrieved chunks
-3. **Query Expansion**: Automatically expand user queries with synonyms
-4. **Citation Links**: Direct links to source documents in responses
-5. **Conversation History**: Multi-turn conversations with context
-6. **Embedding Caching**: Cache frequently accessed embeddings
-7. **Bulk Deletion Optimization**: Batch delete operations for performance
+**Pages / features**
+- **Dashboard** — at-a-glance counters (live, via STOMP)
+- **Documents** — library + details, preview/download, AI metadata, versions
+- **Upload** — app-global resumable TUS queue (persists in IndexedDB, survives navigation/relogin)
+- **Shared with me** — documents shared by others
+- **Favorites** — quick access + favorite download
+- **Profile** — user info, avatar, storage usage bar
+- **Admin** — organization overview + **user management** (roles, quotas)
+- **Failed jobs** — inspect & retry failed AI jobs
+- **RAG chat widget** — conversational Q&A with **streaming, markdown-rendered** answers + source citations
 
 ---
 
 ## 🤖 AI Metadata Generation
 
-The system uses **Spring AI** framework with **Groq's LLaMA models** to automatically analyze uploaded files and generate enriched metadata.
+Uploaded files are analyzed with **Spring AI 1.1.2** against **Groq-hosted Qwen3** models. The
+analyzer produces a structured summary, tags, and a sensitivity classification.
 
-### AI Models Configuration
+### Models
 
-The system employs a **dual-model strategy** based on content type:
+All chat/document/vision generation defaults to a single Groq-hosted model (configurable per role
+via env vars), replacing the earlier dual-Llama strategy:
 
-| Content Type | AI Model | Provider | Use Case |
-|--------------|----------|----------|----------|
-| **PDF Files** | Llama 3.3 70B Versatile | Groq | Complex documents requiring deep analysis |
-| **Text/Other** | Llama 3.1 8B Instant | Groq | Generic text files, faster processing |
+| Concern | Default model | Provider | Notes |
+|---------|---------------|----------|-------|
+| Text / PDF analysis | `qwen/qwen3.6-27b` (`CHAT_MODEL` / `PDF_MODEL`) | Groq | Document metadata extraction |
+| **Image (vision)** analysis | `qwen/qwen3.6-27b` (`IMAGE_MODEL`) | Groq | Multimodal; routed to Groq explicitly |
+| RAG chat | `qwen/qwen3.6-27b` (`GROQ_MODEL`) | Groq | Answer generation over retrieved context |
 
-### Model Selection Logic
+> Supported content types are centralized in `SupportedContentTypes`: **documents/text** are both
+> *analyzable* and *text-extractable* (they feed the embedding pipeline), while **images** are
+> *analyzable* via the vision model but produce no text to embed.
 
-```kotlin
-private fun selectAIClient(contentType: String): ChatClient {
-    // Extract base MIME type (remove charset and parameters)
-    val baseMimeType = contentType.split(";").firstOrNull()?.trim() ?: contentType
-    
-    return if (baseMimeType.equals("application/pdf", ignoreCase = true)) {
-        // PDF-specific model: More powerful for complex documents
-        pdfAnalysisChatClient  // Llama 3.3 70B
-    } else {
-        // Generic model: Faster for simple text files
-        chatClient  // Llama 3.1 8B
-    }
-}
-```
+### PDF & Content Handling
 
-### PDF Text Extraction
+- **PDF text extraction** via Apache PDFBox; DOCX/text handled by the extraction service.
+- **Smart truncation** to respect token limits — keeps the **beginning (70%) and end (30%)** of long
+  documents around a truncation marker, configurable via `ai.document.max-content-chars` /
+  `ai.document.beginning-percentage`.
 
-PDF files are processed using **Apache PDFBox**:
+### Retry with Equal-Jitter Exponential Backoff
+
+AI analysis retries transient failures (default attempts configurable). Between attempts it sleeps a
+delay that is both **exponential** and **equal-jittered** to avoid thundering-herd retries:
 
 ```kotlin
-private fun extractTextFromPdf(inputStream: InputStream): String {
-    var document: org.apache.pdfbox.pdmodel.PDDocument? = null
-    return try {
-        document = org.apache.pdfbox.pdmodel.PDDocument.load(inputStream)
-        val stripper = org.apache.pdfbox.text.PDFTextStripper()
-        val text = stripper.getText(document)
-        log.info("Extracted ${text.length} chars from PDF (${document.numberOfPages} pages)")
-        text
-    } finally {
-        document?.close()
-    }
-}
+val exponentialBackoff = (analysisBackoffBaseMs * (1L shl (attempt - 1))).coerceAtMost(analysisBackoffCapMs)
+val equalJitter = if (exponentialBackoff > 0) {
+    val half = exponentialBackoff / 2
+    half + Random.nextLong(half)        // random in [backoff/2, backoff)
+} else 0L
 ```
 
-### Intelligent Content Truncation
-
-To avoid AI token limits, the system implements **smart truncation**:
-
-```kotlin
-private fun truncateContent(content: String, maxChars: Int): String {
-    if (content.length <= maxChars) return content
-    
-    // Take beginning (70%) and ending (30%) to preserve context
-    val beginChars = (maxChars * beginningPercentage / 100.0).toInt()
-    val endChars = maxChars - beginChars
-    
-    val beginning = content.take(beginChars)
-    val ending = content.takeLast(endChars)
-    
-    val truncationMarker = "\n\n[... CONTENT TRUNCATED - ${content.length - maxChars} characters omitted ...]\n\n"
-    
-    return beginning + truncationMarker + ending
-}
-```
-
-**Configuration** (application.yml):
-```yaml
-ai:
-  document:
-    max-content-chars: 15000      # ~3750 tokens
-    beginning-percentage: 70       # 70% from start, 30% from end
-```
-
-### AI Analysis Prompt
-
-The system uses a structured prompt template (`prompts/file-analysis-prompt.st`):
-
-```
-# AI File Analyzer - Document Metadata Extraction
-
-## Your Role
-You are an expert document analyzer for a corporate file management system.
-
-## Instructions
-Analyze the document and extract:
-
-1. **Summary**: Concise summary (max 2 sentences)
-2. **Tags**: Exactly 5 relevant keywords (lowercase, comma-separated)
-3. **Sensitivity**: Classification level
-   - PUBLIC: Can be shared publicly
-   - INTERNAL: Internal company info, not confidential
-   - CONFIDENTIAL: Sensitive business information
-   - HIGHLY_CONFIDENTIAL: Trade secrets, legal docs
-
-## Output Format (JSON only, no markdown):
-{
-  "summary": "Your 2-sentence summary",
-  "tags": "tag1,tag2,tag3,tag4,tag5",
-  "sensitivity": "PUBLIC|INTERNAL|CONFIDENTIAL|HIGHLY_CONFIDENTIAL"
-}
-
-## Document:
-{document}
-```
-
-### Retry Logic with Exponential Backoff
-
-AI analysis includes robust retry mechanism (max 5 attempts):
-
-```kotlin
-private fun analyzeUploadWithRetry(
-    inputStream: InputStream, 
-    jobId: UUID, 
-    client: ChatClient,
-    contentType: String
-): MetadataDTO {
-    val maxRetries = 5
-    
-    for (attempt in 1..maxRetries) {
-        try {
-            // Reset stream for retries
-            if (attempt > 1 && inputStream.markSupported()) {
-                inputStream.reset()
-            }
-            
-            val result = analyzeUpload(inputStream, client, contentType)
-            
-            // Validate completeness
-            if (result.summary == null || result.tags == null || result.sensitivity == null) {
-                throw IllegalStateException("Incomplete metadata from AI")
-            }
-            
-            return result  // ✅ Success
-            
-        } catch (e: Exception) {
-            if (attempt < maxRetries) {
-                // Exponential backoff: 1s, 2s, 3s, 4s, 5s
-                val delayMs = (1000L * attempt).coerceAtMost(5000L)
-                Thread.sleep(delayMs)
-            }
-        }
-    }
-    
-    // ❌ All attempts failed - mark as UNSUPPORTED
-    throw AIAnalysisUnsupportedException("AI analysis failed after $maxRetries attempts")
-}
-```
-
-### Metadata Output Structure
+### Metadata Output
 
 ```kotlin
 data class MetadataDTO(
-    val summary: String?,           // "This document outlines the Q4 financial results..."
-    val tags: String?,              // "finance,quarterly,report,2024,revenue"
-    val sensitivity: sensitivityLevel?  // CONFIDENTIAL
+    val summary: String?,                 // concise 2-sentence summary
+    val tags: String?,                    // 5 comma-separated keywords
+    val sensitivity: sensitivityLevel?,   // PUBLIC | INTERNAL | CONFIDENTIAL | HIGHLY_CONFIDENTIAL
 )
-
-enum class sensitivityLevel {
-    PUBLIC,
-    INTERNAL,
-    CONFIDENTIAL,
-    HIGHLY_CONFIDENTIAL
-}
 ```
 
-### Job Status Management
-
-AI processing jobs transition through well-defined states:
+### Job State Machine
 
 ```
-PENDING → COMPLETED     ✅ AI analysis successful
-PENDING → UNSUPPORTED   ⚠️  AI failed after 5 retries (file still stored)
-PENDING → FAILED        ❌ Processing error (will retry after 5 minutes)
-FAILED  → FAILED        ❌ Retry failed → Dead Letter Topic (DLT)
+PENDING ──▶ PROCESSING ──▶ COMPLETED       ✅ analysis succeeded
+   │            │
+   │            ├──────────▶ UNSUPPORTED    ⚠️  content type not analyzable / failed permanently
+   │            └──────────▶ FAILED         ❌ transient error (will be retried)
+   └─ FAILED ─(retries exhausted)─▶ DEAD_LETTERED   ☠️ routed to Dead Letter Topic
 ```
+
+Every transition (including the two non-terminal progress pings) is **pushed live** to the owning
+user over STOMP — see [Realtime Channel](#-realtime-channel-stompsockjs).
+
+---
+
+## 🧠 RAG (Retrieval-Augmented Generation) System
+
+The RAG subsystem answers natural-language questions over **only the documents the authenticated user
+can access** (owned + shared), with **conversational memory** and **token streaming**. It is built on
+Spring AI's **modular RAG** (`RetrievalAugmentationAdvisor`).
+
+> 📚 Deep dives: [`docs/rag-implementation.md`](docs/rag-implementation.md) (query side, memory,
+> streaming, tracing) and [`docs/embedding-configuration.md`](docs/embedding-configuration.md)
+> (how documents become vectors). This section is the summary.
+
+### Pipeline
+
+```
+INGESTION (per uploaded document, event-driven)
+  TextExtractionService → ChunkingService (TokenTextSplitter) → EmbeddingGenerator
+    └─ embeddings via Qwen3-Embedding-4B (2560-dim) → pgvector  vector_store  + file_version_embeddings
+
+QUERY (POST /api/rag/query/stream)
+  RagUserContext.currentUserId()                  ← identity from JWT subject (never the request body)
+  FileAccessService.getAccessibleFileIds(user)    ← owned + shared file ids  (empty ⇒ early return, no LLM call)
+  FilterExpressionBuilder.in("fileId", …)         ← scope retrieval to those files
+  RetrievalAugmentationAdvisor (top-K, optional query rewrite/expansion, similarity threshold)
+  MessageWindowChatMemory  keyed "{userId}:{conversationId}"   ← per-user conversation isolation
+  chatClient.prompt().advisors(retrieval, memory).stream()     ← tokens pushed to /user/queue/rag
+```
+
+### Embeddings
+
+- **Model:** `Qwen3-Embedding-4B` → **2560-dimensional** vectors.
+- **Backends (interchangeable, same vector space):** local **Ollama** (`qwen3-embedding:4b`) *or*
+  **OpenWebUI** (OpenAI-compatible). Selected by `app.embedding.provider`.
+- **Store:** pgvector table `vector_store`, column `embedding vector(2560)`.
+- **Search:** **exact (sequential-scan) cosine similarity** — there is intentionally **no ANN index**,
+  because 2560 dimensions exceed pgvector's 2000-dim limit for HNSW/IVFFlat.
+- **Parallelism:** up to **3 concurrent** embedding calls (`min(topic partitions, consumer concurrency)`).
+
+### Conversational Memory
+
+- Per-conversation history persisted in Postgres (`SPRING_AI_CHAT_MEMORY`), keyed `"{userId}:{conversationId}"`
+  so conversations are **isolated per authenticated user**.
+- Follow-ups are compressed into standalone queries before retrieval; window size is configurable
+  (`app.rag.memory.max-messages`, default 20).
+
+### Streaming
+
+Answers are pushed **token-by-token** over the per-user STOMP destination `/user/queue/rag`
+(SockJS), correlated by a `streamId` returned immediately (`202 Accepted`). The same realtime
+connection also carries job-status updates.
+
+### Configuration (excerpt — all under `app.rag.*`)
+
+| What | Property | Env | Default |
+|------|----------|-----|---------|
+| Chunks retrieved per query | `app.rag.retrieval.top-k` | `RAG_TOP_K` | `5` |
+| Min cosine similarity | `app.rag.retrieval.similarity-threshold` | `RAG_SIMILARITY_THRESHOLD` | `0.0` (off) |
+| Query rewrite | `app.rag.retrieval.query-rewrite` | `RAG_QUERY_REWRITE` | `true` |
+| Query expansion | `app.rag.retrieval.query-expansion` | `RAG_QUERY_EXPANSION` | `false` |
+| Conversation window | `app.rag.memory.max-messages` | `RAG_MEMORY_MAX_MESSAGES` | `20` |
+| Serve streaming endpoint | `app.rag.streaming.enabled` | `RAG_STREAMING_ENABLED` | `true` |
+| Eval scores (master switch) | `app.rag.scoring.enabled` | `RAG_SCORING_ENABLED` | `false` |
+
+### Embedding Deletion
+
+When a file/version is deleted, `TusUploaderService` emits a `FILE_DELETED` outbox event; CDC
+publishes it to `file-outbox`; `AIProcessingService`'s deletion listener removes the corresponding
+rows from `vector_store` and `file_version_embeddings`. The process is **idempotent** and resilient
+to partial failures (one failed embedding does not block the rest).
+
+---
+
+## 📡 Realtime Channel (STOMP/SockJS)
+
+AI-job status and RAG answers are delivered over a **single per-user STOMP-over-SockJS connection**
+to `AIProcessingService`, routed through the gateway (no polling, no per-file streams).
+
+- **Why SockJS:** the servlet gateway cannot proxy a raw WebSocket upgrade, so SockJS falls back to
+  HTTP streaming transports, which the gateway *does* proxy (with `streaming-media-types` set).
+- **`/user/queue/jobs`** — one message per job transition (`pending` / `processing` progress pings +
+  the terminal `completed` / `unsupported` / `failed` / `deadlettered` outcome). A single
+  subscription drives the live updates across **Library, Dashboard and Failed Jobs**.
+- **`/user/queue/rag`** — `SOURCES → TOKEN… → DONE` (or `ERROR`) frames for a streamed query,
+  correlated by `streamId`.
 
 ---
 
 ## 📦 Transactional Outbox Pattern
 
-The **Transactional Outbox Pattern** is a critical architectural pattern that ensures **reliable event publishing** in distributed systems. It guarantees that database writes and event emissions happen atomically.
+The **Transactional Outbox Pattern** guarantees that a database write and its corresponding event are
+published atomically — solving the dual-write problem (DB commit vs. Kafka publish can't be made
+atomic directly).
 
-### Why Transactional Outbox?
-
-**Problem without Outbox:**
 ```kotlin
-// ❌ DANGEROUS: Not atomic!
-fun completeUpload(upload: Upload) {
-    database.save(upload)           // Step 1: Write to DB
-    kafka.publish(uploadEvent)      // Step 2: Publish event
-    
-    // What if Kafka is down? Event lost!
-    // What if DB commit fails after Kafka publish? Inconsistent state!
-}
-```
-
-**Solution with Outbox:**
-```kotlin
-// ✅ SAFE: Atomic operation
+// ✅ SAFE: one transaction
 @Transactional
 fun completeUpload(upload: Upload) {
-    database.save(upload)           // Step 1: Write to DB
-    outbox.save(uploadEvent)        // Step 2: Write event to outbox table
-    // Both succeed or both fail together!
-}
-// Debezium reads outbox table and publishes to Kafka asynchronously
+    database.save(upload)        // business write
+    outbox.save(uploadEvent)     // event row in the SAME transaction
+}                                // both commit or both roll back
+// Debezium tails the outbox table and publishes to Kafka asynchronously
 ```
 
-### Implementation Details
+### Producers
+- **TusUploaderService → `files_outbox_events`**: `FILE_INSERTED`, `FILE_DELETED`, and storage
+  accounting events `STORAGE_RESERVED` / `STORAGE_CONFIRMED` / `STORAGE_RELEASED`.
+- **AIProcessingService → `job_outbox`**: `ANALYSIS_COMPLETED` / `ANALYSIS_FAILED` / … with metadata.
 
-#### 1. TusUploaderService Outbox
+### Debezium / CDC
+- Connector class: `io.debezium.connector.postgresql.PostgresConnector` (plugin `pgoutput`).
+- `ExtractNewRecordState` (unwrap) + `ByLogicalTableRouter` map each outbox table to a clean topic
+  (`file-outbox`, `job-outbox`).
+- **Publications are `filtered`** (`publication.autocreate.mode=filtered`) and scoped to the outbox
+  tables only — a `FOR ALL TABLES` publication breaks DELETEs on tables without a primary key.
+- Connectors are **registered automatically** by the compose `setup` profile (idempotent `PUT`,
+  with auto-restart of failed tasks) — see [`just debezium`](#-configuration--setup).
 
-**Entity:** `FilesOutboxEvent.kt`
-```kotlin
-@Entity
-@Table(name = "files_outbox_events")
-class FilesOutboxEvent(
-    @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    var id: UUID? = null,
-    
-    @Column(name = "event_type", nullable = false)
-    var eventType: String,  // "FILE_INSERTED"
-    
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
-    var payload: FileUploadEvent,  // Contains file metadata
-    
-    @Column(name = "created_at", nullable = false)
-    @Temporal(TemporalType.TIMESTAMP)
-    var createdAt: Date
-)
-```
+### Benefits
+✅ Atomic DB write + event · ✅ No lost events · ✅ Services don't depend on Kafka directly ·
+✅ Built-in audit trail · ✅ Idempotent consumers tolerate duplicates
 
-**Transactional Write:** `TusService.kt`
-```kotlin
-@Transactional
-fun appendChunk(dto: UploadDTO, content: ByteArray): UploadDTO {
-    // ... file processing logic ...
-    
-    if (status == UploadStatus.MERGE_PENDING) {
-        // 1. Save file version
-        val version = fileService.createFileVersion(uploadEntity, file)
-        
-        // 2. Create outbox event (same transaction!)
-        val fileUploadEvent = FileUploadEvent(
-            fileId = uploadEntity.fileId,
-            fileVersionId = version.id.toString(),
-            version = version.version,
-            ownerUserId = uploadEntity.ownerId,
-            filename = version.filename,
-            contentType = version.contentType,
-            metadata = version.metadata
-        )
-        
-        val outboxEvent = FilesOutboxEvent(
-            eventType = "FILE_INSERTED",
-            payload = fileUploadEvent,
-            createdAt = Date.from(Instant.now())
-        )
-        
-        outboxRepository.save(outboxEvent)
-        // ✅ Transaction guarantees atomicity
-    }
-    
-    return uploadEntity.toDTO()
-}
-```
+---
 
-#### 2. AIProcessingService Outbox
+## 📈 Observability (LGTM + Langfuse)
 
-**Entity:** `JobOutbox.kt`
-```kotlin
-@Entity
-@Table(name = "job_outbox")
-class JobOutbox(
-    @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    var id: UUID? = null,
-    
-    @Column(name = "event_type", nullable = false)
-    var event_type: String,  // "ANALYSIS_COMPLETED", "ANALYSIS_FAILED", etc.
-    
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "payload", columnDefinition = "jsonb", nullable = false)
-    var payload: Map<String, Any>,  // Enhanced metadata
-    
-    @Column(name = "created_at", nullable = false)
-    var createdAt: Instant = Instant.now()
-)
-```
+Two complementary stacks, both run via Docker Compose:
 
-**Transactional Write:** `JobStatusService.kt`
-```kotlin
-@Transactional
-fun markJobAsCompleted(jobId: UUID, job: JobDTO, metadata: MetadataDTO) {
-    // 1. Update job status
-    val jobEntity = jobRepository.findById(jobId).get()
-    jobEntity.status = jobStatus.COMPLETED
-    jobEntity.payload = mapOf(
-        "summary" to metadata.summary!!,
-        "tags" to metadata.tags!!,
-        "sensitivity" to metadata.sensitivity!!.name
-    )
-    jobRepository.save(jobEntity)
-    
-    // 2. Create outbox event (same transaction!)
-    val outboxEvent = JobOutbox(
-        event_type = "ANALYSIS_COMPLETED",
-        payload = mapOf(
-            "fileid" to job.fileId,
-            "version" to job.version,
-            "status" to jobStatus.COMPLETED.name,
-            "metadata" to jobEntity.payload!!
-        )
-    )
-    jobOutboxRepository.save(outboxEvent)
-    // ✅ Both writes succeed or fail together
-}
-```
+### Grafana LGTM (system telemetry) — `grafana/otel-lgtm`
+- **All four services** export **OTLP traces** + **Micrometer metrics** to the LGTM container
+  (OTLP `:4318`). Distributed traces span gateway → service → DB → Kafka.
+- **Grafana :3000** · Loki (logs) `:3100` · Tempo (traces) · Prometheus `:9099`.
+- **Custom dashboards** auto-provisioned from `observability/`:
+  HTTP RED + JVM/Hikari + the embedding pipeline, plus a logs dashboard.
+- **Trace ↔ logs correlation** wired via `grafana-datasources.yaml` (Loki derived field parses
+  `mdc_traceId`; Tempo `tracesToLogsV2` maps `service.name → application`).
+- **Tempo idle period** raised to 15s (`observability/tempo-config.yaml`): cross-service spans arrive
+  seconds apart, and the 1s default sealed blocks before the gateway root span landed
+  (`<root span not yet received>`).
 
-### Debezium CDC Configuration
+### Langfuse (LLM/RAG tracing) — self-hosted
+- **Only AIProcessingService** traces to Langfuse — it's the only service doing LLM work. The OTel
+  **trace id == the Langfuse trace id**, which is how evaluation scores are attached out-of-band.
+- Spring AI emits `gen_ai.*` observations; a custom `LangfuseObservationFilter` adds full
+  prompt/completion text; `RagTracing` / `PipelineTracing` tag traces with user/session and feature
+  tags; `TraceContextInterceptor` recovers `traceparent` from Debezium payloads so the
+  upload→embedding chain stays one connected trace.
+- Optional **evaluation scores** (relevance, LLM-as-judge groundedness) posted via Langfuse REST.
+- **Langfuse UI :3001** (self-hosted stack: web, worker, ClickHouse, Redis, MinIO, Postgres).
 
-**File Service Connector:**
-```json
-{
-  "name": "fileservice-outbox-connector",
-  "config": {
-    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
-    "database.hostname": "postgres",
-    "database.port": "5432",
-    "database.user": "myuser",
-    "database.password": "secret",
-    "database.dbname": "filedb",
-    "database.server.name": "tusService",
-    "table.include.list": "public.files_outbox_events",
-    "plugin.name": "pgoutput",
-    "snapshot.mode": "initial",
-    
-    "transforms": "unwrap,router",
-    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
-    "transforms.unwrap.drop.tombstones": "false",
-    
-    "transforms.router.type": "io.debezium.transforms.ByLogicalTableRouter",
-    "transforms.router.topic.regex": "tusService.public.files_outbox_events",
-    "transforms.router.topic.replacement": "file-outbox"
-  }
-}
-```
-
-**AI Service Connector:**
-```json
-{
-  "name": "ai-job-outbox-connector",
-  "config": {
-    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
-    "database.hostname": "postgres_aireq",
-    "database.port": "5432",
-    "database.dbname": "aireqdb",
-    "table.include.list": "public.job_outbox",
-    "topic.prefix": "aiService",
-    
-    "transforms": "unwrap,router",
-    "transforms.router.topic.replacement": "job-outbox"
-  }
-}
-```
-
-### Outbox Pattern Benefits
-
-✅ **Atomic Operations**: DB writes + events are in same transaction  
-✅ **No Lost Events**: Events are persisted before publishing  
-✅ **Decoupling**: Services don't need direct Kafka dependency  
-✅ **Reliability**: Debezium handles retries and failures  
-✅ **Audit Trail**: Outbox tables provide event history  
-✅ **Idempotency**: Duplicate events can be handled by consumers  
+> 📚 See [`docs/langfuse-instrumentation.md`](docs/langfuse-instrumentation.md) and
+> [`docs/langfuse-self-hosting.md`](docs/langfuse-self-hosting.md).
 
 ---
 
@@ -970,513 +488,185 @@ fun markJobAsCompleted(jobId: UUID, job: JobDTO, metadata: MetadataDTO) {
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **Kotlin** | 1.9.25 | Primary programming language |
-| **Spring Boot** | 3.5.8/3.5.9 | Framework for microservices |
-| **Spring AI** | 1.1.2 | AI integration framework |
-| **Spring Security** | 6.2.x | OAuth2 resource server |
-| **Spring Kafka** | 3.3.11 | Kafka integration |
-| **Spring Data JPA** | - | Database ORM |
-| **PostgreSQL** | 15 | Primary database (with logical replication) |
-| **Flyway** | - | Database migrations |
-| **Apache Kafka** | 4.1.0 | Event streaming platform |
-| **Debezium** | 3.0.8 | Change Data Capture connector |
-| **Apache PDFBox** | 2.0.31 | PDF text extraction |
-| **MinIO** | Latest | S3-compatible object storage |
+| **Kotlin** | 1.9.25 | Primary language |
+| **Java (JDK)** | 21 | Runtime / toolchain |
+| **Spring Boot** | 3.5.8 / 3.5.9 (Gateway 3.4.12) | Microservice framework |
+| **Spring Framework** | 6.2.15 (pinned) | Pinned to avoid a 6.2.14 startup deadlock |
+| **Spring AI** | 1.1.2 | LLM, embeddings, modular RAG, chat memory |
+| **Spring Security** | 6.x | OAuth2 resource server / OIDC client |
+| **Spring Cloud Gateway (MVC)** | — | API gateway / BFF |
+| **Spring Kafka** | — | Kafka integration |
+| **Spring Data JPA + Flyway** | — | Persistence + migrations |
+| **PostgreSQL** | 15 (+ `pgvector` for aireqdb) | Per-service databases & vector store |
+| **Apache Kafka** | 4.1.0 | Event streaming |
+| **Kafka Connect + Debezium** | cp-kafka-connect / pgoutput | Change Data Capture |
+| **Apache PDFBox / POI / Tika** | — | PDF & DOCX text extraction / content-type detection |
+| **MinIO** | latest | S3-compatible object storage |
+
+### AI / Embeddings
+
+| Component | Choice |
+|-----------|--------|
+| Chat / PDF / **vision** LLM | **Groq**-hosted Qwen3 (`qwen/qwen3.6-27b`, configurable) |
+| Embedding model | **Qwen3-Embedding-4B** (2560-dim) via **Ollama** or **OpenWebUI** |
+| Vector store | PostgreSQL **pgvector** (exact cosine search, no ANN index) |
 
 ### Frontend
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **React** | 18.x | UI framework |
-| **TypeScript** | 5.x | Type-safe JavaScript |
-| **Vite** | 5.x | Build tool |
-| **React Bootstrap** | - | UI components |
-| **tus-js-client** | 4.x | Resumable file uploads |
+| **React** | 19 | UI framework |
+| **TypeScript** | 5.7 | Type-safe JS |
+| **Vite** | 6 | Build tool / dev server |
+| **Tailwind CSS** | 4 | Styling ("Corporate Precision" design tokens) |
+| **Redux Toolkit** + react-redux | 2.x / 9.x | State management |
+| **React Router** | 7 | Routing (`basename="/ui"`) |
+| **Axios** | 1.7 | HTTP (cookies, XSRF, 401 redirect) |
+| **@stomp/stompjs + sockjs-client** | 7.x / 1.6 | Realtime (jobs + RAG streaming) |
+| **tus-js-client** | 4.x | Resumable uploads |
+| **react-markdown + remark-gfm** | 10.x / 4.x | Markdown rendering in chat |
+| **docx-preview** | 0.3 | In-browser DOCX preview |
 
-### Infrastructure
+### Infrastructure & Observability
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **Docker Compose** | - | Container orchestration |
-| **Keycloak** | 26.4 | OAuth2/OIDC provider |
-| **Kafka UI** | Latest | Kafka cluster monitoring |
-| **Kafka Connect** | Latest | Debezium connectors |
-
-### AI Providers
-
-| Provider | Model | Use Case |
-|----------|-------|----------|
-| **Groq** | Llama 3.3 70B Versatile | PDF document analysis |
-| **Groq** | Llama 3.1 8B Instant | Generic text file analysis |
-
----
-
-## 🎯 Services Overview
-
-### 1. TusUploaderService (Port 8081)
-
-**Responsibilities:**
-- Manages file uploads using TUS protocol (resumable uploads)
-- Implements chunked upload with merge strategies (client-side/server-side)
-- File versioning and metadata management
-- Integration with MinIO for object storage
-- Role-based access control (RBAC) for file operations
-- Publisher of file upload events via Outbox pattern
-- Consumer of AI analysis results
-
-**Key Features:**
-- ✅ TUS protocol support (creation, creation-with-upload, resumable, expiration)
-- ✅ Automatic checksum verification (SHA-1, MD5)
-- ✅ Content-Type auto-detection using Apache Tika
-- ✅ File versioning system
-- ✅ Sharing scopes: PERSONAL, DEPARTMENT, ORGANIZATION
-- ✅ Scheduled cleanup of expired uploads (WALL-E task)
-
-**Database Schema:**
-- `uploads` - Upload session metadata
-- `files` - File entities
-- `file_versions` - Version history with metadata
-- `files_outbox_events` - Outbox table for Kafka events
-- `file_shares` - File sharing permissions
-
-### 2. AIProcessingService (Port 8083)
-
-**Responsibilities:**
-- **Document Analysis**: AI-based metadata extraction (summary, tags, sensitivity)
-- **Text Extraction**: Extract text from PDF and other formats
-- **Semantic Chunking**: Split documents into meaningful chunks with overlap
-- **Embedding Generation**: Convert text chunks to vector embeddings
-- **Vector Storage**: Store embeddings in PostgreSQL pgvector
-- **RAG Queries**: Natural language search and question-answering
-- **Embedding Deletion**: Automatic cleanup when files are deleted
-- **Job Management**: Track processing pipeline and handle failures
-
-**Key Features:**
-- ✅ Dual AI model strategy (PDF-specific Llama 3.3 70B vs generic Llama 3.1 8B)
-- ✅ RAG pipeline with Ollama nomic-embed-text (768 dimensions)
-- ✅ PostgreSQL pgvector with HNSW indexing for fast similarity search
-- ✅ Event-driven embedding deletion via Kafka + Debezium CDC
-- ✅ Semantic chunking with 500 tokens/chunk and 50 token overlap
-- ✅ User isolation in vector search (filter by ownerId)
-- ✅ PDF text extraction with Apache PDFBox
-- ✅ Intelligent content truncation for token limits
-- ✅ Retry mechanism with exponential backoff (5 attempts)
-- ✅ Job status tracking (PENDING → COMPLETED/UNSUPPORTED/FAILED)
-- ✅ Dead Letter Topic (DLT) for failed jobs
-
-**Database Schema:**
-- `jobs` - AI processing job records
-- `job_outbox` - Outbox table for result events
-- `vector_store` - pgvector table with HNSW index for embeddings
-- `file_version_embeddings` - Tracking table linking chunks to vector store
-
-**API Endpoints:**
-- `POST /api/rag/query` - Query documents with natural language
-- `GET /api/jobs/{id}/status` - Check processing job status
-
-### 3. UserDetailService (Port 8082)
-
-**Responsibilities:**
-- User profile management
-- Organization and department hierarchy
-- User authentication support
-- User search and listing
-
-**Database Schema:**
-- `users` - User profiles with organization/department
-
-### 4. ApiGateway (Port 8080)
-
-**Responsibilities:**
-- Single entry point for all client requests
-- OAuth2 authentication with Keycloak
-- Token relay to backend services
-- Request routing
-
-**Routes:**
-- `/api/v1/files/**` → TusUploaderService
-- `/api/v1/uploads/**` → TusUploaderService
-- `/api/v1/users/**` → UserDetailService
-- `/ui/**` → Frontend
-
-### 5. Frontend (Port 5173)
-
-**Responsibilities:**
-- File upload interface with progress tracking
-- File browsing and management
-- Resume/pause/cancel upload controls
-- File metadata visualization
-- User authentication (OAuth2 Authorization Code flow)
-
-**Key Features:**
-- ✅ TUS-based chunked uploads with progress bar
-- ✅ File preview and download
-- ✅ Metadata display (including AI-generated)
-- ✅ Role-based UI (admin/manager/staff)
-- ✅ Sharing scope selection
+| **Docker Compose** | — | Local orchestration of all infra |
+| **Keycloak** | 26.4 | OAuth2 / OIDC provider |
+| **Kafka UI** | latest | Kafka cluster monitoring |
+| **Grafana LGTM** | `grafana/otel-lgtm` | Metrics, logs, traces (Grafana/Loki/Tempo/Prometheus) |
+| **Langfuse** | v3 (self-hosted) | LLM/RAG tracing & evaluation |
 
 ---
 
 ## 🧪 Testing Strategy
 
-### Test Coverage
+The backend uses **JUnit 5 + MockK / SpringMockK** with **Testcontainers** for integration/E2E; the
+frontend uses **Vitest + React Testing Library** (jsdom). Tests cover the three levels — unit,
+integration, and end-to-end.
 
-The project implements a **comprehensive testing strategy** with multiple test levels:
+| Service | Test files | Notable suites |
+|---------|-----------:|----------------|
+| **TusUploaderService** | 18 | Tus service/controller, file service, Kafka producer/consumer, JPA specs, Debezium/Kafka integration, E2E |
+| **AIProcessingService** | 20 | RAG service, embedding generator/processor, text extraction, job status/stats/retry, dead-letter, conversation resolver, scoring, Kafka listener |
+| **UserDetailService** | 10 | User service/controller, storage-outbox consumer, Keycloak-mock integration |
+| **ApiGateway** | 1 | Context load / smoke |
 
-#### 1. Unit Tests
+> ℹ️ **Update vs. earlier docs:** AIProcessingService **is** covered by automated tests now (20 files),
+> including RAG, embeddings and the job pipeline — the earlier "manual testing only" caveat no longer
+> applies. AI calls and the vector store are mocked/contained so suites run without live Groq/Ollama.
 
-**Location:** `src/test/kotlin/.../unit/`
-
-**Coverage:**
-- Service layer logic (mocked dependencies)
-- Business rules validation
-- Data transformation
-- Edge cases and error handling
-
-**Example Test Categories:**
-```text
-// TusServiceTest.kt
-- Upload creation
-- Chunk appending
-- Checksum verification
-- Content-Type extraction from metadata
-- Error scenarios
-
-// FileServiceTest.kt
-- File version creation
-- Access control validation
-- Metadata updates
-```
-
-**Tools:**
-- JUnit 5
-- MockK (Kotlin mocking library)
-- SpringMockK (Spring + MockK integration)
-
-#### 2. Integration Tests
-
-**Location:** `src/test/kotlin/.../integration/`
-
-**Coverage:**
-- Service layer with real database
-- Repository operations
-- Transactional behavior
-- Database constraints
-
-**Example Test Categories:**
-```text
-// TusServiceTest (integration)
-@DataJpaTest
-- Upload creation with database persistence
-- Content-Type extraction validation
-- File versioning with cascade operations
-- Upload completion flow
-```
-
-**Tools:**
-- Spring Boot Test
-- Testcontainers (PostgreSQL)
-- H2 for some lightweight tests
-
-#### 3. End-to-End (E2E) Tests
-
-**Location:** `src/test/kotlin/.../e2e/`
-
-**Coverage:**
-- Complete API flows
-- Controller → Service → Repository
-- Authentication and authorization
-- HTTP request/response validation
-
-**Example Test Categories:**
-```text
-// UploadE2ETests.kt
-- POST /uploads - Creation with upload
-- PATCH /uploads/{id} - Chunk append
-- HEAD /uploads/{id} - Upload info
-- DELETE /uploads/{id} - Termination
-- Error responses: 413 Payload Too Large, 404 Not Found, 403 Forbidden
-
-// FileE2ETests.kt
-- GET /files - List files with filters
-- GET /files/{id}/download - Download with version
-- Access control scenarios
-```
-
-**Tools:**
-- @SpringBootTest
-- RestTemplate
-- TestRestTemplate
-- Testcontainers (full stack)
-
-#### 4. Test Configuration
-
-**JaCoCo Code Coverage:**
-```kotlin
-tasks.jacocoTestReport {
-    reports {
-        xml.required.set(true)
-        html.required.set(true)
-    }
-}
-```
-
-**Test Profiles:**
-```yaml
-# src/test/resources/application.yml
-spring:
-  datasource:
-    url: jdbc:h2:mem:testdb
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-```
-
-### Running Tests
-
+**Backend**
 ```bash
-# Run all tests
-./gradlew test
-
-# Run tests with coverage report
-./gradlew test jacocoTestReport
-
-# Run only unit tests
-./gradlew test --tests "*unit*"
-
-# Run only integration tests
-./gradlew test --tests "*integration*"
-
-# Run only E2E tests
-./gradlew test --tests "*e2e*"
-
-# View coverage report
-open build/reports/jacoco/test/html/index.html
+./gradlew test                      # all tests for a service
+./gradlew test jacocoTestReport     # with JaCoCo coverage
+./gradlew test --tests "*unit*"     # filter by level (unit/integration/e2e)
 ```
 
-### Test Metrics
-
-| Service | Test Classes | Test Methods | Coverage Target |
-|---------|--------------|--------------|-----------------|
-| TusUploaderService | 12+ | 100+ | >80% |
-| AIProcessingService | - | - | Manual testing |
-| UserDetailService | 5+ | 40+ | >70% |
+**Frontend**
+```bash
+cd frontend
+npm test            # vitest run
+npm run test:watch  # watch mode
+npm run typecheck   # tsc -b --noEmit  (use this for static checks; eslint config is minimal)
+```
 
 ---
 
 ## ⚙️ Configuration & Setup
 
 ### Prerequisites
-
 - Docker & Docker Compose
 - Java 21 (JDK)
-- Node.js 18+ (for frontend)
-- Groq API Key (for AI features)
+- Node.js 18+ (frontend)
+- **Groq API key** (LLM + vision)
+- **Ollama** (embeddings) — or an OpenWebUI endpoint
+- *(optional)* [`just`](https://github.com/casey/just) for the convenience commands
 
-### Environment Variables
+### 1. Environment variables
 
-Create a `.env` file in the project root:
-
-```bash
-# Groq AI Configuration
-GROQ_API_KEY=your-groq-api-key-here
-GROQ_BASE_URL=https://api.groq.com/openai/v1
-GROQ_MODEL=llama-3.1-8b-instant
-
-# AI Model Configuration
-CHAT_MODEL=llama-3.1-8b-instant
-PDF_MODEL=llama-3.3-70b-versatile
-
-# Keycloak
-KEYCLOAK_ADMIN_USER=administrator
-KEYCLOAK_ADMIN_PASSWORD=admin
-```
-
-### Getting Groq API Key
-
-1. Visit [https://console.groq.com/](https://console.groq.com/)
-2. Sign up for a free account
-3. Navigate to API Keys section
-4. Create a new API key
-5. Copy the key to your `.env` file
-
-**Note:** Groq offers a generous free tier with rate limits suitable for development and testing.
-
-### Installing Ollama (for RAG - Retrieval-Augmented Generation)
-    - Download from: https://ollama.com/download
-    - After installation, pull the required model:
-      ```bash
-      ollama pull nomic-embed-text:latest
-      ```
-
-### Docker Compose Setup
+`AIProcessingService/.env` holds the LLM + Langfuse config (kept out of `application.yml` defaults):
 
 ```bash
-# Start infrastructure (Postgres, Kafka, Keycloak, MinIO)
-docker-compose up -d
-
-# Check services status
-docker-compose ps
-
-# View logs
-docker-compose logs -f kafka
-docker-compose logs -f kafka-connect
+export GROQ_API_KEY=your-groq-api-key
+export GROQ_BASE_URL=https://api.groq.com/openai
+export GROQ_MODEL=qwen/qwen3.6-27b
+export LANGFUSE_OTLP_ENDPOINT=http://localhost:4318/v1/traces   # LGTM by default; point to Langfuse to trace LLM there
+export LANGFUSE_AUTH_HEADER=                                     # Basic auth header for Langfuse ingestion (if used)
 ```
 
-### Service Configuration
+Everything else (models per role, RAG knobs, embedding provider, ports) has sensible defaults in each
+service's `application.yml` and can be overridden via the env vars documented above and in
+[`docs/`](docs/).
 
-#### TusUploaderService (application.yml)
+> Get a free Groq key at <https://console.groq.com/>. Pull the embedding model with Ollama:
+> ```bash
+> ollama pull qwen3-embedding:4b
+> ```
 
-```yaml
-server:
-  port: 8081
-
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/filedb
-    username: myuser
-    password: secret
-  jpa:
-    hibernate:
-      ddl-auto: none
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-
-tus:
-  version: 1.0.0
-  extensions: creation,creation-defer-length,creation-with-upload,expiration,checksum,termination
-  maxSize: 1073741824  # 1GB
-  checksumAlgorithm: sha-1
-
-minio:
-  url: http://localhost:9000
-  access-key: minioadmin
-  secret-key: minioadmin
-  uploads-bucket: uploads
-  files-bucket: files
-
-kafka:
-  bootstrap-servers: localhost:9094
-  topic:
-    file-upload: file-outbox
-
-keycloak:
-  client-id: tus-client
-  client-secret: kBwAXCN3ljeGDubcnpSanUdUP19mcQG9
-  token-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/token
-```
-
-#### AIProcessingService (application.yml)
-
-```yaml
-server:
-  port: 8083
-
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5435/aireqdb
-    username: myuser
-    password: secret
-  
-  ai:
-    openai:
-      api-key: ${GROQ_API_KEY}
-      base-url: ${GROQ_BASE_URL}
-      chat:
-        options:
-          model: ${GROQ_MODEL}
-
-ai:
-  chat:
-    model: ${CHAT_MODEL:llama-3.1-8b-instant}
-  pdf:
-    model: ${PDF_MODEL:llama-3.3-70b-versatile}
-  document:
-    max-content-chars: 15000
-    truncation-strategy: "beginning-end"
-    beginning-percentage: 70
-
-kafka:
-  bootstrap-servers: "localhost:9094"
-  consumer:
-    auto-offset-reset: earliest
-    group-id: "myId"
-
-keycloak:
-  client-id: ai-client
-  client-secret: f9n2EePzamfcR3gieGYidhBjNjY3Jxr9
-  token-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/token
-```
-
-### Starting the Application
-
-#### 1. Start Infrastructure
+### 2. Start the infrastructure
 
 ```bash
-docker-compose up -d postgres postgres_aireq postgres_user minio keycloak kafka kafka-connect
+docker compose up -d         # or:  just docker
+docker compose ps            # check health
 ```
 
-Wait for services to be ready (~30 seconds).
+This brings up Postgres ×4 (filedb, aireqdb+pgvector, userdb, keycloak-db), MinIO, Keycloak, Kafka,
+Kafka UI, Kafka Connect, the **LGTM** stack, and the **Langfuse** stack.
 
-#### 2. Setup Debezium Connectors
+### 3. Register the Debezium connectors
 
 ```bash
-# File service outbox connector
-curl -X POST http://localhost:8086/connectors \
-  -H "Content-Type: application/json" \
-  -d @AIProcessingService/debezium-file-outbox-connector.json
-
-# AI service outbox connector
-curl -X POST http://localhost:8086/connectors \
-  -H "Content-Type: application/json" \
-  -d @AIProcessingService/debezium-job-outbox-connector.json
-
-# Verify connectors
-curl http://localhost:8086/connectors
+just debezium
+# equivalent to:  docker compose --profile setup up --wait setup-connector setup-job-outbox-connector
 ```
 
-#### 3. Start Backend Services
+The setup containers `PUT` the connector configs idempotently and auto-restart failed tasks (no manual
+`curl` needed).
+
+### 4. Run the backend services (locally, via Gradle)
+
+The four Spring Boot apps run on the host (the `spring-boot-docker-compose` integration wires them to
+the compose infra). In four terminals:
 
 ```bash
-# Terminal 1: TusUploaderService
-cd TusUploaderService
-./gradlew bootRun
-
-# Terminal 2: AIProcessingService
-cd AIProcessingService
-./gradlew bootRun
-
-# Terminal 3: UserDetailService
-cd UserDetailService
-./gradlew bootRun
-
-# Terminal 4: ApiGateway
-cd ApiGateway
-./gradlew bootRun
+cd ApiGateway          && ./gradlew bootRun     # :8080
+cd TusUploaderService  && ./gradlew bootRun     # :8081
+cd UserDetailService   && ./gradlew bootRun     # :8082
+cd AIProcessingService && ./gradlew bootRun     # :8083
 ```
 
-#### 4. Start Frontend
+### 5. Run the frontend
 
 ```bash
-cd fileportalfrontend
+cd frontend
 npm install
 npm run dev
 ```
 
-#### 5. Access the Application
+Then open **http://localhost:8080/ui** (not `:5173`). Opening `:5173` pre-login redirects to Keycloak;
+after authenticating the gateway lands you at `:8080/ui`, same-origin with the BFF session. See
+[frontend/README.md](frontend/README.md) for the BFF auth contract.
 
-- **Frontend:** http://localhost:5173
-- **API Gateway:** http://localhost:8080
-- **Keycloak:** http://localhost:9090
-- **Kafka UI:** http://localhost:8084
-- **MinIO Console:** http://localhost:9001
+### Access points
 
-### Default Users (Keycloak)
+| Service | URL |
+|---------|-----|
+| **Frontend (via gateway)** | http://localhost:8080/ui |
+| **API Gateway / Swagger** | http://localhost:8080 · http://localhost:8080/swagger-ui.html |
+| **Keycloak** | http://localhost:9090 |
+| **Kafka UI** | http://localhost:8084 |
+| **Kafka Connect REST** | http://localhost:8086 |
+| **MinIO Console** | http://localhost:9001 |
+| **Grafana (LGTM)** | http://localhost:3000 |
+| **Langfuse** | http://localhost:3001 |
+| **Prometheus** | http://localhost:9099 |
+
+### Default users (Keycloak realm `file-management`)
 
 | Username | Password | Role | Organization | Department |
 |----------|----------|------|--------------|------------|
-| admin    | admin | admin | Company1 | IT |
+| admin | admin | admin | Company1 | IT |
 | manager1 | password | manager | Company1 | HR |
 | riccardo | password | staff | Company1 | IT |
 
@@ -1484,187 +674,69 @@ npm run dev
 
 ## ✨ Features Implemented
 
-### Core Features
+### Core
+- ✅ **Resumable uploads** (TUS): chunked, pause/resume/cancel, checksum verification, expiration cleanup; app-global queue persisted in IndexedDB (survives navigation & re-login)
+- ✅ **File versioning** with per-version metadata and download
+- ✅ **AI metadata**: summary, 5 tags, 4-level sensitivity — for documents **and images (vision)**
+- ✅ **Conversational RAG chat**: per-user memory, file-access-scoped retrieval, **streamed** markdown answers + source citations
+- ✅ **Event-driven architecture**: Transactional Outbox + Debezium CDC + Kafka, with Dead Letter Topic
+- ✅ **Realtime updates**: per-user STOMP/SockJS channel for job status & RAG tokens
+- ✅ **Security & access control**: Keycloak OAuth2/OIDC, gateway **BFF** (session + CSRF + TokenRelay), role-based (admin/manager/staff), org/department isolation
+- ✅ **File sharing**: `PERSONAL` / `DEPARTMENT` / `ORGANIZATION` scopes + explicit user shares
+- ✅ **Favorites** per file version
 
-✅ **Resumable File Uploads** (TUS Protocol)
-- Chunked uploads with progress tracking
-- Resume interrupted uploads
-- Pause/cancel controls
-- Automatic checksum verification
-- Upload expiration and cleanup
-
-✅ **File Versioning**
-- Automatic version tracking
-- Download specific versions
-- Version history visualization
-
-✅ **AI-Powered Metadata**
-- Automatic summary generation (2 sentences)
-- Smart tag extraction (5 keywords)
-- Sensitivity classification (4 levels)
-- PDF and text file support
-- Retry logic for reliability
-
-✅ **Event-Driven Architecture**
-- Transactional Outbox Pattern
-- Debezium Change Data Capture
-- Kafka-based async communication
-- Dead Letter Topic for failures
-
-✅ **Security & Access Control**
-- OAuth2/OpenID Connect (Keycloak)
-- Role-based access control (admin/manager/staff)
-- Organization and department isolation
-- Token-based authentication
-- Secure file sharing
-
-✅ **File Sharing**
-- Three scopes: PERSONAL, DEPARTMENT, ORGANIZATION
-- Permission management
-- Share with specific users
-
-### Optional Features
-
-✅ **Transactional Outbox Pattern**
-- Two-phase commit simulation
-- Atomic writes + event publishing
-- Debezium CDC integration
-- Reliable event delivery
-
-✅ **Dead Letter Topic (DLT)**
-- Failed message handling
-- Retry mechanism with backoff
-- DLT routing for permanent failures
-- Error logging and monitoring
-
-✅ **Multi-Model AI Strategy**
-- Model selection based on content type
-- PDF-specific model (Llama 3.3 70B)
-- Generic model (Llama 3.1 8B)
-- Intelligent content truncation
-
-✅ **RAG (Retrieval-Augmented Generation)**
-- Semantic document search with pgvector
-- Natural language query interface
-- Vector embeddings with Ollama nomic-embed-text (768 dimensions)
-- HNSW indexing for fast similarity search
-- Context-aware answers using retrieved document chunks
-- User isolation with ownerId filtering
-- Automatic embedding deletion on file removal
-- Source citations with similarity scores
-
-✅ **Scheduled Tasks**
-- WALL-E: Expired upload cleanup (hourly)
-- Automatic merge of pending files
-- Database maintenance
+### Platform
+- ✅ **Per-user storage quota**: admins set a byte quota; `storageUsed` tracks owned versions; enforced in TusUploaderService as soon as the TUS `Upload-Length` is known (deferred or at creation), rejecting over-quota uploads with `413 Payload Too Large`. Kept consistent via outbox `STORAGE_RESERVED` / `STORAGE_CONFIRMED` / `STORAGE_RELEASED` events, applied idempotently; quota can't be lowered below current usage. The profile page shows a used-vs-total bar.
+- ✅ **User & admin management**: profiles, avatars, org overview, user/role/quota admin UI
+- ✅ **Scheduled tasks**: expired-upload cleanup ("WALL-E"), pending-merge handling
+- ✅ **Full observability**: OTLP traces + Micrometer metrics to Grafana **LGTM** (custom dashboards, trace↔logs correlation) + dedicated **Langfuse** LLM tracing with optional evaluation scores
+- ✅ **Aggregated OpenAPI/Swagger** across all services at the gateway
 
 ---
 
 ## ⚠️ Known Limitations
 
-### 1. AI Model Limitations
+1. **Asynchronous enrichment** — AI metadata and embeddings are produced after upload (seconds, depending on size/model). The UI reflects progress live via STOMP, but documents aren't searchable the instant they finish uploading.
 
-**Token Limits:**
-- Maximum content: ~15,000 characters (~3,750 tokens)
-- Large files are truncated (beginning 70% + ending 30%)
-- May lose context in middle sections of very large documents
+2. **LLM token & rate limits** — large documents are truncated (beginning 70% + end 30%), so the middle of very large files may be under-represented. Groq's free tier is rate-limited; a paid tier or caching is advisable for heavier use.
 
-**Rate Limiting:**
-- Groq free tier has rate limits
-- Production deployment should use paid tier or caching
+3. **Vector search cost** — at 2560 dimensions there is no ANN index (exceeds pgvector's 2000-dim limit for HNSW/IVFFlat), so similarity search is an exact sequential scan. This is fine at project scale but would need a dimensionality strategy (or Matryoshka truncation) to scale to very large corpora.
 
-### 2. Outbox Table Cleanup
+4. **RAG retrieval window** — default `top-k = 5`; the similarity threshold ships at `0.0` (off) until Langfuse traces reveal the active embedding model's typical score distribution. No hybrid (BM25) search or cross-encoder reranking yet.
 
-**Issue:** Outbox tables (`files_outbox_events`, `job_outbox`) grow indefinitely
+5. **Embedding deletion latency** — deletion is asynchronous (Kafka + CDC); there's no transactional coupling with the file delete, so vector cleanup may lag the file removal by a few seconds.
 
-**Current State:** No automatic cleanup implemented
+6. **Outbox growth** — `files_outbox_events` / `job_outbox` are not auto-pruned; a periodic cleanup job (e.g. delete rows older than N days) is recommended for long-running deployments.
 
-**Recommended Solution:**
-```sql
--- Scheduled job to delete old events (>7 days)
-DELETE FROM files_outbox_events 
-WHERE created_at < NOW() - INTERVAL '7 days';
-
-DELETE FROM job_outbox 
-WHERE created_at < NOW() - INTERVAL '7 days';
-```
-
-**Future Enhancement:** Implement Spring @Scheduled task for automatic cleanup.
-
-### 3. Dead Letter Topic (DLT) Handling
-
-**Current Implementation:**
-- Failed jobs (after retry) are sent to DLT
-- No automatic reprocessing from DLT
-
-**Missing Features:**
-- DLT consumer for manual retry
-- Admin UI for DLT message inspection
-- Automatic reprocessing after cooling period
-
-**Workaround:** Manual reprocessing via Kafka UI or custom scripts.
-
-### 4. Testing Limitations
-
-**AIProcessingService Testing:**
-- No automated tests due to external AI dependency
-- Manual testing only
-- Mock AI responses not implemented
-
-**Reason:** Groq API requires real API key and has rate limits
-
-**Future Enhancement:** Mock AI responses for unit testing.
-
-### 5. RAG System Limitations
-
-**Asynchronous Processing:**
-- Embeddings not available immediately after upload
-- Processing time: 2-10 seconds depending on file size
-- No real-time feedback to users
-
-**Query Context Window:**
-- Default TopK: 5 chunks (~2,500 tokens)
-- May miss relevant context if spread across many chunks
-- No automatic query expansion or reranking
-
-**Embedding Deletion:**
-- Asynchronous deletion via Kafka
-- May take several seconds to complete
-- No transactional guarantee with file deletion
-
-**Language Support:**
-- Primarily optimized for English (nomic-embed-text)
-- Other languages may have reduced accuracy
-
-**Future Enhancements:**
-- Hybrid search (vector + keyword BM25)
-- Cross-encoder reranking
-- Multi-language embedding models
-- Real-time embedding status tracking
+7. **Dead Letter Topic** — poison messages are routed to a DLT, but there is no automated reprocessing or admin UI for DLT inspection; recovery is manual (e.g. via Kafka UI or by restarting a failed connector task).
 
 ---
 
 ## 📚 Additional Documentation
 
-- **[Postman Collections](postman/)** - API testing collections
-- **[Keycloak Configuration](keycloak/)** - Realm exports
+- [`docs/diagrams/architecture-flow.md`](docs/diagrams/architecture-flow.md) — end-to-end sequence + CDC topology (Mermaid)
+- [`docs/rag-implementation.md`](docs/rag-implementation.md) — modular RAG, conversational memory, streaming, tracing
+- [`docs/embedding-configuration.md`](docs/embedding-configuration.md) — embedding model, providers, parallelism
+- [`docs/langfuse-instrumentation.md`](docs/langfuse-instrumentation.md) — OTel → Langfuse mapping & scoring
+- [`docs/langfuse-self-hosting.md`](docs/langfuse-self-hosting.md) — running Langfuse locally
+- [`frontend/README.md`](frontend/README.md) — BFF auth contract & SPA layout
+- [`postman/`](postman/) · [`.postman/`](.postman/) — API collections
+- [`keycloak/`](keycloak/) — realm exports
 
 ---
 
 ## 👥 Team
 
-**Gruppo 11** - Politecnico di Torino 
+**Gruppo 11** — Politecnico di Torino
 - Riccardo Mozzicato
 - Iliyan Kostadinov
 - Andrea Di Prima
 - Samuele Scapellato
 
-Web Applications II - A.Y. 2025/2026
+Web Applications II — A.Y. 2025/2026
 
 ---
 
 ## 📄 License
 
 This project is part of an academic assignment for Politecnico di Torino.
-
----

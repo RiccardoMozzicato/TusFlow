@@ -1,0 +1,70 @@
+# Grafana datasource provisioning override for the grafana/otel-lgtm dev stack.
+#
+# Mounted over /otel-lgtm/grafana/conf/provisioning/datasources/grafana-datasources.yaml
+# (see docker-compose.yml `lgtm` service). Same as the image's bundled file EXCEPT the Loki
+# derived field and Tempo->logs query, which are aligned to how THIS app actually logs.
+#
+# Our services ship JSON log lines to Loki (Loki4j JsonLayout), where the trace id is the field
+# `mdc_traceId` and the span id is `mdc_spanId` (loki4j prefixes MDC entries with `mdc_`). Loki
+# labels are application/host/level (see each service's logback-spring.xml). The image's defaults
+# instead expect a `trace_id` Loki LABEL and a `service_name` label — neither of which we emit —
+# so log<->trace correlation never matched. We do NOT promote the trace id to a Loki label on
+# purpose: per-trace labels explode Loki's index. Instead we parse the JSON field below.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    url: http://127.0.0.1:9090
+    editable: true
+    jsonData:
+      timeInterval: 60s
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+          urlDisplayLabel: "Trace: $${__value.raw}"
+
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    url: http://127.0.0.1:3200
+    editable: true
+    jsonData:
+      # Trace -> logs: jump from a span to that trace's logs. Map the span's service.name to our
+      # Loki `application` label, parse the JSON body, then match the mdc_traceId field.
+      tracesToLogsV2:
+        customQuery: true
+        datasourceUid: "loki"
+        query: '{$${__tags}} | json | mdc_traceId="$${__trace.traceId}"'
+        tags:
+          - key: "service.name"
+            value: "application"
+      serviceMap:
+        datasourceUid: "prometheus"
+      search:
+        hide: false
+      nodeGraph:
+        enabled: true
+      lokiSearch:
+        datasourceUid: "loki"
+
+  - name: Loki
+    type: loki
+    uid: loki
+    url: http://127.0.0.1:3100
+    editable: true
+    jsonData:
+      # Logs -> trace: parse the mdc_traceId JSON field out of the log line and link to Tempo.
+      derivedFields:
+        - name: "trace_id"
+          matcherType: "regex"
+          matcherRegex: "\"mdc_traceId\":\"([0-9a-f]+)\""
+          url: "$${__value.raw}"
+          datasourceUid: "tempo"
+          urlDisplayLabel: "Trace: $${__value.raw}"
+
+  - name: Pyroscope
+    type: grafana-pyroscope-datasource
+    uid: pyroscope
+    url: http://127.0.0.1:4040

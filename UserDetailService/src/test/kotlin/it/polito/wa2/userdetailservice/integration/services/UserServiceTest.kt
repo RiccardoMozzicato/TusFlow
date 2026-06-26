@@ -11,6 +11,7 @@ import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
 import it.polito.wa2.userdetailservice.enums.UserRole
 import it.polito.wa2.userdetailservice.exceptions.SelfDeletionNotAllowedException
+import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import it.polito.wa2.userdetailservice.services.UserService
@@ -28,6 +29,7 @@ import org.keycloak.admin.client.resource.RolesResource
 import org.keycloak.admin.client.resource.UserResource
 import org.keycloak.admin.client.resource.UsersResource
 import org.keycloak.representations.idm.RoleRepresentation
+import org.keycloak.representations.idm.UserRepresentation
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.core.io.ClassPathResource
@@ -67,6 +69,19 @@ class UserServiceTest: IntegrationTest() {
         DatabasePopulatorUtils.execute(populator, dataSource)
     }
 
+    // updateUser() syncs name/email back to Keycloak; stub that chain so the
+    // success-path tests don't fall into the "Error updating user" catch block.
+    private fun mockKeycloakUserUpdate(userId: UUID) {
+        val realmResource = mockk<RealmResource>()
+        val usersResource = mockk<UsersResource>()
+        val userResource = mockk<UserResource>()
+        every { keycloak.realm(realm) } returns realmResource
+        every { realmResource.users() } returns usersResource
+        every { usersResource.get(userId.toString()) } returns userResource
+        every { userResource.toRepresentation() } returns UserRepresentation()
+        justRun { userResource.update(any()) }
+    }
+
     private fun setupJwtAuthentication(userId: String, roles: List<String>) {
         val jwt = Jwt.withTokenValue("token")
             .header("alg", "none")
@@ -85,6 +100,7 @@ class UserServiceTest: IntegrationTest() {
     @WithMockUser(roles = ["staff"])
     fun `getUsers() - successful for staff`() {
         // arrange
+        setupJwtAuthentication("c3d4e5f6-a7b8-9012-cdef-123456789012", listOf("staff"))
         val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
 
         // act
@@ -99,6 +115,7 @@ class UserServiceTest: IntegrationTest() {
     @WithMockUser(roles = ["manager"])
     fun `getUsers() - successful for manager`() {
         // arrange
+        setupJwtAuthentication("b2c3d4e5-f6a7-8901-bcde-f12345678901", listOf("manager"))
         val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
 
         // act
@@ -113,6 +130,7 @@ class UserServiceTest: IntegrationTest() {
     @WithMockUser(roles = ["admin"])
     fun `getUsers() - successful (page=0, pageSize=2)`() {
         // arrange
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
         val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 2)
 
         // act
@@ -126,6 +144,7 @@ class UserServiceTest: IntegrationTest() {
     @WithMockUser(roles = ["admin"])
     fun `getUsers() - successful (page=1, pageSize=2)`() {
         // arrange
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
         val filtersDTO = FiltersDTO(pageNumber = 1, pageSize = 2)
 
         // act
@@ -133,6 +152,85 @@ class UserServiceTest: IntegrationTest() {
 
         // assert
         Assertions.assertEquals(1, result.content.size)
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers() - search matches name case-insensitively within the org`() {
+        // arrange: admin is in "Polytechnic University of Turin" (Mario, Riccardo, Samuele)
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10, search = "ROSSI")
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        Assertions.assertEquals(1, result.totalElements)
+        Assertions.assertEquals("Mario Rossi", result.content[0].fullName)
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers() - search matches email substring within the org`() {
+        // arrange: two org users have a @test.local email (Riccardo, Samuele)
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10, search = "test.local")
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        Assertions.assertEquals(2, result.totalElements)
+        Assertions.assertTrue(result.content.all { it.email.contains("test.local") })
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers() - search is scoped to the caller's organization`() {
+        // arrange: "alice" exists but in a different org (Tech Solutions Inc.)
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10, search = "alice")
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        Assertions.assertEquals(0, result.totalElements)
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers() - sorts by email ascending`() {
+        // arrange
+        setupJwtAuthentication("a1b2c3d4-e5f6-7890-abcd-ef1234567890", listOf("admin"))
+        val filtersDTO = FiltersDTO(
+            pageNumber = 0,
+            pageSize = 10,
+            sortField = "email",
+            sortDirection = org.springframework.data.domain.Sort.Direction.ASC,
+        )
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert: emails come back in ascending order
+        val emails = result.content.map { it.email }
+        Assertions.assertEquals(emails.sorted(), emails)
+    }
+
+    @Test
+    @WithMockUser(roles = ["serviceaccount-fileservice"])
+    fun `getUsers() - service account sees users across organizations`() {
+        // arrange: service account is not org-scoped, so it sees every user
+        setupJwtAuthentication("service-account", listOf("serviceaccount-fileservice"))
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert: all six seeded users, spanning multiple organizations
+        Assertions.assertEquals(6, result.totalElements)
+        Assertions.assertTrue(result.content.map { it.organization }.distinct().size > 1)
     }
 
     @Test
@@ -429,6 +527,7 @@ class UserServiceTest: IntegrationTest() {
             role = UserRole.ROLE_admin,
             storageQuota = 21474836480
         )
+        mockKeycloakUserUpdate(userId)
 
         // act
         userService.updateUser(updatedUser)
@@ -443,6 +542,89 @@ class UserServiceTest: IntegrationTest() {
         Assertions.assertEquals(updatedUser.storageQuota, result.storageQuota)
     }
 
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `updateUser() - throws when storage quota below current used`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 5_000_000L, userId)
+
+        val updatedUser = UserDTO(
+            id = userId,
+            fullName = "Mario Rossi",
+            email = "mario.rossi@gmail.com",
+            organization = "Polytechnic University of Turin",
+            department = "Engineering",
+            role = UserRole.ROLE_manager,
+            storageQuota = 1_000L // below the 5_000_000 already used
+        )
+
+        // act & assert
+        assertThrows<StorageQuotaBelowUsedException> {
+            userService.updateUser(updatedUser)
+        }
+
+        // quota left unchanged in DB
+        val storedQuota = jdbcTemplate.queryForObject(
+            "SELECT storage_quota FROM users WHERE id = ?", Long::class.java, userId
+        )
+        Assertions.assertEquals(10737418240L, storedQuota)
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `updateUser() - succeeds when storage quota above current used and keeps used unchanged`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 1_000L, userId)
+
+        val updatedUser = UserDTO(
+            id = userId,
+            fullName = "Mario Rossi",
+            email = "mario.rossi@gmail.com",
+            organization = "Polytechnic University of Turin",
+            department = "Engineering",
+            role = UserRole.ROLE_manager,
+            storageQuota = 2_000L
+        )
+        mockKeycloakUserUpdate(userId)
+
+        // act
+        userService.updateUser(updatedUser)
+
+        // assert
+        val result = userService.getUser(userId)
+        Assertions.assertEquals(2_000L, result.storageQuota)
+        Assertions.assertEquals(1_000L, result.storageUsed) // update must not touch used
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `updateUser() - allows clearing the quota even with positive used`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 9_999L, userId)
+
+        val updatedUser = UserDTO(
+            id = userId,
+            fullName = "Mario Rossi",
+            email = "mario.rossi@gmail.com",
+            organization = "Polytechnic University of Turin",
+            department = "Engineering",
+            role = UserRole.ROLE_manager,
+            storageQuota = null
+        )
+        mockKeycloakUserUpdate(userId)
+
+        // act
+        userService.updateUser(updatedUser)
+
+        // assert
+        val result = userService.getUser(userId)
+        Assertions.assertNull(result.storageQuota)
+        Assertions.assertEquals(9_999L, result.storageUsed)
+    }
 
     @Test
     @WithMockUser(roles = ["staff", "manager", "serviceaccount-fileservice"])

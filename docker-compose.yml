@@ -13,6 +13,11 @@ services:
       - pg_data:/var/lib/postgresql/data
     labels:
       org.springframework.boot.ignore: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d filedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - kfk-net
 
@@ -30,6 +35,11 @@ services:
       - pg_ai:/var/lib/postgresql/ai
     labels:
       org.springframework.boot.ignore: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d aireqdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - kfk-net
 
@@ -46,6 +56,11 @@ services:
       - pg_user:/var/lib/postgresql/user
     labels:
       org.springframework.boot.ignore: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d userdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: quay.io/minio/minio:latest
@@ -59,6 +74,11 @@ services:
       - "9001:9001" # Web console
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.4
@@ -80,8 +100,12 @@ services:
       - --verbose
     volumes:
       - ./keycloak/:/opt/keycloak/data/import
+      # Custom login theme(s). start-dev disables theme caching, so edits to
+      # the CSS/templates show on browser refresh without a restart.
+      - ./keycloak/themes/:/opt/keycloak/themes
     depends_on:
-      - postgres_keycloak
+      postgres_keycloak:
+        condition: service_healthy
 
   postgres_keycloak:
     image: postgres:15
@@ -96,6 +120,11 @@ services:
       - pg_key:/var/lib/postgresql/data
     labels:
       org.springframework.boot.ignore: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   kafka:
     image: apache/kafka:4.1.0
@@ -132,9 +161,10 @@ services:
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
+    container_name: kafka-ui2
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     ports:
       - "8084:8080"
     environment:
@@ -189,8 +219,40 @@ services:
       - bash
       - -c
       - |
-        echo "Installing Debezium connector..."
-        confluent-hub install debezium/debezium-connector-postgresql:3.0.8 --no-prompt
+        PLUGIN_DIR="/usr/share/confluent-hub-components/debezium-connector-postgres"
+        echo "Installing Debezium PostgreSQL connector from Maven Central (if missing)..."
+        if [ ! -d "$$PLUGIN_DIR" ]; then
+          mkdir -p /usr/share/confluent-hub-components
+          curl -fsSLk -o /tmp/debezium-postgres-plugin.tar.gz \
+            "https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/3.0.8.Final/debezium-connector-postgres-3.0.8.Final-plugin.tar.gz" \
+            && python3 -c "import tarfile; tarfile.open('/tmp/debezium-postgres-plugin.tar.gz').extractall('/usr/share/confluent-hub-components/')" \
+            && echo "Debezium connector installed successfully." \
+            || { echo "ERROR: Failed to install Debezium connector. Aborting."; exit 1; }
+        else
+          echo "Debezium connector already present, skipping download."
+        fi
+        echo "Installing Debezium scripting SMT (if missing)..."
+        if [ ! -f "$$PLUGIN_DIR/debezium-scripting-3.0.8.Final.jar" ]; then
+          curl -fsSLk -o /tmp/debezium-scripting.tar.gz \
+            "https://repo1.maven.org/maven2/io/debezium/debezium-scripting/3.0.8.Final/debezium-scripting-3.0.8.Final.tar.gz" \
+            && python3 -c "import tarfile; tarfile.open('/tmp/debezium-scripting.tar.gz').extractall('/tmp/debezium-scripting')" \
+            && cp /tmp/debezium-scripting/debezium-scripting/debezium-scripting-3.0.8.Final.jar "$$PLUGIN_DIR/" \
+            && echo "Debezium scripting SMT installed successfully." \
+            || { echo "ERROR: Failed to install Debezium scripting SMT. Aborting."; exit 1; }
+        else
+          echo "Debezium scripting SMT already present, skipping download."
+        fi
+        echo "Installing Groovy JSR223 engine (if missing)..."
+        if [ ! -f "$$PLUGIN_DIR/groovy-4.0.21.jar" ] || [ ! -f "$$PLUGIN_DIR/groovy-jsr223-4.0.21.jar" ]; then
+          curl -fsSLk -o "$$PLUGIN_DIR/groovy-4.0.21.jar" \
+            "https://repo1.maven.org/maven2/org/apache/groovy/groovy/4.0.21/groovy-4.0.21.jar" \
+            && curl -fsSLk -o "$$PLUGIN_DIR/groovy-jsr223-4.0.21.jar" \
+            "https://repo1.maven.org/maven2/org/apache/groovy/groovy-jsr223/4.0.21/groovy-jsr223-4.0.21.jar" \
+            && echo "Groovy JSR223 installed successfully." \
+            || { echo "ERROR: Failed to install Groovy JSR223. Aborting."; exit 1; }
+        else
+          echo "Groovy JSR223 already present, skipping download."
+        fi
         echo "Starting Kafka Connect..."
         /etc/confluent/docker/run
     networks:
@@ -204,8 +266,12 @@ services:
       kafka-connect:
         condition: service_healthy
       postgres:
-        condition: service_started
-    restart: no
+        condition: service_healthy
+    # Relaunch-and-retry: if the connector task can't reach RUNNING (e.g. the app's
+    # Flyway hasn't created the outbox table yet), the self-heal loop exits non-zero and
+    # Docker restarts this one-shot job, so booting the apps at ANY time recovers the
+    # connector. Exits 0 (no restart) once the task is RUNNING.
+    restart: on-failure
     networks:
       - kfk-net
     command:
@@ -217,13 +283,13 @@ services:
           echo "Kafka Connect not ready yet, retrying..."
         sleep 5
         done
-        
-        echo "Kafka Connect is up. Attempting to register connector..."
-        RESPONSE=$$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+
+        CONNECTOR="fileservice-outbox-connector"
+        echo "Kafka Connect is up. Upserting $$CONNECTOR config (idempotent create-or-update)..."
+        PUT_CODE=$$(curl -s -o /tmp/connector_response.txt -w "%{http_code}" -X PUT \
         -H "Content-Type: application/json" \
-        --data '{
-        "name": "fileservice-outbox-connector",
-        "config": {
+        --data @- http://kafka-connect:8083/connectors/$$CONNECTOR/config <<'JSON'
+        {
           "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
           "database.hostname": "postgres",
           "database.port": "5432",
@@ -231,15 +297,20 @@ services:
           "database.password": "secret",
           "database.dbname": "filedb",
           "table.include.list": "public.files_outbox_events",
+          "publication.autocreate.mode": "filtered",
           "topic.prefix": "tusService",
-          "transforms": "unwrap,router",
+          "transforms": "unwrap,filter,router",
           "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
           "transforms.unwrap.drop.tombstones": "true",
-
+          "transforms.unwrap.add.fields": "op,lsn",
+          "transforms.filter.type": "io.debezium.transforms.Filter",
+          "transforms.filter.language": "jsr223.groovy",
+          "transforms.filter.condition": "value.__op != 'u'",
           "transforms.router.type": "io.debezium.transforms.ByLogicalTableRouter",
           "transforms.router.topic.regex": ".*",
           "transforms.router.topic.replacement": "file-outbox",
-          
+          "topic.creation.default.partitions": "3",
+          "topic.creation.default.replication.factor": "1",
           "plugin.name": "pgoutput",
           "key.converter.schemas.enable": "false",
           "value.converter.schemas.enable": "false",
@@ -247,15 +318,36 @@ services:
           "key.converter": "org.apache.kafka.connect.storage.StringConverter",
           "snapshot.mode": "initial"
         }
-        }' http://kafka-connect:8083/connectors/)
-      
-        if [ "$$RESPONSE" -eq 201 ] || [ "$$RESPONSE" -eq 409 ]; then
-          echo "Connector registered successfully (or already exists). Exiting."
-          exit 0
-        else
-          echo "Failed to register connector. Status code: $$RESPONSE"
+        JSON
+        )
+        echo "Config upsert HTTP $$PUT_CODE: $$(cat /tmp/connector_response.txt)"
+        if [ "$$PUT_CODE" != "200" ] && [ "$$PUT_CODE" != "201" ]; then
+          echo "Failed to upsert file connector config. Status code: $$PUT_CODE"
           exit 1
         fi
+
+        # Debezium can fail to create the filtered publication on first attempt (table not yet
+        # migrated, or a transient empty table-filter right after a Connect restart) and a failed
+        # task never recovers on its own. Poll the task and restart it until it reaches RUNNING.
+        echo "Ensuring connector task reaches RUNNING (self-healing the startup race)..."
+        ATTEMPTS=60
+        i=0
+        while [ $$i -lt $$ATTEMPTS ]; do
+          STATE=$$(curl -s http://kafka-connect:8083/connectors/$$CONNECTOR/status \
+            | sed -n 's/.*"tasks":\[{"id":[0-9]*,"state":"\([A-Z]*\)".*/\1/p')
+          if [ "$$STATE" = "RUNNING" ]; then
+            echo "file connector task is RUNNING. Done."
+            exit 0
+          fi
+          echo "Task state is $${STATE:-PENDING}; restarting failed tasks and retrying ($$i/$$ATTEMPTS)..."
+          curl -s -o /dev/null -X POST "http://kafka-connect:8083/connectors/$$CONNECTOR/restart?includeTasks=true&onlyFailed=true"
+          i=$$((i+1))
+          sleep 10
+        done
+        echo "file connector task did not reach RUNNING after $$ATTEMPTS attempts."
+        echo "public.files_outbox_events likely still missing. Start TusUploaderService (runs Flyway), then run:"
+        echo "  curl -X POST 'http://kafka-connect:8083/connectors/$$CONNECTOR/restart?includeTasks=true&onlyFailed=true'"
+        exit 1
 
 # Setup Debezium connector for AI Processing Service job_outbox
   setup-job-outbox-connector:
@@ -265,8 +357,12 @@ services:
       kafka-connect:
         condition: service_healthy
       postgres_aireq:
-        condition: service_started
-    restart: no
+        condition: service_healthy
+    # Relaunch-and-retry: if the connector task can't reach RUNNING (e.g. the app's
+    # Flyway hasn't created the outbox table yet), the self-heal loop exits non-zero and
+    # Docker restarts this one-shot job, so booting the apps at ANY time recovers the
+    # connector. Exits 0 (no restart) once the task is RUNNING.
+    restart: on-failure
     networks:
       - kfk-net
     command:
@@ -278,13 +374,13 @@ services:
           echo "Kafka Connect not ready yet, retrying..."
           sleep 5
         done
-        
-        echo "Kafka Connect is up. Attempting to register job-outbox connector..."
-        RESPONSE=$$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+
+        CONNECTOR="ai-processing-job-outbox-connector"
+        echo "Kafka Connect is up. Upserting $$CONNECTOR config (idempotent create-or-update)..."
+        PUT_CODE=$$(curl -s -o /tmp/job_outbox_put.txt -w "%{http_code}" -X PUT \
         -H "Content-Type: application/json" \
-        --data '{
-        "name": "ai-processing-job-outbox-connector",
-        "config": {
+        --data @- http://kafka-connect:8083/connectors/$$CONNECTOR/config <<'JSON'
+        {
           "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
           "plugin.name": "pgoutput",
           "database.hostname": "postgres_aireq",
@@ -292,39 +388,70 @@ services:
           "database.user": "myuser",
           "database.password": "secret",
           "database.dbname": "aireqdb",
-          "database.server.name": "aiprocessing-server",
           "table.include.list": "public.job_outbox",
+          "publication.autocreate.mode": "filtered",
           "topic.prefix": "aiService",
-        
-          "transforms": "unwrap,router",
-
+          "transforms": "unwrap,filter,router",
           "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
           "transforms.unwrap.drop.tombstones": "true",
-
+          "transforms.unwrap.add.fields": "op",
+          "transforms.filter.type": "io.debezium.transforms.Filter",
+          "transforms.filter.language": "jsr223.groovy",
+          "transforms.filter.condition": "value.__op != 'u'",
           "transforms.router.type": "io.debezium.transforms.ByLogicalTableRouter",
           "transforms.router.topic.regex": ".*",
           "transforms.router.topic.replacement": "job-outbox",
-        
+          "topic.creation.default.partitions": "3",
+          "topic.creation.default.replication.factor": "1",
           "key.converter.schemas.enable": "false",
           "value.converter.schemas.enable": "false",
           "value.converter": "org.apache.kafka.connect.json.JsonConverter",
           "key.converter": "org.apache.kafka.connect.storage.StringConverter",
           "snapshot.mode": "initial"
         }
-        }' http://kafka-connect:8083/connectors/)
-      
-        if [ "$$RESPONSE" -eq 201 ] || [ "$$RESPONSE" -eq 409 ]; then
-          echo "Job-outbox connector registered successfully (or already exists). Exiting."
-          exit 0
-        else
-          echo "Failed to register job-outbox connector. Status code: $$RESPONSE"
+        JSON
+        )
+        echo "Config upsert HTTP $$PUT_CODE: $$(cat /tmp/job_outbox_put.txt)"
+        if [ "$$PUT_CODE" != "200" ] && [ "$$PUT_CODE" != "201" ]; then
+          echo "Failed to upsert job-outbox connector config. Status code: $$PUT_CODE"
           exit 1
         fi
+
+        # Debezium's filtered-publication creation fails if public.job_outbox does not exist
+        # yet. AIProcessingService runs outside compose, so its Flyway migrations may not have
+        # created the table at registration time -- and a failed Debezium task never recovers
+        # on its own. Poll the task and restart it until the table exists and it reaches RUNNING.
+        echo "Ensuring connector task reaches RUNNING (self-healing the startup race)..."
+        ATTEMPTS=60
+        i=0
+        while [ $$i -lt $$ATTEMPTS ]; do
+          STATE=$$(curl -s http://kafka-connect:8083/connectors/$$CONNECTOR/status \
+            | sed -n 's/.*"tasks":\[{"id":[0-9]*,"state":"\([A-Z]*\)".*/\1/p')
+          if [ "$$STATE" = "RUNNING" ]; then
+            echo "job-outbox connector task is RUNNING. Done."
+            exit 0
+          fi
+          echo "Task state is $${STATE:-PENDING}; restarting failed tasks and retrying ($$i/$$ATTEMPTS)..."
+          curl -s -o /dev/null -X POST "http://kafka-connect:8083/connectors/$$CONNECTOR/restart?includeTasks=true&onlyFailed=true"
+          i=$$((i+1))
+          sleep 10
+        done
+        echo "job-outbox connector task did not reach RUNNING after $$ATTEMPTS attempts."
+        echo "public.job_outbox is likely still missing. Start AIProcessingService (runs Flyway), then run:"
+        echo "  curl -X POST 'http://kafka-connect:8083/connectors/$$CONNECTOR/restart?includeTasks=true&onlyFailed=true'"
+        exit 1
 
 
   lgtm:
     image: grafana/otel-lgtm:latest
     container_name: lgtm
+    # Spring Boot's docker-compose support recognizes the grafana/otel-lgtm image and would
+    # auto-create an OTLP-tracing ConnectionDetails bean pointing at this container's :4318 —
+    # which OVERRIDES management.otlp.tracing.endpoint, hijacking AIProcessingService's traces
+    # away from Langfuse. Ignore it so the configured endpoint (LANGFUSE_OTLP_ENDPOINT /
+    # application-local.yaml) wins. Services that want LGTM set their endpoint explicitly.
+    labels:
+      org.springframework.boot.ignore: true
     ports:
       - "3000:3000"   # Grafana UI
       - "3100:3100"   # Loki (log ingestion)
@@ -333,11 +460,210 @@ services:
       - "9099:9090"   # Prometheus
     volumes:
       - lgtm_data:/data
+      # Override Tempo's 1s trace_idle_period/max_block_duration (see observability/tempo-config.yaml):
+      # cross-service traces' spans arrive seconds apart, so the 1s default sealed the block before
+      # the gateway root span landed — leaving "<root span not yet received>" in trace search.
+      - ./observability/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
+      # Align Grafana's Loki<->Tempo correlation to our JSON logs: derived field parses the
+      # mdc_traceId field for log->trace links, tracesToLogsV2 maps service.name->application
+      # for trace->logs (see observability/grafana-datasources.yaml).
+      - ./observability/grafana-datasources.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/grafana-datasources.yaml:ro
+      # Auto-provision our curated dashboard (HTTP RED + JVM/Hikari + embedding pipeline). The
+      # provider yaml is added alongside the image's bundled one; the JSON is loaded from the path
+      # the provider points at (see observability/grafana-dashboard-provider.yaml).
+      - ./observability/grafana-dashboard-provider.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/g11-dashboards.yaml:ro
+      - ./observability/grafana-dashboard-g11.json:/otel-lgtm/grafana-dashboard-g11.json:ro
+      - ./observability/grafana-logs-dashboard-g11.json:/otel-lgtm/grafana-logs-dashboard-g11.json:ro
     networks:
       - kfk-net
 
+  # ---------------------------------------------------------------------------
+  # Self-hosted Langfuse (v3). Mirrors the official langfuse/langfuse compose,
+  # renamed (langfuse-*) and re-ported to avoid clashes with this stack:
+  #   - web UI on 3001 (Grafana already owns host 3000)
+  #   - own postgres/clickhouse/redis/minio on langfuse-net
+  # AIProcessingService runs on the HOST and reaches Langfuse via published
+  # ports, so point it at:
+  #   LANGFUSE_OTLP_ENDPOINT=http://localhost:3001/api/public/otel/v1/traces
+  #   LANGFUSE_BASE_URL=http://localhost:3001
+  #   LANGFUSE_AUTH_HEADER="Basic <base64(pk-lf-local-dev:sk-lf-local-dev)>"
+  # Dev-only secrets below; do NOT reuse in production.
+  # ---------------------------------------------------------------------------
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:3
+    container_name: g11-langfuse-worker
+    restart: always
+    depends_on: &langfuse-depends-on
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3030:3030"
+    networks:
+      - langfuse-net
+    environment: &langfuse-worker-env
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-postgres:5432/postgres
+      SALT: mysalt
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      TELEMETRY_ENABLED: "true"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: "events/"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      # Browser-reachable endpoint for media links (published MinIO port).
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9190
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: "media/"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: myredissecret
+
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:3
+    container_name: g11-langfuse-web
+    restart: always
+    depends_on: *langfuse-depends-on
+    ports:
+      - "3001:3000"
+    networks:
+      - langfuse-net
+    environment:
+      <<: *langfuse-worker-env
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: mysecret
+      # Auto-provision a dev org/project/user + a known API key pair so traces
+      # flow on first boot without clicking through the UI.
+      LANGFUSE_INIT_ORG_ID: local-org
+      LANGFUSE_INIT_ORG_NAME: Local
+      LANGFUSE_INIT_PROJECT_ID: local-project
+      LANGFUSE_INIT_PROJECT_NAME: file-portal
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-local-dev
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-local-dev
+      LANGFUSE_INIT_USER_EMAIL: admin@local.dev
+      LANGFUSE_INIT_USER_NAME: Admin
+      LANGFUSE_INIT_USER_PASSWORD: langfuse123
+
+  langfuse-clickhouse:
+    image: docker.io/clickhouse/clickhouse-server
+    container_name: g11-langfuse-clickhouse
+    restart: always
+    # Ignored by Spring Boot docker-compose support (Langfuse-internal datastore).
+    labels:
+      org.springframework.boot.ignore: true
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9010:9000"
+    networks:
+      - langfuse-net
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  langfuse-minio:
+    image: cgr.dev/chainguard/minio
+    container_name: g11-langfuse-minio
+    restart: always
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    ports:
+      # 9090 is taken by Keycloak (127.0.0.1:9090:8080); use 9190/9191 instead.
+      - "9190:9000"
+      - "127.0.0.1:9191:9001"
+    volumes:
+      - langfuse_minio_data:/data
+    networks:
+      - langfuse-net
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+
+  langfuse-redis:
+    image: docker.io/redis:7
+    container_name: g11-langfuse-redis
+    restart: always
+    # Ignored by Spring Boot docker-compose support (Langfuse-internal datastore).
+    labels:
+      org.springframework.boot.ignore: true
+    command: >
+      --requirepass myredissecret
+      --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - langfuse_redis_data:/data
+    networks:
+      - langfuse-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  langfuse-postgres:
+    image: postgres:15
+    container_name: g11-langfuse-postgres
+    restart: always
+    # Spring Boot's docker-compose support would otherwise auto-create a
+    # JdbcConnectionDetails bean for this service and clash with each app's own
+    # Flyway/datasource (it's Langfuse-internal — no Spring app should bind to it).
+    labels:
+      org.springframework.boot.ignore: true
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "127.0.0.1:5436:5432"
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    networks:
+      - langfuse-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
 networks:
   kfk-net:
+    driver: bridge
+  langfuse-net:
     driver: bridge
 
 volumes:
@@ -349,3 +675,8 @@ volumes:
   kafka_data:
   kafka_connect_plugins:
   lgtm_data:
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:
+  langfuse_redis_data:

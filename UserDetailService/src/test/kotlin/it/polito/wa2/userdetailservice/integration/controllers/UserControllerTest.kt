@@ -71,17 +71,20 @@ class UserControllerTest: IntegrationTest() {
 
     @Test
     @WithMockUser(roles = ["staff"])
-    fun `getUsers() - forbidden for staff role`() {
+    fun `getUsers() - successful for staff role`() {
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns PageImpl(emptyList())
+
         mockMvc.perform(get("/api/v1/users").with(csrf()))
-            .andExpect(status().isForbidden)
+            .andExpect(status().isOk)
     }
 
     @Test
     @WithMockUser(roles = ["manager"])
-    fun `getUsers() - forbidden for manager role`() {
+    fun `getUsers() - successful for manager role`() {
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns PageImpl(emptyList())
 
         mockMvc.perform(get("/api/v1/users").with(csrf()))
-            .andExpect(status().isForbidden)
+            .andExpect(status().isOk)
     }
 
     @Test
@@ -101,7 +104,7 @@ class UserControllerTest: IntegrationTest() {
         )
         val page = PageImpl(users)
 
-        every { userService.getUsers(FiltersDTO(0, 2)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 2, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users")
@@ -112,7 +115,7 @@ class UserControllerTest: IntegrationTest() {
             .andExpect(jsonPath("$.content").isArray)
             .andExpect(jsonPath("$.content.length()").value(1))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 2)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 2, null, "fullName")) }
     }
 
     // GET /api/v1/users/{id} tests

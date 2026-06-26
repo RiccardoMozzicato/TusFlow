@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.verify
 import it.polito.wa2.userdetailservice.controllers.UserController
+import it.polito.wa2.userdetailservice.dto.AvatarContentDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
@@ -24,6 +25,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
+import java.io.ByteArrayInputStream
 import java.util.UUID
 
 /**
@@ -70,7 +72,7 @@ class UserControllerTest {
         )
         val page = PageImpl(users, PageRequest.of(0, 10), users.size.toLong())
 
-        every { userService.getUsers(FiltersDTO(0, 10)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users"))
@@ -83,7 +85,7 @@ class UserControllerTest {
             .andExpect(jsonPath("$.size").value(10))
             .andExpect(jsonPath("$.number").value(0))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) }
     }
 
     @Test
@@ -103,7 +105,7 @@ class UserControllerTest {
         )
         val page = PageImpl(users, PageRequest.of(1, 5), 10)
 
-        every { userService.getUsers(FiltersDTO(1, 5)) } returns page
+        every { userService.getUsers(FiltersDTO(1, 5, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(
@@ -117,7 +119,29 @@ class UserControllerTest {
             .andExpect(jsonPath("$.size").value(5))
             .andExpect(jsonPath("$.number").value(1))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(1, 5)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(1, 5, null, "fullName")) }
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `getUsers - parses search and sort params into the FiltersDTO`() {
+        // arrange
+        val page = PageImpl(emptyList<UserDTO>(), PageRequest.of(0, 10), 0)
+        every {
+            userService.getUsers(FiltersDTO(0, 10, "rossi", "email", org.springframework.data.domain.Sort.Direction.DESC))
+        } returns page
+
+        // act & assert
+        mockMvc.perform(
+            get("/api/v1/users")
+                .param("search", "rossi")
+                .param("sort", "email,desc")
+        )
+            .andExpect(status().isOk)
+
+        verify(exactly = 1) {
+            userService.getUsers(FiltersDTO(0, 10, "rossi", "email", org.springframework.data.domain.Sort.Direction.DESC))
+        }
     }
 
     @Test
@@ -137,14 +161,14 @@ class UserControllerTest {
         )
         val page = PageImpl(users, PageRequest.of(0, 10), 1)
 
-        every { userService.getUsers(FiltersDTO(0, 10)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.content.length()").value(1))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) }
     }
 
     @Test
@@ -164,14 +188,14 @@ class UserControllerTest {
         )
         val page = PageImpl(users, PageRequest.of(0, 10), 1)
 
-        every { userService.getUsers(FiltersDTO(0, 10)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.content.length()").value(1))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) }
     }
 
     @Test
@@ -189,7 +213,7 @@ class UserControllerTest {
         // arrange
         val page = PageImpl<UserDTO>(emptyList(), PageRequest.of(0, 10), 0)
 
-        every { userService.getUsers(FiltersDTO(0, 10)) } returns page
+        every { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) } returns page
 
         // act & assert
         mockMvc.perform(get("/api/v1/users"))
@@ -198,7 +222,7 @@ class UserControllerTest {
             .andExpect(jsonPath("$.content.length()").value(0))
             .andExpect(jsonPath("$.totalElements").value(0))
 
-        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10)) }
+        verify(exactly = 1) { userService.getUsers(FiltersDTO(0, 10, null, "fullName")) }
     }
 
     // GET /api/v1/users/{id} tests
@@ -529,5 +553,62 @@ class UserControllerTest {
             .andExpect(status().isNotFound)
 
         verify(exactly = 1) { userService.deleteUser(userId) }
+    }
+
+    // GET /api/v1/users/{id}/avatar tests
+    @Test
+    @WithMockUser(roles = ["staff"])
+    fun `getUserAvatar - streams image bytes with content type`() {
+        // arrange
+        val userId = UUID.randomUUID()
+        val bytes = byteArrayOf(1, 2, 3, 4)
+        every { userService.getAvatarContent(userId) } returns
+            AvatarContentDTO(ByteArrayInputStream(bytes), "image/webp", "abc123")
+
+        // act & assert
+        mockMvc.perform(get("/api/v1/users/$userId/avatar"))
+            .andExpect(status().isOk)
+            .andExpect(content().contentTypeCompatibleWith("image/webp"))
+            .andExpect(header().string("ETag", "\"abc123\""))
+            .andExpect(content().bytes(bytes))
+
+        verify(exactly = 1) { userService.getAvatarContent(userId) }
+    }
+
+    @Test
+    @WithMockUser(roles = ["staff"])
+    fun `getUserAvatar - 404 when no avatar set`() {
+        // arrange
+        val userId = UUID.randomUUID()
+        every { userService.getAvatarContent(userId) } returns null
+
+        // act & assert
+        mockMvc.perform(get("/api/v1/users/$userId/avatar"))
+            .andExpect(status().isNotFound)
+
+        verify(exactly = 1) { userService.getAvatarContent(userId) }
+    }
+
+    @Test
+    fun `getUserAvatar - unauthorized without authentication`() {
+        // act & assert
+        mockMvc.perform(get("/api/v1/users/${UUID.randomUUID()}/avatar"))
+            .andExpect(status().isUnauthorized)
+
+        verify(exactly = 0) { userService.getAvatarContent(any()) }
+    }
+
+    // DELETE /api/v1/users/me/avatar tests
+    @Test
+    @WithMockUser(roles = ["staff"])
+    fun `deleteUserAvatar - successful removal returns 204`() {
+        // arrange
+        justRun { userService.deleteAvatar(any()) }
+
+        // act & assert
+        mockMvc.perform(delete("/api/v1/users/me/avatar").with(csrf()))
+            .andExpect(status().isNoContent)
+
+        verify(exactly = 1) { userService.deleteAvatar(any()) }
     }
 }

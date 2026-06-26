@@ -19,13 +19,16 @@ class KafkaProducer(
 
     @PreAuthorize("hasAnyRole('ROLE_staff','ROLE_manager','ROLE_admin')")
     override fun sendMessage(message: String) {
+        log.debug("Sending message to Kafka: {}", message)
         val future = kafkaTemplate.sendDefault(message)
         future.whenComplete { result, ex ->
             if (ex == null) {
+                val offset = result.recordMetadata.offset()
                 log.debug(
                     "Sent message=[" + message +
-                            "] with offset=[" + result.recordMetadata.offset() + "]"
+                            "] with offset=[" + offset + "]"
                 )
+                log.info("Message sent successfully to Kafka with offset=[{}]", offset)
             } else {
                 log.warn(
                     "Unable to send message=[" +
@@ -38,11 +41,14 @@ class KafkaProducer(
 
     @PreAuthorize("hasAnyRole('ROLE_staff','ROLE_manager','ROLE_admin')")
     override fun sendFileUploadMessage(fileUpload: FileUploadEvent) {
+        log.debug("Processing FileUploadEvent for fileId: {}", fileUpload.fileId)
         try {
+            log.debug("Serializing FileUploadEvent: fileId={}", fileUpload.fileId)
             sendMessage(objectMapper.writeValueAsString(fileUpload))
+            log.info("FileUploadEvent sent successfully to Kafka: fileId={}", fileUpload.fileId)
         }
         catch (e: com.fasterxml.jackson.core.JsonProcessingException){
-            log.error("Failed to serialize FileUploadEvent: {}", e.message)
+            log.error("Failed to serialize FileUploadEvent: fileId={}, error={}", fileUpload.fileId, e.message)
         }
         catch (e: Exception) {
             log.error("Unable to send FileUploadEvent message to Kafka for fileId:{}, details:{}", fileUpload.fileId, e.message)

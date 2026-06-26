@@ -16,6 +16,7 @@ import g11.tusuploaderservice.exceptions.*
 import g11.tusuploaderservice.integration.IntegrationTest
 import g11.tusuploaderservice.repositories.FileRepository
 import g11.tusuploaderservice.repositories.FileVersionRepository
+import g11.tusuploaderservice.repositories.FilesOutboxEventsRepository
 import g11.tusuploaderservice.repositories.TusRepository
 import g11.tusuploaderservice.services.AuthService
 import g11.tusuploaderservice.services.FileService
@@ -46,6 +47,8 @@ class TusServiceTest : IntegrationTest() {
     private lateinit var fileRepository: FileRepository
     @Autowired
     private lateinit var fileVersionRepository: FileVersionRepository
+    @Autowired
+    private lateinit var filesOutboxEventsRepository: FilesOutboxEventsRepository
 
     @MockitoBean
     private lateinit var authService: AuthService
@@ -60,7 +63,9 @@ class TusServiceTest : IntegrationTest() {
         email: String = "test@example.com",
         organization: String = "TestOrg",
         department: String? = "TestDept",
-        userRole: UserRole = UserRole.ROLE_admin
+        userRole: UserRole = UserRole.ROLE_admin,
+        storageQuota: Long? = null,
+        storageUsed: Long = 0L
     ) {
         val jwt = Jwt.withTokenValue("token")
             .header("alg", "none")
@@ -85,7 +90,9 @@ class TusServiceTest : IntegrationTest() {
                 email = email,
                 organization = organization,
                 department = department,
-                role = userRole
+                role = userRole,
+                storageQuota = storageQuota,
+                storageUsed = storageUsed
             )
         )
 
@@ -757,4 +764,141 @@ class TusServiceTest : IntegrationTest() {
 
         println("✓ Test passed: small chunk sets mergeMode to CLIENT_SIDE (line 169 covered)")
     }
+
+    // region Storage quota
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `Create upload with quota persists a STORAGE_RESERVED outbox event`() {
+        val fileUuid = UUID.randomUUID()
+        setupJwtAuthentication(storageQuota = 10_000_000L, storageUsed = 0L)
+
+        val upload = tusService.createUpload(
+            UploadDTO(
+                uploadLength = 10_000L,
+                filename = "quota_reserved.txt",
+                fileUuid = fileUuid,
+                sharingScope = SharingScope.PERSONAL
+            )
+        )
+
+        val reserved = filesOutboxEventsRepository.findAll().filter {
+            it.eventType == "STORAGE_RESERVED" && it.payload["uploadId"] == upload.id.toString()
+        }
+        assertEquals(1, reserved.size, "Exactly one STORAGE_RESERVED event should be persisted")
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `Create upload without quota still persists a STORAGE_RESERVED outbox event`() {
+        // Usage must be tracked even with no quota, so a quota can be set later with the right value.
+        val fileUuid = UUID.randomUUID()
+        setupJwtAuthentication(storageQuota = null)
+
+        val upload = tusService.createUpload(
+            UploadDTO(
+                uploadLength = 10_000L,
+                filename = "no_quota_reserved.txt",
+                fileUuid = fileUuid,
+                sharingScope = SharingScope.PERSONAL
+            )
+        )
+
+        val reserved = filesOutboxEventsRepository.findAll().filter {
+            it.eventType == "STORAGE_RESERVED" && it.payload["uploadId"] == upload.id.toString()
+        }
+        assertEquals(1, reserved.size, "STORAGE_RESERVED must be emitted even without a quota")
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `Create upload exceeding quota throws and persists nothing`() {
+        val fileUuid = UUID.randomUUID()
+        setupJwtAuthentication(storageQuota = 5_000L, storageUsed = 0L)
+
+        val exception = assertThrows(UploadTooLargeException::class.java) {
+            tusService.createUpload(
+                UploadDTO(
+                    uploadLength = 6_000L, // above the 5_000 quota
+                    filename = "over_quota.txt",
+                    fileUuid = fileUuid,
+                    sharingScope = SharingScope.PERSONAL
+                )
+            )
+        }
+        assertTrue(exception.message.contains("storage quota"))
+
+        // The @Transactional service rolls back: neither the upload nor the outbox event survive.
+        assertNull(tusRepository.findAll().find { it.fileId == fileUuid }, "No upload should be saved")
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `Terminate upload persists a STORAGE_RELEASED outbox event`() {
+        val fileUuid = UUID.randomUUID()
+        setupJwtAuthentication(storageQuota = 10_000_000L, storageUsed = 0L)
+
+        val upload = tusService.createUpload(
+            UploadDTO(
+                uploadLength = 10_000L,
+                filename = "to_release.txt",
+                fileUuid = fileUuid,
+                sharingScope = SharingScope.PERSONAL
+            )
+        )
+
+        tusService.terminateUpload(upload.id.toString())
+
+        val released = filesOutboxEventsRepository.findAll().filter {
+            it.eventType == "STORAGE_RELEASED" && it.payload["uploadId"] == upload.id.toString()
+        }
+        assertEquals(1, released.size, "Exactly one STORAGE_RELEASED event should be persisted")
+    }
+
+    @Test
+    @WithMockUser(roles = ["admin"])
+    fun `Deferred upload declaring length over quota is soft-deleted and chunks purged`() {
+        val fileUuid = UUID.randomUUID()
+        setupJwtAuthentication(storageQuota = 5_000L, storageUsed = 0L)
+
+        // Deferred upload: size unknown at creation, so no reservation/quota check yet.
+        val upload = tusService.createUpload(
+            UploadDTO(
+                uploadDeferLength = 1,
+                filename = "deferred_over_quota.txt",
+                fileUuid = fileUuid,
+                sharingScope = SharingScope.PERSONAL
+            )
+        )
+
+        // First chunk without a declared length: stored in MinIO, status becomes UPLOADING.
+        val firstChunk = ByteArray(1024) { 0 }
+        tusService.appendChunk(
+            UploadDTO(id = upload.id, uploadOffset = 0L),
+            firstChunk
+        )
+        assertEquals(UploadStatus.UPLOADING, tusRepository.findById(upload.id!!).get().status)
+
+        // Second chunk declares the final length (6000) which exceeds the remaining quota (5000).
+        val secondChunk = ByteArray(100) { 0 }
+        val exception = assertThrows(UploadTooLargeException::class.java) {
+            tusService.appendChunk(
+                UploadDTO(id = upload.id, uploadOffset = 1024L, uploadLength = 6_000L),
+                secondChunk
+            )
+        }
+        assertTrue(exception.message.contains("storage quota"))
+
+        // The cleanup runs in its own committed transaction, so the soft-delete survives the throw.
+        val cleaned = tusRepository.findById(upload.id!!).get()
+        assertEquals(UploadStatus.DELETED, cleaned.status, "Upload should be soft-deleted on quota rejection")
+
+        // Nothing was reserved for this upload (deferred chunks never emit STORAGE_RESERVED).
+        val reserved = filesOutboxEventsRepository.findAll().filter {
+            it.eventType == "STORAGE_RESERVED" && it.payload["uploadId"] == upload.id.toString()
+        }
+        assertTrue(reserved.isEmpty(), "No STORAGE_RESERVED event should be persisted for an over-quota deferred upload")
+    }
+
+    // endregion
 }

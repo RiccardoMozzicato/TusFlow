@@ -82,6 +82,9 @@ open class File(
     fun toDTO(ownerName: String? = null): FileDTO {
         // Get the latest version to extract size and contentType
         val latestVersion = this.versions.maxByOrNull { it.version }
+        // Status reflects the current version (what the library filter keys on).
+        val currentVersionEntity =
+            this.versions.firstOrNull { it.version == this.currentVersion } ?: latestVersion
 
         return FileDTO(
             id = this.uuid,
@@ -93,7 +96,10 @@ open class File(
             contentType = latestVersion?.contentType,
             owner = this.ownerId,
             ownerName = ownerName,
-            sharingScope = this.sharingScope
+            sharingScope = this.sharingScope,
+            organization = this.organization,
+            department = this.department,
+            status = currentVersionEntity?.status
         )
 
     }

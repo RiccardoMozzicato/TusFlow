@@ -12,6 +12,14 @@ group = "G11"
 version = "0.0.1-SNAPSHOT"
 description = "TusUploaderService"
 
+// Pin Spring Framework to 6.2.15+. Boot 3.5.8 ships 6.2.14, which has a ConcurrentReferenceHashMap /
+// AnnotationTypeMappings deadlock (spring-projects/spring-framework#35944): the cache's mapping
+// function re-enters computeIfAbsent while holding a segment lock, so two concurrent first-requests
+// can deadlock (ABBA) during per-request handler annotation scanning. That wedges every Tomcat
+// worker and the whole service stops responding (even /actuator/health) until restart. Fixed in
+// 6.2.15. Safe with Boot 3.5.8 (a patch bump). Drop this once Boot is raised to 3.5.9+.
+extra["spring-framework.version"] = "6.2.15"
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -73,34 +81,13 @@ dependencies {
 
     // Observability - Loki log appender (LGTM stack)
     implementation("com.github.loki4j:loki-logback-appender:1.5.2")
-}
 
-// OpenTelemetry Java Agent
-val otelAgentVersion = "2.12.0"
-val otelAgentFile = file("$buildDir/otel/opentelemetry-javaagent.jar")
+    // Observability - Distributed Tracing (Micrometer + OTel bridge + OTLP exporter)
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
-tasks.register("downloadOtelAgent") {
-    group = "observability"
-    description = "Download the OpenTelemetry Java Agent JAR"
-    outputs.file(otelAgentFile)
-    doLast {
-        otelAgentFile.parentFile.mkdirs()
-        val url = "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v$otelAgentVersion/opentelemetry-javaagent.jar"
-        ant.invokeMethod("get", mapOf("src" to url, "dest" to otelAgentFile))
-    }
-}
-
-tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
-    dependsOn("downloadOtelAgent")
-    jvmArgs(
-        "-javaagent:${otelAgentFile.absolutePath}",
-    )
-    environment("OTEL_SERVICE_NAME", "TusUploaderService")
-    environment("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-    environment("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
-    environment("OTEL_METRICS_EXPORTER", "otlp")
-    environment("OTEL_TRACES_EXPORTER", "otlp")
-    environment("OTEL_LOGS_EXPORTER", "none") // logs via Loki logback appender
+    // Observability - Metrics export to the LGTM stack (Prometheus via OTLP)
+    implementation("io.micrometer:micrometer-registry-otlp")
 }
 
 kotlin {

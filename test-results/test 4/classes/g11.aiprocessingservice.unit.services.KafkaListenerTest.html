@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - KafkaListenerTest</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>KafkaListenerTest</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/g11.aiprocessingservice.unit.services.html">g11.aiprocessingservice.unit.services</a> &gt; KafkaListenerTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">17</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">2.797s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a href="#">Tests</a>
+</li>
+<li>
+<a href="#">Standard output</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">downloadFile should call authService to get token()</td>
+<td class="success">0.014s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">downloadFile should fail when authService returns null or empty token()</td>
+<td class="success">0.015s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">downloadFile should not call fileServiceClient when authService fails()</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">downloadFile should set Bearer token in request headers()</td>
+<td class="success">0.658s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">downloadFile should successfully download with valid token()</td>
+<td class="success">1.540s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">downloadFile should throw exception when token is invalid (401 response)()</td>
+<td class="success">0.009s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">downloadFile should throw exception when token is missing (403 response)()</td>
+<td class="success">0.012s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should acknowledge even when job is null()</td>
+<td class="success">0.017s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should handle first failure and retry()</td>
+<td class="success">0.012s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should handle missing error message gracefully()</td>
+<td class="success">0.391s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should handle processJob throwing IllegalStateException()</td>
+<td class="success">0.016s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should resume stuck PENDING job()</td>
+<td class="success">0.020s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should send to DLT on retry failure()</td>
+<td class="success">0.026s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should skip already completed job()</td>
+<td class="success">0.010s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should successfully process new job()</td>
+<td class="success">0.025s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should throw exception when JSON parsing fails()</td>
+<td class="success">0.015s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">onMessage should throw exception when createJobIfNotExists fails()</td>
+<td class="success">0.014s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>08:52:53.703 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Node -1 disconnected.
+08:52:53.703 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:53.703 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:53.704 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Node -1 disconnected.
+08:52:53.704 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:53.704 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:53.966 [Ai-service-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Node -1 disconnected.
+08:52:53.966 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:53.966 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:54.091 [dlt-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Node -1 disconnected.
+08:52:54.091 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:54.091 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:54.103 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Node -1 disconnected.
+08:52:54.103 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:54.103 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:54.265 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Node -1 disconnected.
+08:52:54.268 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:54.268 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:54.665 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Node -1 disconnected.
+08:52:54.665 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:54.665 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:54.773 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Node -1 disconnected.
+08:52:54.773 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:54.773 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:54.866 [Ai-service-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Node -1 disconnected.
+08:52:54.866 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:54.866 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:55.069 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Node -1 disconnected.
+08:52:55.070 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:55.070 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:55.119 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Node -1 disconnected.
+08:52:55.120 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:55.120 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:55.119 [dlt-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Node -1 disconnected.
+08:52:55.124 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:55.124 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:55.441 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;87a6dc6c-20cd-418c-a008-b63d71c56e05&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;87a6dc6c-20cd-418c-a008-b63d71c56e05\&quot;,\&quot;fileId\&quot;:\&quot;68c0f18a-1478-47b9-a1b3-838cb453fa36\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;6a80e52e-73ab-4231-9368-ee110e590424\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:55.493 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=87a6dc6c-20cd-418c-a008-b63d71c56e05, fileId=68c0f18a-1478-47b9-a1b3-838cb453fa36, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=6a80e52e-73ab-4231-9368-ee110e590424, fileVersionId=1)
+08:52:55.493 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 87a6dc6c-20cd-418c-a008-b63d71c56e05 created successfully - acknowledging Kafka message
+08:52:55.503 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Failed to process job 87a6dc6c-20cd-418c-a008-b63d71c56e05: null
+g11.aiprocessingservice.unit.services.KafkaListenerTest$onMessage should handle missing error message gracefully$exceptionWithoutMessage$1
+	at g11.aiprocessingservice.unit.services.KafkaListenerTest.onMessage should handle missing error message gracefully(KafkaListenerTest.kt:342)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+08:52:55.506 [Test worker] ?[31mWARN ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 87a6dc6c-20cd-418c-a008-b63d71c56e05 FIRST FAILURE - will retry after 5 minutes
+08:52:55.519 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ { invalid json }
+08:52:55.522 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Failed to parse event_type from Kafka message: Unexpected character ('i' (code 105)): was expecting double-quote to start field name
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 3]
+com.fasterxml.jackson.core.JsonParseException: Unexpected character ('i' (code 105)): was expecting double-quote to start field name
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 3]
+	at com.fasterxml.jackson.core.JsonParser._constructReadException(JsonParser.java:2672)
+	at com.fasterxml.jackson.core.base.ParserMinimalBase._reportUnexpectedChar(ParserMinimalBase.java:742)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser._handleOddName(ReaderBasedJsonParser.java:1909)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser.nextFieldName(ReaderBasedJsonParser.java:939)
+	at com.fasterxml.jackson.databind.deser.std.BaseNodeDeserializer._deserializeContainerNoRecursion(JsonNodeDeserializer.java:535)
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:99)
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:24)
+	at com.fasterxml.jackson.databind.deser.DefaultDeserializationContext.readRootValue(DefaultDeserializationContext.java:342)
+	at com.fasterxml.jackson.databind.ObjectMapper._readTreeAndClose(ObjectMapper.java:5021)
+	at com.fasterxml.jackson.databind.ObjectMapper.readTree(ObjectMapper.java:3308)
+	at g11.aiprocessingservice.services.MetadataProcessor.onMessage(MetadataProcessor.kt:54)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at io.mockk.proxy.jvm.advice.MethodCall.call(MethodCall.kt:14)
+	at io.mockk.proxy.jvm.advice.SelfCallEliminatorCallable.call(SelfCallEliminatorCallable.kt:14)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper.handleOriginalCall(JvmMockFactoryHelper.kt:96)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper.access$handleOriginalCall(JvmMockFactoryHelper.kt:19)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper$mockHandler$1$invocation$1$1.invoke(JvmMockFactoryHelper.kt:28)
+	at io.mockk.impl.stub.MockKStub$handleInvocation$originalPlusToString$1.invoke(MockKStub.kt:235)
+	at io.mockk.impl.stub.SpyKStub.defaultAnswer(SpyKStub.kt:15)
+	at io.mockk.impl.stub.MockKStub.answer(MockKStub.kt:44)
+	at io.mockk.impl.recording.states.AnsweringState.call(AnsweringState.kt:16)
+	at io.mockk.impl.recording.CommonCallRecorder.call(CommonCallRecorder.kt:53)
+	at io.mockk.impl.stub.MockKStub.handleInvocation(MockKStub.kt:271)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper$mockHandler$1.invocation(JvmMockFactoryHelper.kt:24)
+	at io.mockk.proxy.jvm.advice.Interceptor.call(Interceptor.kt:21)
+	at g11.aiprocessingservice.services.MetadataProcessor.onMessage(MetadataProcessor.kt:109)
+	at g11.aiprocessingservice.unit.services.KafkaListenerTest.onMessage should throw exception when JSON parsing fails(KafkaListenerTest.kt:157)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+08:52:55.525 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Failed to parse Kafka message: Unexpected character ('i' (code 105)): was expecting double-quote to start field name
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 3]
+com.fasterxml.jackson.core.JsonParseException: Unexpected character ('i' (code 105)): was expecting double-quote to start field name
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 3]
+	at com.fasterxml.jackson.core.JsonParser._constructReadException(JsonParser.java:2672)
+	at com.fasterxml.jackson.core.base.ParserMinimalBase._reportUnexpectedChar(ParserMinimalBase.java:742)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser._handleOddName(ReaderBasedJsonParser.java:1909)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser.nextFieldName(ReaderBasedJsonParser.java:939)
+	at com.fasterxml.jackson.databind.deser.std.BaseNodeDeserializer._deserializeContainerNoRecursion(JsonNodeDeserializer.java:535)
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:99)
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:24)
+	at com.fasterxml.jackson.databind.deser.DefaultDeserializationContext.readRootValue(DefaultDeserializationContext.java:342)
+	at com.fasterxml.jackson.databind.ObjectMapper._readTreeAndClose(ObjectMapper.java:5021)
+	at com.fasterxml.jackson.databind.ObjectMapper.readTree(ObjectMapper.java:3308)
+	at g11.aiprocessingservice.services.MetadataProcessor.readJson(MetadataProcessor.kt:242)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at io.mockk.proxy.jvm.advice.MethodCall.call(MethodCall.kt:14)
+	at io.mockk.proxy.jvm.advice.SelfCallEliminatorCallable.call(SelfCallEliminatorCallable.kt:14)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper.handleOriginalCall(JvmMockFactoryHelper.kt:96)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper.access$handleOriginalCall(JvmMockFactoryHelper.kt:19)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper$mockHandler$1$invocation$1$1.invoke(JvmMockFactoryHelper.kt:28)
+	at io.mockk.impl.stub.MockKStub$handleInvocation$originalPlusToString$1.invoke(MockKStub.kt:235)
+	at io.mockk.impl.stub.SpyKStub.defaultAnswer(SpyKStub.kt:15)
+	at io.mockk.impl.stub.MockKStub.answer(MockKStub.kt:44)
+	at io.mockk.impl.recording.states.AnsweringState.call(AnsweringState.kt:16)
+	at io.mockk.impl.recording.CommonCallRecorder.call(CommonCallRecorder.kt:53)
+	at io.mockk.impl.stub.MockKStub.handleInvocation(MockKStub.kt:271)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper$mockHandler$1.invocation(JvmMockFactoryHelper.kt:24)
+	at io.mockk.proxy.jvm.advice.Interceptor.call(Interceptor.kt:21)
+	at g11.aiprocessingservice.services.MetadataProcessor.readJson(MetadataProcessor.kt:250)
+	at g11.aiprocessingservice.services.MetadataProcessor.onMessage(MetadataProcessor.kt:66)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at io.mockk.proxy.jvm.advice.MethodCall.call(MethodCall.kt:14)
+	at io.mockk.proxy.jvm.advice.SelfCallEliminatorCallable.call(SelfCallEliminatorCallable.kt:14)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper.handleOriginalCall(JvmMockFactoryHelper.kt:96)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper.access$handleOriginalCall(JvmMockFactoryHelper.kt:19)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper$mockHandler$1$invocation$1$1.invoke(JvmMockFactoryHelper.kt:28)
+	at io.mockk.impl.stub.MockKStub$handleInvocation$originalPlusToString$1.invoke(MockKStub.kt:235)
+	at io.mockk.impl.stub.SpyKStub.defaultAnswer(SpyKStub.kt:15)
+	at io.mockk.impl.stub.MockKStub.answer(MockKStub.kt:44)
+	at io.mockk.impl.recording.states.AnsweringState.call(AnsweringState.kt:16)
+	at io.mockk.impl.recording.CommonCallRecorder.call(CommonCallRecorder.kt:53)
+	at io.mockk.impl.stub.MockKStub.handleInvocation(MockKStub.kt:271)
+	at io.mockk.impl.instantiation.JvmMockFactoryHelper$mockHandler$1.invocation(JvmMockFactoryHelper.kt:24)
+	at io.mockk.proxy.jvm.advice.Interceptor.call(Interceptor.kt:21)
+	at g11.aiprocessingservice.services.MetadataProcessor.onMessage(MetadataProcessor.kt:109)
+	at g11.aiprocessingservice.unit.services.KafkaListenerTest.onMessage should throw exception when JSON parsing fails(KafkaListenerTest.kt:157)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+08:52:55.640 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Node -1 disconnected.
+08:52:55.640 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:55.643 [org.springframework.kafka.KafkaListenerEndpointContainer#0-2-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-4, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:55.733 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Node -1 disconnected.
+08:52:55.733 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:55.734 [org.springframework.kafka.KafkaListenerEndpointContainer#1-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-processor-5, groupId=embedding-processor] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:55.866 [Ai-service-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Node -1 disconnected.
+08:52:55.867 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:55.867 [Ai-service-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-Ai-service-consumer-6, groupId=Ai-service-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:55.998 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Node -1 disconnected.
+08:52:55.998 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:55.999 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-2, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:56.088 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Node -1 disconnected.
+08:52:56.088 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:56.088 [org.springframework.kafka.KafkaListenerEndpointContainer#0-1-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-embedding-generator-3, groupId=embedding-generator] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:56.139 [dlt-consumer-0-C-1] ?[34mINFO ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Node -1 disconnected.
+08:52:56.139 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Connection to node -1 (localhost/127.0.0.1:9094) could not be established. Node may not be available.
+08:52:56.139 [dlt-consumer-0-C-1] ?[31mWARN ?[0;39m o.a.k.clients.NetworkClient [ ]
+                --&gt; [Consumer clientId=consumer-dlt-consumer-1, groupId=dlt-consumer] Bootstrap broker localhost:9094 (id: -1 rack: null) disconnected
+08:52:56.201 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;9cfc5d75-d9cc-42f6-a9fe-5e1ee741c8d4&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;9cfc5d75-d9cc-42f6-a9fe-5e1ee741c8d4\&quot;,\&quot;fileId\&quot;:\&quot;1aceff8e-2934-47ec-b59a-827bb8a69097\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;c487e491-0fc9-4874-81e9-ca218c07525c\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:56.212 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=9cfc5d75-d9cc-42f6-a9fe-5e1ee741c8d4, fileId=1aceff8e-2934-47ec-b59a-827bb8a69097, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=c487e491-0fc9-4874-81e9-ca218c07525c, fileVersionId=1)
+08:52:56.212 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 9cfc5d75-d9cc-42f6-a9fe-5e1ee741c8d4 created successfully - acknowledging Kafka message
+08:52:56.213 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Skipping file-analyzed event for job 9cfc5d75-d9cc-42f6-a9fe-5e1ee741c8d4 - file analysis not supported
+08:52:56.230 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Error calling file service for download edd3928b-c1dd-4422-8295-ec52c3c65ad0: Unauthorized
+08:52:56.245 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;106648b2-6212-4dcd-9f3b-ba199a0b6b21&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;106648b2-6212-4dcd-9f3b-ba199a0b6b21\&quot;,\&quot;fileId\&quot;:\&quot;0aa4d7c9-5c3c-4dcd-929e-d7b7756b4b11\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;10c273ea-0069-4b35-9612-69ff2158d53a\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:56.253 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=106648b2-6212-4dcd-9f3b-ba199a0b6b21, fileId=0aa4d7c9-5c3c-4dcd-929e-d7b7756b4b11, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=10c273ea-0069-4b35-9612-69ff2158d53a, fileVersionId=1)
+08:52:56.254 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 106648b2-6212-4dcd-9f3b-ba199a0b6b21 created successfully - acknowledging Kafka message
+08:52:56.254 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Skipping file-analyzed event for job 106648b2-6212-4dcd-9f3b-ba199a0b6b21 - file analysis not supported
+08:52:56.263 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;0d0565bc-9a8d-4091-8325-3f7fd272d548&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;0d0565bc-9a8d-4091-8325-3f7fd272d548\&quot;,\&quot;fileId\&quot;:\&quot;f03561b0-eb28-4168-9ec9-e154373fce18\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;366ad097-438c-46df-ba1e-b7af5120c036\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:56.270 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=0d0565bc-9a8d-4091-8325-3f7fd272d548, fileId=f03561b0-eb28-4168-9ec9-e154373fce18, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=366ad097-438c-46df-ba1e-b7af5120c036, fileVersionId=1)
+08:52:56.272 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Skipping job for file f03561b0-eb28-4168-9ec9-e154373fce18 - already processed or in progress
+08:52:56.282 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;8d875fca-1ae5-40ec-8106-62ab7f5453d7&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;8d875fca-1ae5-40ec-8106-62ab7f5453d7\&quot;,\&quot;fileId\&quot;:\&quot;b7190035-8142-4fca-8628-69e1c1309ca8\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;6ec606af-0bd2-455b-bff4-d1658dfc8ca2\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:56.287 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=8d875fca-1ae5-40ec-8106-62ab7f5453d7, fileId=b7190035-8142-4fca-8628-69e1c1309ca8, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=6ec606af-0bd2-455b-bff4-d1658dfc8ca2, fileVersionId=1)
+08:52:56.287 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 8d875fca-1ae5-40ec-8106-62ab7f5453d7 created successfully - acknowledging Kafka message
+08:52:56.288 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Failed to process job 8d875fca-1ae5-40ec-8106-62ab7f5453d7: AI returned incomplete metadata
+java.lang.IllegalStateException: AI returned incomplete metadata
+	at g11.aiprocessingservice.unit.services.KafkaListenerTest.onMessage should handle processJob throwing IllegalStateException(KafkaListenerTest.kt:306)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+08:52:56.289 [Test worker] ?[31mWARN ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 8d875fca-1ae5-40ec-8106-62ab7f5453d7 FIRST FAILURE - will retry after 5 minutes
+08:52:56.325 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;24d83261-093e-4e99-84ac-9e1440973b21&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;24d83261-093e-4e99-84ac-9e1440973b21\&quot;,\&quot;fileId\&quot;:\&quot;b7fd65ed-55c7-4db8-933c-13ddb00f3ed5\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;dec9c3b7-0454-4d7a-9344-e091d4fe60c2\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:56.333 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=24d83261-093e-4e99-84ac-9e1440973b21, fileId=b7fd65ed-55c7-4db8-933c-13ddb00f3ed5, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=dec9c3b7-0454-4d7a-9344-e091d4fe60c2, fileVersionId=1)
+08:52:56.333 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 24d83261-093e-4e99-84ac-9e1440973b21 created successfully - acknowledging Kafka message
+08:52:56.334 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Failed to process job 24d83261-093e-4e99-84ac-9e1440973b21: Processing failed again
+java.lang.RuntimeException: Processing failed again
+	at g11.aiprocessingservice.unit.services.KafkaListenerTest.onMessage should send to DLT on retry failure(KafkaListenerTest.kt:242)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+08:52:56.335 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 24d83261-093e-4e99-84ac-9e1440973b21 RETRY FAILED - will be sent to DLT
+08:52:56.351 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Error calling file service for download f2e4d70a-43ab-4e63-b126-8dbacfd5e09e: Forbidden
+08:52:56.360 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;0d0a7f8e-44ad-46a5-a2f9-3e3d00f09f67&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;0d0a7f8e-44ad-46a5-a2f9-3e3d00f09f67\&quot;,\&quot;fileId\&quot;:\&quot;15a97d45-f5ff-479a-95e5-b7897ff42116\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;9b2fc9f0-67bd-4c53-83c7-4fd845306de7\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:56.364 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=0d0a7f8e-44ad-46a5-a2f9-3e3d00f09f67, fileId=15a97d45-f5ff-479a-95e5-b7897ff42116, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=9b2fc9f0-67bd-4c53-83c7-4fd845306de7, fileVersionId=1)
+08:52:56.364 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Failed to create/check job for file 15a97d45-f5ff-479a-95e5-b7897ff42116: Database error
+java.lang.RuntimeException: Database error
+	at g11.aiprocessingservice.unit.services.KafkaListenerTest.onMessage should throw exception when createJobIfNotExists fails(KafkaListenerTest.kt:175)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+08:52:56.372 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;7cb30a1f-db9b-443b-919f-b6eaf957f746&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;7cb30a1f-db9b-443b-919f-b6eaf957f746\&quot;,\&quot;fileId\&quot;:\&quot;e003493b-470b-44e3-9521-990044adc0d4\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;1e4926ce-3241-40ce-90b3-8a17cc3d27b9\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:56.376 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=7cb30a1f-db9b-443b-919f-b6eaf957f746, fileId=e003493b-470b-44e3-9521-990044adc0d4, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=1e4926ce-3241-40ce-90b3-8a17cc3d27b9, fileVersionId=1)
+08:52:56.376 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 7cb30a1f-db9b-443b-919f-b6eaf957f746 created successfully - acknowledging Kafka message
+08:52:56.376 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Failed to process job 7cb30a1f-db9b-443b-919f-b6eaf957f746: Processing failed
+java.lang.RuntimeException: Processing failed
+	at g11.aiprocessingservice.unit.services.KafkaListenerTest.onMessage should handle first failure and retry(KafkaListenerTest.kt:208)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:775)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:479)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:161)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:152)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:91)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:112)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:94)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:87)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:216)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:212)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:137)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:201)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:170)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:94)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:59)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:142)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$1(InterceptingLauncher.java:39)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:38)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+08:52:56.377 [Test worker] ?[31mWARN ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Job 7cb30a1f-db9b-443b-919f-b6eaf957f746 FIRST FAILURE - will retry after 5 minutes
+08:52:56.382 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; This is the message from Kafka 
+ {
+    &quot;event_type&quot;: &quot;FILE_INSERTED&quot;,
+    &quot;id&quot;: &quot;a801e145-8800-4ddf-819e-62ac375a6270&quot;,
+    &quot;payload&quot;: &quot;{\&quot;id\&quot;:\&quot;a801e145-8800-4ddf-819e-62ac375a6270\&quot;,\&quot;fileId\&quot;:\&quot;8b9a2467-6ba2-4f81-8dd8-727a30d884cf\&quot;,\&quot;version\&quot;:1,\&quot;filename\&quot;:\&quot;test.txt\&quot;,\&quot;contentType\&quot;:\&quot;text/plain\&quot;,\&quot;ownerUserId\&quot;:\&quot;33dec6b1-18c5-4ca3-be29-e9ed50c83f19\&quot;,\&quot;fileVersionId\&quot;:1}&quot;
+}
+08:52:56.385 [Test worker] ?[39mDEBUG?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Converted to json: JobDTO(id=a801e145-8800-4ddf-819e-62ac375a6270, fileId=8b9a2467-6ba2-4f81-8dd8-727a30d884cf, version=1, filename=test.txt, metadata=null, contentType=text/plain, ownerUserId=33dec6b1-18c5-4ca3-be29-e9ed50c83f19, fileVersionId=1)
+08:52:56.385 [Test worker] ?[34mINFO ?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Skipping job for file 8b9a2467-6ba2-4f81-8dd8-727a30d884cf - already processed or in progress
+08:52:56.399 [Test worker] ?[1;31mERROR?[0;39m g.a.services.MetadataProcessor [ ]
+                --&gt; Error calling file service for download 1c05727c-19da-45a8-9391-96bfd59cc415: Unauthorized
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 8.14.3</a> at May 12, 2026, 8:52:58 AM</p>
+</div>
+</div>
+</body>
+</html>

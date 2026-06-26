@@ -21,14 +21,23 @@ repositories {
 
 extra["springCloudVersion"] = "2024.0.2"
 
+// Pin Spring Framework to 6.2.15+. The managed 6.2.14 has a ConcurrentReferenceHashMap /
+// AnnotationTypeMappings deadlock (spring-projects/spring-framework#35944): two concurrent
+// first-requests can deadlock (ABBA) during handler annotation scanning and wedge every Tomcat
+// worker, hanging the whole service (even /actuator/health) until restart. Fixed in 6.2.15.
+extra["spring-framework.version"] = "6.2.15"
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springdoc:springdoc-openapi-starter-common:2.7.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.springframework.cloud:spring-cloud-starter-gateway-mvc")
+    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.springframework.security:spring-security-test")
@@ -38,34 +47,13 @@ dependencies {
     implementation("com.github.loki4j:loki-logback-appender:1.5.2")
     // https://mvnrepository.com/artifact/org.apache.httpcomponents.client5/httpclient5
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5")
-}
 
-// OpenTelemetry Java Agent
-val otelAgentVersion = "2.12.0"
-val otelAgentFile = file("$buildDir/otel/opentelemetry-javaagent.jar")
+    // Observability - Distributed Tracing (Micrometer + OTel bridge + OTLP exporter)
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
-tasks.register("downloadOtelAgent") {
-    group = "observability"
-    description = "Download the OpenTelemetry Java Agent JAR"
-    outputs.file(otelAgentFile)
-    doLast {
-        otelAgentFile.parentFile.mkdirs()
-        val url = "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v$otelAgentVersion/opentelemetry-javaagent.jar"
-        ant.invokeMethod("get", mapOf("src" to url, "dest" to otelAgentFile))
-    }
-}
-
-tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
-    dependsOn("downloadOtelAgent")
-    jvmArgs(
-        "-javaagent:${otelAgentFile.absolutePath}",
-    )
-    environment("OTEL_SERVICE_NAME", "ApiGateway")
-    environment("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-    environment("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
-    environment("OTEL_METRICS_EXPORTER", "otlp")
-    environment("OTEL_TRACES_EXPORTER", "otlp")
-    environment("OTEL_LOGS_EXPORTER", "none")
+    // Observability - Metrics export to the LGTM stack (Prometheus via OTLP)
+    implementation("io.micrometer:micrometer-registry-otlp")
 }
 
 dependencyManagement {

@@ -1,5 +1,6 @@
 package g11.tusuploaderservice.conf
 
+import io.micrometer.core.instrument.MeterRegistry
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.springframework.beans.factory.annotation.Value
@@ -9,11 +10,14 @@ import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
 import org.springframework.kafka.core.ConsumerFactory
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory
+import org.springframework.kafka.core.MicrometerConsumerListener
 
 @EnableKafka
 @Configuration
 class KafkaConsumerConfig(
-    @Value("\${kafka.bootstrap-servers}") private val bootstrapAddress: String
+    @Value("\${kafka.bootstrap-servers}") private val bootstrapAddress: String,
+    @Value("\${spring.kafka.listener.auto-startup:true}") private val autoStartup: Boolean,
+    private val meterRegistry: MeterRegistry,
 ) {
 
     @Bean
@@ -24,13 +28,18 @@ class KafkaConsumerConfig(
         configProps[ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG] = StringDeserializer::class.java
         configProps[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = "earliest"
         configProps[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = true
-        return DefaultKafkaConsumerFactory(configProps)
+        // Bind native Kafka consumer client metrics (incl. records-lag) to the registry for OTLP export.
+        return DefaultKafkaConsumerFactory<String, String>(configProps).apply {
+            addListener(MicrometerConsumerListener(meterRegistry))
+        }
     }
 
     @Bean
     fun kafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
         factory.consumerFactory = consumerFactory()
+        factory.containerProperties.isObservationEnabled = false
+        factory.setAutoStartup(autoStartup)
         return factory
     }
 }

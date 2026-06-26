@@ -1,0 +1,109 @@
+{
+  "realm": "file-management",
+  "enabled": true,
+  "sslRequired": "none",
+  "verifyEmail": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "composite": false
+      },
+      {
+        "name": "manager",
+        "composite": false
+      },
+      {
+        "name": "staff",
+        "composite": false
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "gateway-client",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "UDeZXlu98uuR15s27yHyGyWOvNj7h2VU",
+      "directAccessGrantsEnabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ],
+  "requiredActions": [
+    {
+      "alias": "VERIFY_PROFILE",
+      "name": "Verify Profile",
+      "providerId": "VERIFY_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 90,
+      "config": {}
+    }
+  ],
+  "users": [
+    {
+      "username": "riccardo",
+      "firstName": "Riccardo",
+      "lastName": "Test",
+      "email": "riccardo@test.local",
+      "emailVerified": true,
+      "enabled": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ],
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    },
+    {
+      "username": "samuele",
+      "firstName": "Samuele",
+      "lastName": "Test",
+      "email": "samuele@test.local",
+      "emailVerified": true,
+      "enabled": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SamueleScapellato",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager",
+        "staff"
+      ],
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+    },
+    {
+      "username": "test_staff",
+      "firstName": "Test",
+      "lastName": "Staff",
+      "email": "test_staff@test.local",
+      "emailVerified": true,
+      "enabled": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SamueleScapellato",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "staff"
+      ],
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012"
+    }
+  ]
+}

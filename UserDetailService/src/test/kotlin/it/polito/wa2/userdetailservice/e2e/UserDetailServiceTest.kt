@@ -51,13 +51,12 @@ class UserDetailServiceTest : IntegrationTest() {
     }
 
     private fun getKeycloakAccessToken(userRole: UserRole): String {
-        val tokenUrl = "http://localhost:9090/realms/file-management/protocol/openid-connect/token"
+        val keycloakBaseUrl = IntegrationTest.keycloakContainer.authServerUrl.trimEnd('/')
+        val tokenUrl = "$keycloakBaseUrl/realms/${IntegrationTest.realmName}/protocol/openid-connect/token"
 
-        val credentials = when (userRole) {
-            UserRole.ROLE_admin -> mapOf("username" to "riccardo", "password" to "password")
-            UserRole.ROLE_manager -> mapOf("username" to "samuele", "password" to "SamueleScapellato")
-            else -> mapOf("username" to "test_staff", "password" to "SamueleScapellato")
-        }
+        val roleName = userRole.name.removePrefix("ROLE_")
+        val realmUser = IntegrationTest.usersByRole[roleName]
+            ?: error("No user found in realm for role '$roleName'")
 
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_FORM_URLENCODED
@@ -65,10 +64,10 @@ class UserDetailServiceTest : IntegrationTest() {
 
         val body = LinkedMultiValueMap<String, String>().apply {
             add("grant_type", "password")
-            add("client_id", "gateway-client")
-            add("client_secret", "UDeZXlu98uuR15s27yHyGyWOvNj7h2VU")
-            add("username", credentials["username"])
-            add("password", credentials["password"])
+            add("client_id", IntegrationTest.gatewayClientId)
+            add("client_secret", IntegrationTest.gatewayClientSecret)
+            add("username", realmUser.username)
+            add("password", realmUser.password)
         }
 
         val response = RestTemplate().postForEntity(
@@ -428,6 +427,110 @@ class UserDetailServiceTest : IntegrationTest() {
         assertEquals(userDTO.department, updatedUser["department"])
         assertEquals(1, updatedUser["role"])
         assertEquals(userDTO.storageQuota, updatedUser["storage_quota"])
+    }
+
+    @Test
+    fun `updateUser() - 409 storage quota below used`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 5_000_000L, userId)
+
+        val userDTO = UserDTO(
+            id = userId,
+            fullName = "Mario Rossi",
+            email = "mario.rossi@gmail.com",
+            organization = "Polytechnic University of Turin",
+            department = "Engineering",
+            role = UserRole.ROLE_manager,
+            storageQuota = 1_000L // below the already-used amount
+        )
+
+        val token = getKeycloakAccessToken(UserRole.ROLE_admin)
+        val headers = HttpHeaders()
+        headers.setBearerAuth(token)
+        headers.contentType = MediaType.APPLICATION_JSON
+        val entity = HttpEntity(userDTO, headers)
+
+        // act
+        val response: ResponseEntity<ProblemDetail> = restTemplate.exchange(
+            "/api/v1/users/$userId",
+            HttpMethod.PUT,
+            entity,
+            ProblemDetail::class.java
+        )
+
+        // assert
+        assertEquals(HttpStatus.CONFLICT, response.statusCode)
+
+        // quota must not have been updated
+        val storedQuota = jdbcTemplate.queryForObject(
+            "SELECT storage_quota FROM users WHERE id = ?", Long::class.java, userId
+        )
+        assertEquals(10737418240L, storedQuota)
+    }
+
+    @Test
+    fun `updateUser() - 204 does not change storage used`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 1_000L, userId)
+
+        val userDTO = UserDTO(
+            id = userId,
+            fullName = "Mario Rossi",
+            email = "mario.rossi@gmail.com",
+            organization = "Polytechnic University of Turin",
+            department = "Engineering",
+            role = UserRole.ROLE_manager,
+            storageQuota = 8_000L
+        )
+
+        val token = getKeycloakAccessToken(UserRole.ROLE_admin)
+        val headers = HttpHeaders()
+        headers.setBearerAuth(token)
+        headers.contentType = MediaType.APPLICATION_JSON
+        val entity = HttpEntity(userDTO, headers)
+
+        // act
+        val response: ResponseEntity<Void> = restTemplate.exchange(
+            "/api/v1/users/$userId",
+            HttpMethod.PUT,
+            entity,
+            Void::class.java
+        )
+
+        // assert
+        assertEquals(HttpStatus.NO_CONTENT, response.statusCode)
+        val updatedUser = jdbcTemplate.queryForMap("SELECT * FROM users WHERE id = ?", userId)
+        assertEquals(8_000L, updatedUser["storage_quota"])
+        assertEquals(1_000L, updatedUser["storage_used"]) // update must leave used untouched
+    }
+
+    @Test
+    fun `getUser() - 200 exposes storageUsed`() {
+        // arrange
+        val userId = UUID.fromString("70c8c455-fbf3-4033-a4b0-21780006cf9f")
+        jdbcTemplate.update("UPDATE users SET storage_used = ? WHERE id = ?", 4_242L, userId)
+
+        val token = getKeycloakAccessToken(UserRole.ROLE_admin)
+        val headers = HttpHeaders()
+        headers.setBearerAuth(token)
+        val entity = HttpEntity<Void>(headers)
+
+        // act
+        val response: ResponseEntity<UserDTO> = restTemplate.exchange(
+            "/api/v1/users/$userId",
+            HttpMethod.GET,
+            entity,
+            UserDTO::class.java
+        )
+
+        // assert
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val user = response.body
+        assertNotNull(user)
+        assertEquals(4_242L, user.storageUsed)
+        assertEquals(10737418240L, user.storageQuota)
     }
 
     @Test

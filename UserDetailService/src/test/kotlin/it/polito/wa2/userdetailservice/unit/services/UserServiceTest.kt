@@ -5,16 +5,19 @@ import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import it.polito.wa2.userdetailservice.dto.AvatarContentDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
 import it.polito.wa2.userdetailservice.entities.User
 import it.polito.wa2.userdetailservice.enums.UserRole
 import it.polito.wa2.userdetailservice.exceptions.SelfDeletionNotAllowedException
+import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import it.polito.wa2.userdetailservice.repositories.UserRepository
 import it.polito.wa2.userdetailservice.services.UserService
+import it.polito.wa2.userdetailservice.services.minioServiceInterface
 import jakarta.ws.rs.core.Response
 import junit.framework.TestCase
 import org.junit.jupiter.api.Assertions
@@ -32,10 +35,14 @@ import org.keycloak.representations.idm.UserRepresentation
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.Specification
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContext
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.jwt.Jwt
+import java.io.ByteArrayInputStream
 import java.net.URI
 import java.time.Instant
 import java.util.Date
@@ -47,6 +54,7 @@ import kotlin.test.assertEquals
 class UserServiceTest {
     private lateinit var userRepo: UserRepository
     private lateinit var keycloak: Keycloak
+    private lateinit var minioService: minioServiceInterface
     private lateinit var userService: UserService
 
     private val users: List<User> = listOf(
@@ -78,16 +86,48 @@ class UserServiceTest {
     fun setup() {
         userRepo = mockk()
         keycloak = mockk()
-        userService = UserService(userRepo, "file-management", keycloak)
+        minioService = mockk()
+        userService = UserService(userRepo, minioService, "file-management", keycloak)
+    }
+
+    // Wires up a SecurityContext for the org-scoped (non-service-account) path,
+    // returning the given authenticated user from the repo.
+    private fun mockOrgScopedAuth(authenticatedUserId: UUID, authenticatedUser: User) {
+        val jwt = mockk<Jwt>()
+        val authentication = mockk<Authentication>()
+        val securityContext = mockk<SecurityContext>()
+        every { securityContext.authentication } returns authentication
+        every { authentication.principal } returns jwt
+        every { authentication.authorities } returns emptyList()
+        every { jwt.subject } returns authenticatedUserId.toString()
+        SecurityContextHolder.setContext(securityContext)
+        every { userRepo.findById(authenticatedUserId) } returns Optional.of(authenticatedUser)
+    }
+
+    // updateUser() syncs name/email back to Keycloak; stub that chain so the
+    // success-path tests don't fall into the "Error updating user" catch block.
+    private fun mockKeycloakUserUpdate(userId: UUID) {
+        val realmResource = mockk<RealmResource>()
+        val usersResource = mockk<UsersResource>()
+        val userResource = mockk<UserResource>()
+        every { keycloak.realm(any()) } returns realmResource
+        every { realmResource.users() } returns usersResource
+        every { usersResource.get(userId.toString()) } returns userResource
+        every { userResource.toRepresentation() } returns UserRepresentation()
+        justRun { userResource.update(any()) }
     }
 
     @Test
-    fun `getUsers() - successful`() {
+    fun `getUsers() - successful, org-scoped with default sort`() {
         // arrange
-        val filtersDTO: FiltersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
-        val page: Page<User> =
-            PageImpl(users, PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize), users.size.toLong())
-        every { userRepo.findAll(PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize)) } returns page
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+
+        val pageableSlot = slot<Pageable>()
+        every { userRepo.findAll(any<Specification<User>>(), capture(pageableSlot)) } answers {
+            PageImpl(users, pageableSlot.captured, users.size.toLong())
+        }
 
         // act
         val result = userService.getUsers(filtersDTO)
@@ -96,8 +136,104 @@ class UserServiceTest {
         assertEquals(2, result.totalElements)
         TestCase.assertTrue(result.content.all { it is UserDTO })
         assertEquals("John Doe", result.content[0].fullName)
-        assertEquals("Mary Smith", result.content[1].fullName)
-        verify { userRepo.findAll(PageRequest.of(filtersDTO.pageNumber, filtersDTO.pageSize)) }
+        // default sort is fullName ascending
+        assertEquals(Sort.by(Sort.Direction.ASC, "fullName"), pageableSlot.captured.sort)
+        verify { userRepo.findById(authenticatedUserId) }
+        verify { userRepo.findAll(any<Specification<User>>(), any<Pageable>()) }
+        verify(exactly = 0) { userRepo.findByOrganization(any(), any()) }
+    }
+
+    @Test
+    fun `getUsers() - service account is not org-scoped`() {
+        // arrange: a service-account authority skips the org lookup entirely
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10)
+        val authentication = mockk<Authentication>()
+        val securityContext = mockk<SecurityContext>()
+        every { securityContext.authentication } returns authentication
+        every { authentication.authorities } returns listOf(
+            org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_serviceaccount-fileservice"),
+        )
+        SecurityContextHolder.setContext(securityContext)
+
+        every { userRepo.findAll(any<Specification<User>>(), any<Pageable>()) } returns
+            PageImpl(users, PageRequest.of(0, 10), users.size.toLong())
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        assertEquals(2, result.totalElements)
+        verify(exactly = 0) { userRepo.findById(any()) }
+        verify { userRepo.findAll(any<Specification<User>>(), any<Pageable>()) }
+    }
+
+    @Test
+    fun `getUsers() - honors a valid sort field and direction`() {
+        // arrange
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val filtersDTO = FiltersDTO(
+            pageNumber = 0,
+            pageSize = 10,
+            sortField = "email",
+            sortDirection = Sort.Direction.DESC,
+        )
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+
+        val pageableSlot = slot<Pageable>()
+        every { userRepo.findAll(any<Specification<User>>(), capture(pageableSlot)) } answers {
+            PageImpl(users, pageableSlot.captured, users.size.toLong())
+        }
+
+        // act
+        userService.getUsers(filtersDTO)
+
+        // assert
+        assertEquals(Sort.by(Sort.Direction.DESC, "email"), pageableSlot.captured.sort)
+    }
+
+    @Test
+    fun `getUsers() - falls back to fullName for an unknown sort field`() {
+        // arrange: a bogus field must not reach JPA (which would 500)
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val filtersDTO = FiltersDTO(
+            pageNumber = 0,
+            pageSize = 10,
+            sortField = "bogus; DROP TABLE users",
+            sortDirection = Sort.Direction.ASC,
+        )
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+
+        val pageableSlot = slot<Pageable>()
+        every { userRepo.findAll(any<Specification<User>>(), capture(pageableSlot)) } answers {
+            PageImpl(users, pageableSlot.captured, users.size.toLong())
+        }
+
+        // act
+        userService.getUsers(filtersDTO)
+
+        // assert
+        assertEquals(Sort.by(Sort.Direction.ASC, "fullName"), pageableSlot.captured.sort)
+    }
+
+    @Test
+    fun `getUsers() - passes the search term through to the specification`() {
+        // arrange — the spec is opaque here, so we assert the query still runs with
+        // a non-null spec; spec matching behavior is covered by UserSpecificationsTest.
+        val authenticatedUserId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val filtersDTO = FiltersDTO(pageNumber = 0, pageSize = 10, search = "mary")
+        mockOrgScopedAuth(authenticatedUserId, users[0])
+
+        val specSlot = slot<Specification<User>>()
+        every { userRepo.findAll(capture(specSlot), any<Pageable>()) } returns
+            PageImpl(listOf(users[1]), PageRequest.of(0, 10), 1)
+
+        // act
+        val result = userService.getUsers(filtersDTO)
+
+        // assert
+        assertEquals(1, result.totalElements)
+        assertEquals("Mary Smith", result.content[0].fullName)
+        TestCase.assertTrue(specSlot.isCaptured)
     }
 
     @Test
@@ -383,6 +519,8 @@ class UserServiceTest {
         every { userRepo.findById(userId) } returns Optional.of(existingUser)
         every { userRepo.getUserByEmail("john.smith@gmail.com") } returns Optional.empty()
 
+        mockKeycloakUserUpdate(userId)
+
         // act
         userService.updateUser(updatedUserDTO)
 
@@ -424,6 +562,8 @@ class UserServiceTest {
         )
 
         every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        mockKeycloakUserUpdate(userId)
 
         // act
         userService.updateUser(updatedUserDTO)
@@ -545,6 +685,8 @@ class UserServiceTest {
 
         every { userRepo.findById(userId) } returns Optional.of(existingUser)
 
+        mockKeycloakUserUpdate(userId)
+
         // act
         userService.updateUser(updatedUserDTO)
 
@@ -556,6 +698,121 @@ class UserServiceTest {
         assertEquals(UserRole.ROLE_manager, existingUser.role) // Changed
         assertEquals(10737418240, existingUser.storageQuota) // Changed
         verify { userRepo.findById(userId) }
+    }
+
+    @Test
+    fun `updateUser() - throws when storage quota is below current used`() {
+        // arrange
+        val userId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val existingUser = User(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            role = UserRole.ROLE_staff,
+            department = "IT",
+            storageQuota = 10000,
+            storageUsed = 5000,
+            createdAt = Date.from(Instant.now().minusSeconds(60 * 60 * 24)),
+            updatedAt = Date.from(Instant.now().minusSeconds(60 * 60))
+        )
+
+        val updatedUserDTO = UserDTO(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com", // same email to skip conflict lookup
+            organization = "CloudFlare",
+            department = "IT",
+            role = UserRole.ROLE_staff,
+            storageQuota = 1000 // below the 5000 already used
+        )
+
+        every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        // act & assert
+        val exception = Assertions.assertThrows(StorageQuotaBelowUsedException::class.java) {
+            userService.updateUser(updatedUserDTO)
+        }
+        TestCase.assertTrue(exception.message!!.contains("5000"))
+        // entity must be left untouched
+        assertEquals(10000, existingUser.storageQuota)
+    }
+
+    @Test
+    fun `updateUser() - allows storage quota equal to current used`() {
+        // arrange - boundary: quota == used is acceptable
+        val userId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val existingUser = User(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            role = UserRole.ROLE_staff,
+            department = "IT",
+            storageQuota = 10000,
+            storageUsed = 1000,
+            createdAt = Date.from(Instant.now().minusSeconds(60 * 60 * 24)),
+            updatedAt = Date.from(Instant.now().minusSeconds(60 * 60))
+        )
+
+        val updatedUserDTO = UserDTO(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            department = "IT",
+            role = UserRole.ROLE_staff,
+            storageQuota = 1000 // exactly the used amount
+        )
+
+        every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        mockKeycloakUserUpdate(userId)
+
+        // act
+        userService.updateUser(updatedUserDTO)
+
+        // assert
+        assertEquals(1000, existingUser.storageQuota)
+    }
+
+    @Test
+    fun `updateUser() - allows null storage quota even when storage used is positive`() {
+        // arrange - clearing the quota disables enforcement but usage keeps being tracked
+        val userId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val existingUser = User(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            role = UserRole.ROLE_staff,
+            department = "IT",
+            storageQuota = 10000,
+            storageUsed = 5000,
+            createdAt = Date.from(Instant.now().minusSeconds(60 * 60 * 24)),
+            updatedAt = Date.from(Instant.now().minusSeconds(60 * 60))
+        )
+
+        val updatedUserDTO = UserDTO(
+            id = userId,
+            fullName = "John Doe",
+            email = "john.doe@gmail.com",
+            organization = "CloudFlare",
+            department = "IT",
+            role = UserRole.ROLE_staff,
+            storageQuota = null
+        )
+
+        every { userRepo.findById(userId) } returns Optional.of(existingUser)
+
+        mockKeycloakUserUpdate(userId)
+
+        // act
+        userService.updateUser(updatedUserDTO)
+
+        // assert - quota cleared, used untouched
+        assertEquals(null, existingUser.storageQuota)
+        assertEquals(5000, existingUser.storageUsed)
     }
 
     @Test
@@ -804,5 +1061,70 @@ class UserServiceTest {
         verify { userRepo.deleteById(userId) }
         verify { userResource.remove() }
         verify(exactly = 1) { userRepo.save(userToDelete) } // Rollback attempted
+    }
+
+    @Test
+    fun `getAvatarContent() - returns null when user has no avatar`() {
+        // arrange
+        val userId = users[0].id
+        val user = users[0].apply { imageObjectKey = null }
+        every { userRepo.findById(userId) } returns Optional.of(user)
+
+        // act
+        val result = userService.getAvatarContent(userId)
+
+        // assert
+        assertEquals(null, result)
+        verify(exactly = 0) { minioService.getAvatar(any()) }
+    }
+
+    @Test
+    fun `getAvatarContent() - delegates to minio when avatar is set`() {
+        // arrange
+        val userId = users[0].id
+        val objectKey = "$userId/avatar.webp"
+        val user = users[0].apply { imageObjectKey = objectKey }
+        val expected = AvatarContentDTO(ByteArrayInputStream(byteArrayOf(1, 2)), "image/webp", "etag")
+        every { userRepo.findById(userId) } returns Optional.of(user)
+        every { minioService.getAvatar(objectKey) } returns expected
+
+        // act
+        val result = userService.getAvatarContent(userId)
+
+        // assert
+        assertEquals(expected, result)
+        verify(exactly = 1) { minioService.getAvatar(objectKey) }
+    }
+
+    @Test
+    fun `deleteAvatar() - removes object and clears key`() {
+        // arrange
+        val userId = users[1].id
+        val objectKey = "$userId/avatar.webp"
+        val user = users[1].apply { imageObjectKey = objectKey }
+        every { userRepo.findById(userId) } returns Optional.of(user)
+        justRun { minioService.removeAvatar(objectKey) }
+
+        // act
+        userService.deleteAvatar(userId.toString())
+
+        // assert
+        assertEquals(null, user.imageObjectKey)
+        verify(exactly = 1) { minioService.removeAvatar(objectKey) }
+    }
+
+    @Test
+    fun `deleteAvatar() - no-op on minio when no avatar set`() {
+        // arrange
+        val userId = users[1].id
+        val user = users[1].apply { imageObjectKey = null }
+        every { userRepo.findById(userId) } returns Optional.of(user)
+
+        // act
+        userService.deleteAvatar(userId.toString())
+
+        // assert
+        assertEquals(null, user.imageObjectKey)
+        verify(exactly = 0) { minioService.removeAvatar(any()) }
     }
 }

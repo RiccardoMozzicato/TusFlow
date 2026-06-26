@@ -8,5 +8,7 @@ data class FileShareDTO (
     val fileID: UUID,
     val userID: UUID,
     val permission: PERMISSION_LEVEL,
-    val timestamp: String
+    val timestamp: String,
+    /** Recipient's display name, resolved from the user service; null if unavailable. */
+    val userName: String? = null
 )

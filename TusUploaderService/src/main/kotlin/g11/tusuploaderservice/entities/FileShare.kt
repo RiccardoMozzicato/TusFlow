@@ -48,12 +48,13 @@ open class FileShare(
     open var file: File
 )
 
-fun FileShare.toDTO(): FileShareDTO {
+fun FileShare.toDTO(userName: String? = null): FileShareDTO {
     return FileShareDTO(
         id = this.id,
         fileID = this.file.uuid,
         userID = this.userID,
         permission = this.permission,
-        timestamp = RFC9110(this.timestamp.toInstant())
+        timestamp = RFC9110(this.timestamp.toInstant()),
+        userName = userName
     )
 }

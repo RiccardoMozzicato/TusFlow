@@ -15,5 +15,9 @@ data class FiltersDTO(
     val sortDirection: Sort.Direction,
     val pageNumber: UInt = 0u,
     val pageSize: UInt = 10u,
-    val sharingScope: SharingScope = SharingScope.PERSONAL,
+    val sharingScopes: Set<SharingScope> = setOf(SharingScope.PERSONAL),
+    val ownership: Ownership? = null,
+    val excludeContentTypes: List<String>? = null,
+    /** Free-text query matched (case-insensitive, substring) against the file name; null/blank means no filter. */
+    val search: String? = null,
 )

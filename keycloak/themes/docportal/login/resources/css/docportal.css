@@ -1,0 +1,127 @@
+/*
+ * DocPortal — "Corporate Precision" login skin.
+ * Loaded after the parent keycloak.v2 styles.css, so these rules win.
+ * Overrides PatternFly v5 component variables where possible (clean), and
+ * uses targeted rules + a few !important where PF specificity demands it.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --dp-primary: #022448;
+  --dp-primary-container: #1e3a5f;
+  --dp-on-primary: #ffffff;
+  --dp-surface: #ffffff;
+  --dp-surface-tint: #f8f9ff;
+  --dp-on-surface: #121c28;
+  --dp-on-surface-variant: #43474e;
+  --dp-outline-variant: #c4c6cf;
+  --dp-error: #ba1a1a;
+  --dp-radius-lg: 0.5rem;
+  --dp-radius-xl: 0.75rem;
+}
+
+/* ---- Page background: deep corporate navy field ---- */
+.login-pf body,
+body.login-pf,
+body {
+  background: radial-gradient(
+      1200px 600px at 50% -10%,
+      var(--dp-primary-container) 0%,
+      var(--dp-primary) 55%,
+      #011a35 100%
+    )
+    no-repeat fixed !important;
+  background-size: cover !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* ---- Brand header above the card: DocPortal wordmark ---- */
+#kc-header-wrapper {
+  font-size: 0 !important; /* hide default realm display name text */
+  padding: 0 0 1.25rem 0 !important;
+  background: var(--dp-logo, url('../img/docportal-logo.svg')) no-repeat center
+    center;
+  background-size: contain;
+  height: 44px;
+}
+
+/* ---- Login card ---- */
+.pf-v5-c-login__main {
+  background-color: var(--dp-surface) !important;
+  border: 1px solid var(--dp-outline-variant) !important;
+  border-radius: var(--dp-radius-xl) !important;
+  box-shadow:
+    0 10px 30px -12px rgba(1, 20, 40, 0.45),
+    0 2px 6px -2px rgba(1, 20, 40, 0.2) !important;
+  overflow: hidden;
+}
+
+.pf-v5-c-login__main-header,
+.pf-v5-c-login__main-body {
+  background-color: transparent !important;
+}
+
+/* ---- Title ("Sign in to your account") ---- */
+#kc-page-title {
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+  color: var(--dp-on-surface) !important;
+}
+
+/* ---- Labels ---- */
+.pf-v5-c-form__label-text,
+.pf-v5-c-form__label {
+  color: var(--dp-on-surface-variant) !important;
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 500 !important;
+}
+
+/* ---- Inputs ---- */
+.pf-v5-c-form-control,
+.pf-v5-c-form-control input,
+input.pf-v5-c-form-control {
+  border-radius: var(--dp-radius-lg) !important;
+  font-family: 'Inter', sans-serif !important;
+}
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--BorderColor: var(--dp-outline-variant);
+  --pf-v5-c-form-control--BorderBottomColor: var(--dp-outline-variant);
+  --pf-v5-c-form-control--focus--BorderBottomColor: var(--dp-primary);
+  --pf-v5-c-form-control--hover--BorderBottomColor: var(--dp-primary);
+}
+.pf-v5-c-form-control:focus-within {
+  outline: 2px solid var(--dp-primary) !important;
+  outline-offset: 1px;
+}
+
+/* ---- Primary button (Sign in) ---- */
+.pf-v5-c-button.pf-m-primary,
+#kc-login {
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--dp-primary);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--dp-primary-container);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--dp-primary-container);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--dp-primary-container);
+  border-radius: var(--dp-radius-lg) !important;
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+}
+
+/* ---- Links (forgot password, register, etc.) ---- */
+.pf-v5-c-button.pf-m-link,
+#kc-info a,
+a {
+  --pf-v5-c-button--m-link--Color: var(--dp-primary);
+  color: var(--dp-primary) !important;
+}
+
+/* ---- Checkbox (remember me) accent ---- */
+.pf-v5-c-check__input {
+  accent-color: var(--dp-primary);
+}
+
+/* ---- Inline alerts: soften to brand error ---- */
+.pf-v5-c-alert.pf-m-danger {
+  --pf-v5-c-alert--BorderTopColor: var(--dp-error);
+}

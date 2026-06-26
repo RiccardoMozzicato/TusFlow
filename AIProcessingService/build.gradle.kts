@@ -33,6 +33,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 
     // Database
+    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.flywaydb:flyway-core")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
@@ -43,9 +44,16 @@ dependencies {
     implementation("org.springframework.ai:spring-ai-starter-model-ollama")
     implementation("org.springframework.ai:spring-ai-advisors-vector-store")
     implementation("org.springframework.ai:spring-ai-starter-vector-store-pgvector")
+    // Modular RAG (RetrievalAugmentationAdvisor + query transformers/retrievers/augmenters)
+    implementation("org.springframework.ai:spring-ai-rag")
+    // JDBC-backed conversational chat memory (SPRING_AI_CHAT_MEMORY); schema owned by Flyway
+    implementation("org.springframework.ai:spring-ai-starter-model-chat-memory-repository-jdbc")
 
     // PDF Processing
     implementation("org.apache.pdfbox:pdfbox:2.0.31")
+
+    // Word (.docx) processing
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
 
     //Security
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
@@ -54,12 +62,17 @@ dependencies {
 
     //Web
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springdoc:springdoc-openapi-starter-common:2.7.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     //Kafka
     implementation("org.springframework.kafka:spring-kafka")
+    // Required by @RetryableTopic's @Backoff (spring-retry is an optional dependency of spring-kafka)
+    implementation("org.springframework.retry:spring-retry")
 
     // unit testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
@@ -76,40 +89,19 @@ dependencies {
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:kafka")
     testImplementation("io.jsonwebtoken:jjwt-api:0.12.3")
-    testRuntimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")
+    testRuntimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     testRuntimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // Observability - Loki log appender (LGTM stack)
     implementation("com.github.loki4j:loki-logback-appender:1.5.2")
-}
 
-// OpenTelemetry Java Agent
-val otelAgentVersion = "2.12.0"
-val otelAgentFile = file("$buildDir/otel/opentelemetry-javaagent.jar")
+    // Observability - Distributed Tracing (Micrometer + OTel bridge + OTLP exporter)
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
-tasks.register("downloadOtelAgent") {
-    group = "observability"
-    description = "Download the OpenTelemetry Java Agent JAR"
-    outputs.file(otelAgentFile)
-    doLast {
-        otelAgentFile.parentFile.mkdirs()
-        val url = "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v$otelAgentVersion/opentelemetry-javaagent.jar"
-        ant.invokeMethod("get", mapOf("src" to url, "dest" to otelAgentFile))
-    }
-}
-
-tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
-    dependsOn("downloadOtelAgent")
-    jvmArgs(
-        "-javaagent:${otelAgentFile.absolutePath}",
-    )
-    environment("OTEL_SERVICE_NAME", "AIProcessingService")
-    environment("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-    environment("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
-    environment("OTEL_METRICS_EXPORTER", "otlp")
-    environment("OTEL_TRACES_EXPORTER", "otlp")
-    environment("OTEL_LOGS_EXPORTER", "none")
+    // Observability - Metrics export to the LGTM stack (Prometheus via OTLP)
+    implementation("io.micrometer:micrometer-registry-otlp")
 }
 
 dependencyManagement {

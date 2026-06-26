@@ -4,26 +4,27 @@ import g11.tusuploaderservice.dto.*
 import g11.tusuploaderservice.dto.toDTO
 import g11.tusuploaderservice.entities.*
 import g11.tusuploaderservice.exceptions.ForbiddenException
+import g11.tusuploaderservice.exceptions.InvalidFormatException
 import g11.tusuploaderservice.exceptions.ResourceNotFoundException
 import g11.tusuploaderservice.exceptions.StorageException
 import g11.tusuploaderservice.repositories.FileRepository
 import g11.tusuploaderservice.repositories.FileShareRepository
+import g11.tusuploaderservice.repositories.FileVersionFavoriteRepository
 import g11.tusuploaderservice.repositories.FileVersionRepository
 import g11.tusuploaderservice.repositories.TusRepository
+import g11.tusuploaderservice.specs.FileShareSpecifications
 import g11.tusuploaderservice.specs.FileSpecifications
 import g11.tusuploaderservice.utils.getUserIdFromJwt
-import g11.tusuploaderservice.utils.getUserTokenFromJwt
 import g11.tusuploaderservice.utils.mergeByteArrays
+import io.micrometer.tracing.Tracer
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
-import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.client.RestClient
@@ -44,12 +45,14 @@ class FileService(
     private val fileShareRepository: FileShareRepository,
     @Qualifier("userServiceClient") private val userServiceClient: RestClient,
     private val fileVersionRepository: FileVersionRepository,
+    private val fileVersionFavoriteRepository: FileVersionFavoriteRepository,
     private val outboxRepository: g11.tusuploaderservice.repositories.FilesOutboxEventsRepository,
+    private val tracer: Tracer,
 ) : FileServiceInterface {
     private val log = LoggerFactory.getLogger(FileService::class.java)
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun createFile(fileId: UUID, upload: Upload) : File {
+    override fun createFile(fileId: UUID, upload: Upload): File {
 
         //ACLs controls not needed here because this function is called on upload completion by appendChunk, thus is, checks are already done
 
@@ -58,7 +61,7 @@ class FileService(
         val fileEntity = File(
             uuid = fileId,
             createdAt = Date.from(Instant.now()),
-            lastUpdateAt =  Date.from(Instant.now()),
+            lastUpdateAt = Date.from(Instant.now()),
             lastFilename = filename,
             currentVersion = 1L,
             ownerId = upload.ownerId,
@@ -67,14 +70,17 @@ class FileService(
             sharingScope = upload.sharingScope,
         )
 
-        log.debug("Created file ${fileEntity.uuid}")
+        log.debug("Creating new file: {} with filename: {} for owner: {}", fileId, filename, upload.ownerId)
         fileRepository.save(fileEntity)
+        log.info("File created successfully: {} with sharing scope: {}", fileId, upload.sharingScope)
         return fileEntity
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun createFileVersion(upload: Upload,file: File): FileVersion {
+    override fun createFileVersion(upload: Upload, file: File): FileVersion {
         //ACLs controls not needed here because this function is called on upload completion by appendChunk, thus is, checks are already done
+
+        log.debug("Creating new version for file: {}", file.uuid)
 
         val filename = upload.filename ?: LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))
 
@@ -82,6 +88,7 @@ class FileService(
             filename = filename,
             size = upload.size!!, // size is not null here because upload is completed
             metadata = upload.metadata,
+            aiMetadata = null,
             contentType = upload.contentType!!, // contentType is not null here because its autodetected before completion
             createdAt = upload.createdAt,
             objectKey = upload.objectKey!!, // objectKey is not null here because upload is completed
@@ -105,103 +112,52 @@ class FileService(
         upload.fileVersionId = persistedVersion.id
         tusRepository.save(upload)
 
-        log.info("Created new file version ${persistedVersion.version} for file ${savedFile.uuid}")
+        log.info("Created new file version {} for file {} with size: {} bytes", persistedVersion.version, savedFile.uuid, fileVersion.size)
         return persistedVersion
     }
 
     /**
-     * Restituisce file con sharingScope ORGANIZATION o DEPARTMENT
-     * Filtrati per organization e department dell'utente corrente
+     * Restituisce i file visibili all'utente nei sharingScope richiesti (in OR):
+     * - PERSONAL: file dove l'utente è owner O è presente nei fileShare
+     * - DEPARTMENT: file del department dell'utente
+     * - ORGANIZATION: file dell'organization dell'utente
+     * Org/department sono ricavati dal token dell'utente, mai dai parametri.
+     * Restituisce una pagina vuota se nessun file corrisponde ai criteri.
      */
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun getOrganizationDepartmentFiles(filtersDTO: FiltersDTO): Page<FileDTO> {
-        log.debug("Retrieving organization/department files with criteria {}", filtersDTO)
+    override fun getFiles(filtersDTO: FiltersDTO): Page<FileDTO> {
+        log.debug("Retrieving files with criteria {}", filtersDTO)
 
-        // Verifica che lo sharingScope sia ORGANIZATION o DEPARTMENT
-        require(filtersDTO.sharingScope == SharingScope.ORGANIZATION ||
-                filtersDTO.sharingScope == SharingScope.DEPARTMENT) {
-            "getOrganizationDepartmentFiles requires sharingScope to be ORGANIZATION or DEPARTMENT"
-        }
+        require(filtersDTO.sharingScopes.isNotEmpty()) { "At least one sharing scope is required" }
 
-        val token= authService.getAccessToken()
-        val userDetails = getUserDetails(token)
-        log.debug("Current user details: {}", userDetails)
-
-        val pageable = PageRequest.of(
-            filtersDTO.pageNumber.toInt(),
-            filtersDTO.pageSize.toInt(),
-            Sort.by(filtersDTO.sortDirection, filtersDTO.sortField)
-        )
-
-        val spec = FileSpecifications.buildOrganizationDepartmentFiles(
-            contentType = filtersDTO.contentType,
-            dateFrom = filtersDTO.dateFrom,
-            dateTo = filtersDTO.dateTo,
-            sharingScope = filtersDTO.sharingScope,
-            organization = userDetails.organization,
-            department = userDetails.department
-        )
-
-        val files = fileRepository.findAll(spec, pageable)
-
-        if(files.isEmpty) {
-            log.warn("No organization/department file found")
-            throw ResourceNotFoundException("No files found matching the specified criteria")
-        }
-
-        // Batch request per ottenere i nomi degli owner
-        val ownerIds = files.content.map { it.ownerId }.distinct()
-        val ownerNamesMap = getUsersBatchFromUserService(token, ownerIds)
-
-        return files.map {
-            val ownerName = ownerNamesMap[it.ownerId]?.fullName
-            it.toDTO(ownerName)
-        }
-    }
-
-    /**
-     * Restituisce file con sharingScope PERSONAL
-     * Include file dove l'utente è owner O è presente in fileShare
-     */
-    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun getPersonalFiles(filtersDTO: FiltersDTO): Page<FileDTO> {
-        log.debug("Retrieving personal files with criteria {}", filtersDTO)
-
-        // Verifica che lo sharingScope sia PERSONAL (o usa PERSONAL come default)
-        val sharingScope = filtersDTO.sharingScope
-        require(sharingScope == SharingScope.PERSONAL) {
-            "getPersonalFiles requires sharingScope to be PERSONAL"
-        }
-
-        // Get service token to call UserDetailService
         val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
-        val pageable = PageRequest.of(
-            filtersDTO.pageNumber.toInt(),
-            filtersDTO.pageSize.toInt(),
-            Sort.by(filtersDTO.sortDirection, filtersDTO.sortField)
-        )
+        // L'ordinamento è gestito interamente dallo specification (vedi
+        // buildFilesByScopes): alcuni campi ordinabili non sono colonne dirette del
+        // root File ("size" sta su file_versions, "lastFilename" va ordinato
+        // case-insensitive). Si passa quindi un Pageable senza Sort, così Spring non
+        // tenta di risolvere il campo sul root sovrascrivendo l'ORDER BY dello spec.
+        val pageable = PageRequest.of(filtersDTO.pageNumber.toInt(), filtersDTO.pageSize.toInt())
 
-        log.debug("pageable: {}", pageable)
-        val spec = FileSpecifications.buildPersonalFiles(
+        val spec = FileSpecifications.buildFilesByScopes(
             contentType = filtersDTO.contentType,
             dateFrom = filtersDTO.dateFrom,
             dateTo = filtersDTO.dateTo,
-            ownerId = userDetails.id,
-            userId = userDetails.id
+            sharingScopes = filtersDTO.sharingScopes,
+            userId = userDetails.id,
+            organization = userDetails.organization,
+            department = userDetails.department,
+            isAdmin = userDetails.role == UserRole.ROLE_admin,
+            ownership = filtersDTO.ownership,
+            excludeContentTypes = filtersDTO.excludeContentTypes,
+            search = filtersDTO.search,
+            sortField = filtersDTO.sortField,
+            sortDirection = filtersDTO.sortDirection,
         )
 
-        log.debug("Specification: {}", spec.toString())
         val files = fileRepository.findAll(spec, pageable)
-
-        log.debug("files: {}", files.toString())
-
-        if(files.isEmpty) {
-            log.warn("No personal file found")
-            throw ResourceNotFoundException("No files found matching the specified criteria")
-        }
 
         // Batch request per ottenere i nomi degli owner
         val ownerIds = files.content.map { it.ownerId }.distinct()
@@ -213,40 +169,50 @@ class FileService(
         }
     }
 
-    /**
-     * Restituisce tutti i file presenti nel repository
-     */
-    override fun getAllFiles(): List<FileDTO> {
-        log.debug("Retrieving all files from repository")
-
-        val files = fileRepository.findAll()
-
-        if(files.isEmpty()) {
-            log.warn("No files found in repository")
-            throw ResourceNotFoundException("No files found in the repository")
-        }
-
-        log.info("Found {} files in repository", files.size)
-        return files.map { it.toDTO() }
-    }
-
-    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff', 'ROLE_ai_worker')")
     override fun getFileMetadata(id: UUID): FileDTO {
         log.debug("Retrieving metadata for {}", id)
 
-        val token= authService.getAccessToken()
+        // AI service accounts (ROLE_ai_worker) are not registered in UserDetailService,
+        // so skip the user lookup and permission check. The ROLE_ai_worker JWT authority
+        // already guarantees the caller is a trusted internal service.
+        val isAiWorker = SecurityContextHolder.getContext().authentication.authorities
+            .any { it.authority == "ROLE_ai_worker" }
+
+        // AI workers only need the raw metadata; they have no user-service access
+        // and never display the owner name, so skip the permission check + lookup.
+        if (isAiWorker) {
+            return fileRepository.findById(id)
+                .orElseThrow {
+                    log.error("File: {}, does not exists", id)
+                    ResourceNotFoundException("Resource does not exists, no metadata found for: $id")
+                }
+                .toDTO()
+        }
+
+        // Resolve the user (also enforces auth) BEFORE touching the file repo, so an
+        // unauthenticated / unknown caller is rejected without a file lookup.
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
-
         // Check permissions - if no exception is thrown, user has at least READ_ONLY access
         getCurrentUserPermission(id, userDetails)
 
-        return fileRepository.findById(id)
-            .orElseThrow{
+        val file = fileRepository.findById(id)
+            .orElseThrow {
                 log.error("File: {}, does not exists", id)  // Should not happen due to permission check above
                 ResourceNotFoundException("Resource does not exists, no metadata found for: $id")
             }
-            .toDTO()
+
+        // Resolve the owner's display name so the UI shows a name, not a UUID.
+        // Degrade gracefully to null (UUID) if the user service is unavailable.
+        val ownerName = runCatching { getUserFromUserService(token, file.ownerId).fullName }
+            .getOrElse {
+                log.warn("Could not resolve owner name for file {}: {}", id, it.message)
+                null
+            }
+
+        return file.toDTO(ownerName)
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
@@ -276,32 +242,32 @@ class FileService(
                 ResourceNotFoundException("File version $targetVersion for file $id not found")
             }
 
-        // Extract metadata fields from the metadata JSON
-        val metadata = fileVersion.metadata ?: emptyMap()
+        // Extract AI metadata fields from the dedicated aiMetadata map
+        val aiMetadata = fileVersion.aiMetadata ?: emptyMap()
 
         return MetadataAIDTO(
-            tags = metadata["tags"],
-            summary = metadata["summary"],
-            filename = metadata["filename"],
-            metadata = metadata["metadata"],
-            contentType = metadata["contentType"],
-            ownerUserId = metadata["ownerUserId"],
-            sensitivity = metadata["sensitivity"],
-            fileVersionId = metadata["fileVersionId"],
+            tags = aiMetadata["tags"],
+            summary = aiMetadata["summary"],
+            filename = fileVersion.filename,
+            contentType = fileVersion.contentType,
+            ownerUserId = file.ownerId.toString(),
+            sensitivity = aiMetadata["sensitivity"],
+            fileVersionId = fileVersion.id?.toString(),
+            analysisStatus = fileVersion.aiMetadata?.get("analysisStatus"),
             status = fileVersion.status
         )
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff', 'ROLE_ai_worker')")
-    override fun updateFileMetadataByUser(id: UUID, version:Long?, metadata: Map<String, String>) {
+    override fun updateFileMetadataByUser(id: UUID, version: Long?, metadata: Map<String, String>) {
         log.debug("Updating metadata of {} with {}", id, metadata)
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
         // Check permissions
-        if(getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+        if (getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
             log.warn("User {} does not have WRITE permission for file {}", userDetails.id, id)
             throw ForbiddenException("Access denied: insufficient permissions to update metadata for file $id")
         }
@@ -309,43 +275,120 @@ class FileService(
         updateFileMetadata(id, version, metadata)
     }
 
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff', 'ROLE_ai_worker')")
+    override fun updateGeneratedMetadataByUser(id: UUID, version: Long?, metadata: Map<String, String>) {
+        log.debug("Updating AI metadata of {} with {}", id, metadata)
+
+        val token = authService.getAccessToken()
+        val userDetails = getUserDetails(token)
+        log.debug("Current user details: {}", userDetails)
+
+        if (getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+            log.warn("User {} does not have WRITE permission for file={}, version={}", userDetails.id, id, version)
+            throw ForbiddenException("Access denied: insufficient permissions to update AI metadata for file $id")
+        }
+
+        if (metadata.isEmpty()) {
+            log.warn("Generated metadata updating failed: userId={}, fileId={}", userDetails.id, id)
+            throw InvalidFormatException("AI metadata cannot be empty")
+        }
+
+        metadata.keys.forEach { key ->
+            if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                log.warn("Generated metadata updating failed:  fileId={}, version={}", id, version)
+                throw InvalidFormatException("Metadata key '$key' must be ASCII encoded")
+            }
+            if (AiMetadataField.entries.none { it.key == key }) {
+                log.warn("Generated metadata updating failed fileId={}, version={}: only AI metadata keys are allowed", id, version)
+                throw InvalidFormatException("Only AI metadata keys [summary, tags, sensitivity] are allowed")
+            }
+        }
+
+        metadata["sensitivity"]?.let { sensitivity ->
+            try {
+                SensitivityLevel.valueOf(sensitivity)
+            } catch (e: IllegalArgumentException) {
+                log.warn("Generated metadata updating failed fileId={}, version={}: invalid sensitivity value", id, version)
+                throw InvalidFormatException("Invalid sensitivity value '$sensitivity'")
+            }
+        }
+
+        val filteredMetadata =
+            metadata.filterKeys { key -> AiMetadataField.entries.any { it.key == key } }.toMutableMap()
+
+        filteredMetadata["summary"]?.let {
+            if (it.length > 500) {
+                filteredMetadata["summary"] = it.take(500)
+            }
+        }
+
+        filteredMetadata["tags"]?.let {
+            if (it.length > 100) {
+                filteredMetadata["tags"] = it.take(100)
+            }
+        }
+
+        updateFileMetadata(id, version, filteredMetadata)
+    }
+
     /**
      * Internal method to update file metadata without authentication checks.
      * Used by Kafka consumers and other internal services.
      */
     override fun updateFileMetadata(id: UUID, version: Long?, metadata: Map<String, String>) {
-        log.debug("Updating metadata internally of {} with {}", id, metadata)
+        val span = tracer.nextSpan().name("updateFileMetadata").start()
+        val scope = tracer.withSpan(span)
+        try {
+            log.debug("Updating metadata internally of {} with {}", id, metadata)
 
-        val file = fileVersionRepository.findByFileUuidAndVersion(id, version ?: 1L)
-            .orElseThrow {
-                log.warn("The resource $id does not exists")
-                ResourceNotFoundException("Resource does not exist, cannot update metadata for: $id")
+            val file = fileVersionRepository.findByFileUuidAndVersion(id, version ?: 1L)
+                .orElseThrow {
+                    log.warn("The resource $id does not exists")
+                    ResourceNotFoundException("Resource does not exist, cannot update metadata for: $id")
+                }
+
+            // Extract fileName from metadata if provided
+            metadata["filename"]?.let { file.filename = it }
+
+            // Filter out fileName from metadata map for the metadata field update
+            var metadataToUpdate = metadata - "filename"
+
+            // AI-analysis outputs live in the dedicated aiMetadata map: the user-facing fields
+            // (summary, tags, sensitivity) plus the analysisStatus a failed/unsupported analysis sets.
+            val aiMetadataKeys = AiMetadataField.entries.map { it.key }.toSet() + "analysisStatus"
+            val aiMetadataToUpdate = metadataToUpdate.filterKeys { it in aiMetadataKeys }
+            metadataToUpdate = metadataToUpdate - aiMetadataKeys
+
+            log.debug("updating file metadata: {}, for file {}", metadataToUpdate.toString(), id)
+
+            // Update metadata fields that exist in the entity and eventually
+            // add new fields specified in the metadata map
+            val currentMetadata = file.metadata?.toMutableMap() ?: mutableMapOf()
+            currentMetadata.putAll(metadataToUpdate)
+            file.metadata = currentMetadata
+
+            if (aiMetadataToUpdate.isNotEmpty()) {
+                val currentAiMetadata = file.aiMetadata?.toMutableMap() ?: mutableMapOf()
+                currentAiMetadata.putAll(aiMetadataToUpdate)
+                file.aiMetadata = currentAiMetadata
             }
-
-        // Extract fileName from metadata if provided
-        metadata["filename"]?.let { file.filename = it }
-
-        // Filter out fileName from metadata map for the metadata field update
-        val metadataToUpdate = metadata - "filename"
-
-        log.debug("updating file metadata: {}, for file {}", metadataToUpdate.toString(), id)
-
-        // Update metadata fields that exist in the entity and eventually
-        // add new fields specified in the metadata map
-        val currentMetadata = file.metadata?.toMutableMap() ?: mutableMapOf()
-        currentMetadata.putAll(metadataToUpdate)
-        file.metadata = currentMetadata
+        } finally {
+            scope.close()
+            span.end()
+        }
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun deleteFile(id: UUID) {
         //WARNING: Actually a user can deletes a file even if is not the owner but has WRITE permission
-        val token= authService.getAccessToken()
+        log.debug("Attempting to delete file: {}", id)
+
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
         // Check permissions
-        if(getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+        if (getCurrentUserPermission(id, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
             log.warn("User {} does not have WRITE permission for file {}", userDetails.id, id)
             throw ForbiddenException("Access denied: insufficient permissions to delete file $id")
         }
@@ -362,17 +405,36 @@ class FileService(
         val fileVersionIds = file.versions.map { it.id!! }
         log.debug("File {} has {} versions to delete: {}", id, fileVersionIds.size, fileVersionIds)
 
+        val totalSize = file.versions.sumOf { it.size }
+        if (totalSize > 0) {
+            val storageEvent = FilesOutboxEvent(
+                eventType = "STORAGE_RELEASED",
+                payload = mapOf(
+                    "ownerUserId" to file.ownerId.toString(),
+                    "fileId" to id.toString(),
+                    "size" to totalSize,
+                    "traceparent" to tracer.currentSpan()?.context()
+                        ?.let { "00-${it.traceId()}-${it.spanId()}-01" }
+                ),
+                createdAt = Date.from(Instant.now())
+            )
+            outboxRepository.save(storageEvent)
+            log.debug("Saved storage released outbox event for deleted file {}", id)
+        }
+
         // Delete all file shares first to avoid foreign key constraint violation
         log.debug("Deleting all shares for file {}", id)
         fileShareRepository.deleteByFile_Uuid(id)
-        
+
         // Pubblica evento di cancellazione nell'outbox prima di cancellare il file
         try {
             val deletionEvent = mapOf(
                 "fileId" to id.toString(),
                 "deletedAt" to Instant.now().toString(),
                 "deletedBy" to userDetails.id.toString(),
-                "fileVersionIds" to fileVersionIds.map { it.toString() }
+                "fileVersionIds" to fileVersionIds.map { it.toString() },
+                "traceparent" to tracer.currentSpan()?.context()
+                    ?.let { "00-${it.traceId()}-${it.spanId()}-01" }
             )
 
             log.info("Creating FILE_DELETED event with payload: $deletionEvent")
@@ -384,7 +446,11 @@ class FileService(
             )
 
             outboxRepository.save(outboxEvent)
-            log.info("Successfully saved FILE_DELETED outbox event for file {} with {} versions", id, fileVersionIds.size)
+            log.info(
+                "Successfully saved FILE_DELETED outbox event for file {} with {} versions",
+                id,
+                fileVersionIds.size
+            )
         } catch (e: Exception) {
             log.error("Failed to publish FILE_DELETED event for file {}: {}", id, e.message, e)
             // Continua comunque con la cancellazione del file
@@ -397,15 +463,22 @@ class FileService(
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff','ROLE_ai_worker')")
-    override fun downloadFile(id: UUID,  version: Long?): DownloadDTO {
-        log.debug("Download the resource {}", id)
+    override fun downloadFile(id: UUID, version: Long?): DownloadDTO {
+        log.debug("Download the resource {} version: {}", id, version)
 
-        /*val token= authService.getAccessToken()
-        val userDetails = getUserDetails(token)
-        log.debug("Current user details: {}", userDetails)
+        // AI service accounts (ROLE_ai_worker) are not registered in UserDetailService,
+        // so skip the user lookup and permission check. The ROLE_ai_worker JWT authority
+        // already guarantees the caller is a trusted internal service.
+        val isAiWorker = SecurityContextHolder.getContext().authentication.authorities
+            .any { it.authority == "ROLE_ai_worker" }
 
-        // Check permissions - if no exception is thrown, user has at least READ_ONLY access
-        getCurrentUserPermission(id, userDetails)*/
+        if (!isAiWorker) {
+            val token = authService.getAccessToken()
+            val userDetails = getUserDetails(token)
+            log.debug("Current user details: {}", userDetails)
+            // Check permissions - if no exception is thrown, user has at least READ_ONLY access
+            getCurrentUserPermission(id, userDetails)
+        }
 
         // Retrieve the file entity
         val file = fileRepository.findById(id).orElseThrow {
@@ -415,10 +488,10 @@ class FileService(
 
         // Retrieve information about the current version
         //if version is null, download the current version
-        val fileVersion: FileVersion = if(version == null) {
+        val fileVersion: FileVersion = if (version == null) {
             file.versions.find { it.version == file.currentVersion }
                 ?: throw ResourceNotFoundException("Current version not found for file $id")
-        } else{
+        } else {
             file.versions.find { it.version == version }
                 ?: throw ResourceNotFoundException("Version $version not found for file $id")
         }
@@ -428,29 +501,41 @@ class FileService(
 
         // If the file is already merged, download directly
         if (currentStatus != FileStatus.MERGE_PENDING) {
-            log.debug("Already merged, so downloading directly!")
+            log.debug("File already merged, downloading directly from storage - fileId: {} version: {}", id, fileVersion.version)
             val key = fileVersion.objectKey
                 ?: "${file.uuid}/v${fileVersion.version}/${fileVersion.filename}"
             val stream = storageService.getObject("files", key)
+            log.debug("Successfully retrieved file from storage - fileId: {}", id)
             return DownloadDTO(fileVersion.filename, contentType, stream)
         }
 
-        // Otherwise, merge first
-        log.debug("File not merged, merging now!")
-
-        // Recupera l'upload a partire da fileVersionId
+        // Otherwise the version still needs merging. Serialize concurrent merges of the same
+        // upload: on completion the AI pipeline downloads each file twice (embedding + metadata)
+        // and the browser preview can add a third — all reach this path at once. Without
+        // serialization those merges interleave their MinIO part delete/rewrite and corrupt the
+        // object (leaving 0-byte parts). A pessimistic write lock on the upload row makes exactly
+        // one request perform the merge; the others find the upload already gone and serve the
+        // composed object.
         val versionId = fileVersion.id
             ?: throw ResourceNotFoundException("FileVersion id not found for file $id")
 
-        val upload = tusRepository.findByFileVersionId(versionId)
-            .orElseThrow {
-                log.warn("Upload for file $id and version ${fileVersion.version} not found")
-                ResourceNotFoundException("Upload for file $id not found")
-            }
+        // Blocks until any in-flight merge of this upload commits. A successful merge deletes the
+        // upload row, so an empty result means another request already merged this version.
+        val upload = tusRepository.findWithLockByFileVersionId(versionId).orElse(null)
+        if (upload == null) {
+            log.debug("Version already merged by a concurrent request, serving directly - fileId: {} version: {}", id, fileVersion.version)
+            // The merge always writes to this deterministic key (see below).
+            val key = "${file.uuid}/v${fileVersion.version}/${fileVersion.filename}"
+            return DownloadDTO(fileVersion.filename, contentType, storageService.getObject("files", key))
+        }
 
+        // We hold the lock and the upload still exists: perform the one-and-only merge.
+        log.debug("File not merged yet, starting merge process for fileId: {} version: {}", id, fileVersion.version)
         if (upload.chunkCount == 1) {
+            log.debug("Single chunk upload detected, moving chunk directly - fileId: {}", id)
             moveSingleChunkUpload(upload)
         } else {
+            log.debug("Multiple chunks detected ({}), merging - fileId: {}", upload.chunkCount, id)
             mergeObject(upload)
         }
 
@@ -463,6 +548,7 @@ class FileService(
         tusRepository.delete(upload)
 
         val stream: ByteArray = storageService.getObject(bucket = "files", fileVersion.objectKey)
+        log.info("File download completed successfully - fileId: {} version: {}", id, fileVersion.version)
         return DownloadDTO(file.lastFilename, contentType, stream)
     }
 
@@ -472,6 +558,25 @@ class FileService(
             log.warn("The resource $fileId does not exists")
             throw ResourceNotFoundException("Resource does not exists: $fileId")
         }
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun getWritableFileIds(candidateIds: Collection<UUID>): List<UUID> {
+        val token = authService.getAccessToken()
+        val userDetails = getUserDetails(token)
+        log.debug(
+            "Computing writable file ids for user {} (role {}) among {} candidates",
+            userDetails.id, userDetails.role, candidateIds.size,
+        )
+
+        val spec = FileSpecifications.buildWritableFiles(
+            userId = userDetails.id,
+            organization = userDetails.organization,
+            department = userDetails.department,
+            role = userDetails.role,
+            candidateIds = candidateIds,
+        )
+        return fileRepository.findAll(spec).map { it.uuid }
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
@@ -497,17 +602,19 @@ class FileService(
             }
 
             SharingScope.DEPARTMENT -> {
-                // Department files: check organization and department match
+                // Department files: check organization match first
                 if (file.organization != userDTO.organization) {
                     throw ForbiddenException("Access denied: file belongs to different organization")
                 }
-                if (file.department != userDTO.department) {
-                    throw ForbiddenException("Access denied: file belongs to different department")
-                }
 
-                // Admin: READ_WRITE on any file in their organization
+                // Admin: READ_WRITE on any file in their organization (can access any department)
                 if (userDTO.role == UserRole.ROLE_admin) {
                     return PERMISSION_LEVEL.READ_WRITE
+                }
+
+                // For non-admin roles, check department match
+                if (file.department != userDTO.department) {
+                    throw ForbiddenException("Access denied: file belongs to different department")
                 }
 
                 // Manager: READ_WRITE on department files
@@ -551,8 +658,9 @@ class FileService(
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun getFileShares(fileId: UUID, pageable: Pageable): Page<FileShareDTO> {
+        log.debug("Retrieving shares for file: {} - page: {}, size: {}", fileId, pageable.pageNumber, pageable.pageSize)
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
@@ -561,30 +669,41 @@ class FileService(
 
         // Ensure the file exists before fetching shares
         if (!fileRepository.existsById(fileId)) {
+            log.warn("File not found: {}", fileId)
             throw ResourceNotFoundException("File not found: $fileId")
         }
         val shares = fileShareRepository.findByFile_Uuid(fileId, pageable)
-        return shares.map { it.toDTO() }
+        log.debug("Retrieved {} shares for file: {}", shares.totalElements, fileId)
+        // Resolve recipient display names so the UI shows names, not UUIDs.
+        val userIds = shares.content.map { it.userID }.distinct()
+        val userNamesMap = getUsersBatchFromUserService(token, userIds)
+
+        return shares.map { it.toDTO(userNamesMap[it.userID]?.fullName) }
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun createFileShare(fileShareDTO: FileShareDTO): FileShareDTO {
+        log.debug("Creating file share - fileId: {}, userId: {}, permission: {}", fileShareDTO.fileID, fileShareDTO.userID, fileShareDTO.permission)
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
         // Check permissions
-        if(getCurrentUserPermission(fileShareDTO.fileID, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
+        if (getCurrentUserPermission(fileShareDTO.fileID, userDetails) != PERMISSION_LEVEL.READ_WRITE) {
             log.warn("User {} does not have WRITE permission for file {}", userDetails.id, fileShareDTO.fileID)
             throw ForbiddenException("Access denied: insufficient permissions to share file ${fileShareDTO.fileID}")
         }
 
-        //calls User Service to verify that user exists
-        getUserFromUserService(token, fileShareDTO.userID)
+        //calls User Service to verify that user exists (and reuse its name in the response)
+        log.debug("Verifying user {} exists in User Service", fileShareDTO.userID)
+        val sharedUser = getUserFromUserService(token, fileShareDTO.userID)
 
         val file = fileRepository.findById(fileShareDTO.fileID)
-            .orElseThrow { ResourceNotFoundException("File not found: ${fileShareDTO.fileID}") }
+            .orElseThrow {
+                log.warn("File not found: {}", fileShareDTO.fileID)
+                ResourceNotFoundException("File not found: ${fileShareDTO.fileID}")
+            }
 
         val share = FileShare(
             id = null,
@@ -593,18 +712,43 @@ class FileService(
             permission = fileShareDTO.permission,
             timestamp = Date()
         )
-        return fileShareRepository.save(share).toDTO()
-
+        val savedShare= fileShareRepository.save(share).toDTO(sharedUser.fullName)
+        log.info("File share created successfully - fileId: {}, userId: {}, permission: {}", fileShareDTO.fileID, fileShareDTO.userID, fileShareDTO.permission)
+        return savedShare
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
-    override fun getFilesSharedWithCurrentUser( pageable: Pageable): Page<FileDTO> {
+    override fun getFilesSharedWithCurrentUser(
+        ownerId: UUID?,
+        permission: PERMISSION_LEVEL?,
+        contentType: String?,
+        dateFrom: String?,
+        dateTo: String?,
+        excludeContentTypes: Collection<String>?,
+        search: String?,
+        pageable: Pageable,
+    ): Page<FileDTO> {
+        log.debug(
+            "Retrieving files shared with current user - page: {}, size: {}, ownerId: {}, permission: {}, contentType: {}, excludeContentTypes: {}, dateFrom: {}, dateTo: {}, search: {}",
+            pageable.pageNumber, pageable.pageSize, ownerId, permission, contentType, excludeContentTypes, dateFrom, dateTo, search,
+        )
 
         // Get user ID directly from JWT in SecurityContext
         val userId = getUserIdFromJwt()
         log.debug("Current user ID: {}", userId)
 
-        val filesPage = fileShareRepository.findByUserID(userId, pageable)
+        val spec = FileShareSpecifications.build(
+            recipientId = userId,
+            ownerId = ownerId,
+            permission = permission,
+            contentType = contentType,
+            dateFrom = dateFrom,
+            dateTo = dateTo,
+            excludeContentTypes = excludeContentTypes,
+            search = search,
+        )
+        val filesPage = fileShareRepository.findAll(spec, pageable)
+        log.debug("Found {} shared files for user: {}", filesPage.totalElements, userId)
 
         // Raccoglie tutti gli owner ID distinti
         val ownerIds = filesPage.content.map { it.file.ownerId }.distinct()
@@ -613,26 +757,93 @@ class FileService(
         val token = authService.getAccessToken()
         val ownerNamesMap = getUsersBatchFromUserService(token, ownerIds)
 
-        return filesPage.map {
-            val ownerName = ownerNamesMap[it.file.ownerId]?.fullName
-            it.file.toDTO(ownerName)
+        return filesPage.map { share ->
+            val ownerName = ownerNamesMap[share.file.ownerId]?.fullName
+            // Carry the caller's permission and the share timestamp so the
+            // "Shared with me" view can badge and sort/filter without extra calls.
+            share.file.toDTO(ownerName).copy(
+                permission = share.permission,
+                sharedAt = g11.tusuploaderservice.utils.RFC9110(share.timestamp.toInstant()),
+            )
+        }
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun getMyPendingUploads(): List<g11.tusuploaderservice.dto.PendingUploadDTO> {
+        val userId = getUserIdFromJwt()
+        // Resumable = the client still has bytes to send (PENDING/UPLOADING); exclude
+        // MERGE_PENDING (server assembling) and DELETED. Skip expired partials.
+        val resumableStatuses = listOf(
+            g11.tusuploaderservice.entities.UploadStatus.PENDING,
+            g11.tusuploaderservice.entities.UploadStatus.UPLOADING,
+        )
+        val uploads = tusRepository.findByOwnerIdAndStatusInAndExpiresAtAfter(
+            userId,
+            resumableStatuses,
+            Date.from(Instant.now()),
+        )
+        log.debug("Found {} resumable uploads for user {}", uploads.size, userId)
+
+        return uploads.map { upload ->
+            g11.tusuploaderservice.dto.PendingUploadDTO(
+                fileId = upload.fileId,
+                filename = upload.filename,
+                contentType = upload.contentType,
+                size = upload.size,
+                status = upload.status,
+                createdAt = g11.tusuploaderservice.utils.RFC9110(upload.createdAt.toInstant()),
+            )
         }
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun deleteFileShare(fileId: UUID, shareId: Long) {
+        log.debug("Attempting to delete file share - fileId: {}, shareId: {}", fileId, shareId)
 
-        val token= authService.getAccessToken()
+        val token = authService.getAccessToken()
         val userDetails = getUserDetails(token)
         log.debug("Current user details: {}", userDetails)
 
         // Check permissions
         val file = fileRepository.findById(fileId)
-            .orElseThrow { ResourceNotFoundException("File not found: $fileId") }
+            .orElseThrow {
+                log.warn("File not found: {}", fileId)
+                ResourceNotFoundException("File not found: $fileId")
+            }
 
         // only owner can delete shares
         if (file.ownerId != userDetails.id) {
+            log.warn("User {} is not the owner of file {}, cannot delete share", userDetails.id, fileId)
             throw ForbiddenException("Access denied: only file owner can delete share for file $fileId")
+        }
+
+        val share: FileShare = fileShareRepository.findById(shareId)
+            .orElseThrow {
+                log.warn("File share not found: {}", shareId)
+                ResourceNotFoundException("File share not found: $shareId")
+            }
+
+        if (share.file.uuid != file.uuid) {
+            log.warn("File share {} does not belong to file {}", shareId, fileId)
+            throw ResourceNotFoundException("File share $shareId does not belong to file $fileId")
+        }
+        fileShareRepository.delete(share)
+
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun updateFileSharePermission(fileId: UUID, shareId: Long, permission: PERMISSION_LEVEL): FileShareDTO {
+
+        val token = authService.getAccessToken()
+        val userDetails = getUserDetails(token)
+        log.debug("Current user details: {}", userDetails)
+
+        val file = fileRepository.findById(fileId)
+            .orElseThrow { ResourceNotFoundException("File not found: $fileId") }
+
+        // only owner can change share permissions (same policy as deleteFileShare)
+        if (file.ownerId != userDetails.id) {
+            throw ForbiddenException("Access denied: only file owner can update share for file $fileId")
         }
 
         val share: FileShare = fileShareRepository.findById(shareId)
@@ -641,18 +852,25 @@ class FileService(
         if (share.file.uuid != file.uuid) {
             throw ResourceNotFoundException("File share $shareId does not belong to file $fileId")
         }
-        fileShareRepository.delete(share)
 
+        share.permission = permission
+        val saved = fileShareRepository.save(share)
+
+        // Resolve the recipient's display name so the response matches createFileShare/getFileShares.
+        val sharedUser = getUserFromUserService(token, saved.userID)
+        return saved.toDTO(sharedUser.fullName)
     }
 
 
     override fun composeObject(upload: Upload) {
+        log.debug("Starting object composition for upload: {}", upload.id)
         try {
 
             val versionId = upload.fileVersionId
                 ?: throw ResourceNotFoundException("FileVersion id not set for upload ${upload.id}")
             val fileVersion = fileVersionRepository.findById(versionId)
                 .orElseThrow {
+                    log.error("FileVersion {} not found for upload {}", versionId, upload.id)
                     ResourceNotFoundException("FileVersion $versionId not found for upload ${upload.id}")
                 }
 
@@ -660,14 +878,16 @@ class FileService(
             tusRepository.flush()
 
             val finalObjectKey = "${upload.fileId}/v${fileVersion.version}/${fileVersion.filename}"
+            log.debug("Composing object to final key: {}", finalObjectKey)
             storageService.composeObject(upload, finalObjectKey)
 
             // aggiorno anche l'objectKey della versione
             fileVersion.objectKey = finalObjectKey
             fileVersion.status = FileStatus.AVAILABLE
             fileVersionRepository.save(fileVersion)
+            log.info("Object composition completed successfully for upload: {}", upload.id)
         } catch (e: Exception) {
-            log.error("Errore durante composeObject", e)
+            log.error("Error during object composition for upload {}: {}", upload.id, e.message, e)
             throw e
         }
     }
@@ -696,7 +916,7 @@ class FileService(
                     "${upload.id}/part-$index"
                 }
                 log.debug("Deleting from part {} to part {} for upload {}", startIndex, chunkCounter, upload.id)
-                storageService.deleteObjects("uploads",objectsToDelete)
+                storageService.deleteObjects("uploads", objectsToDelete)
 
                 //compatta
                 val composedChunk = mergeByteArrays(byteArrays)
@@ -707,7 +927,7 @@ class FileService(
                     size = totalSize.toLong(),
                     contentType = upload.contentType,
                     filename = upload.filename,
-                    bucket="uploads"
+                    bucket = "uploads"
                 )
                 log.debug("Creating composed object {} in MINIO for upload {}", chunkDTO.number, upload.id)
                 storageService.putObject(chunkDTO)
@@ -768,32 +988,38 @@ class FileService(
         }
     }
 
-    override fun mergeObject(upload: Upload){
-        if (upload.mergeMode == MergeMode.CLIENT_SIDE){
+    override fun mergeObject(upload: Upload) {
+        log.debug("Starting merge process for upload: {} with merge mode: {}", upload.id, upload.mergeMode)
+        if (upload.mergeMode == MergeMode.CLIENT_SIDE) {
+            log.debug("Using client-side merge for upload: {}", upload.id)
             composeObjectClientSide(upload)
         }
 
         // Dopo composeObjectClientSide, verifica se il numero di chunk è gestibile
         // Se c'è un solo chunk, spostalo direttamente senza compose
         if (upload.chunkCount == 1) {
-            log.debug("Only one chunk remaining after client-side compose, moving directly")
+            log.debug("Only one chunk remaining after client-side compose, moving directly - upload: {}", upload.id)
             moveSingleChunkUpload(upload)
             storageService.deletePartialObjects(upload.id.toString())
             return
         }
 
+        log.debug("Composing {} chunks for upload: {}", upload.chunkCount, upload.id)
         composeObject(upload)
 
         storageService.deletePartialObjects(upload.id.toString())
+        log.info("Merge process completed successfully for upload: {}", upload.id)
     }
 
-    override fun moveSingleChunkUpload(upload: Upload){
-        val chunkBytes = storageService.getObject("uploads","${upload.id}/part-1")
+    override fun moveSingleChunkUpload(upload: Upload) {
+        log.debug("Moving single chunk upload to final location - upload: {}", upload.id)
+        val chunkBytes = storageService.getObject("uploads", "${upload.id}/part-1")
 
         val versionId = upload.fileVersionId
             ?: throw ResourceNotFoundException("FileVersion id not set for upload ${upload.id}")
         val fileVersion = fileVersionRepository.findById(versionId)
             .orElseThrow {
+                log.error("FileVersion {} not found for upload {}", versionId, upload.id)
                 ResourceNotFoundException("FileVersion $versionId not found for upload ${upload.id}")
             }
 
@@ -809,7 +1035,8 @@ class FileService(
             bucket = "files",
             version = fileVersion.version
         )
-        storageService.putFinalObject( mergedChunk)
+        log.debug("Uploading chunk to final destination - key: {}", finalObjectKey)
+        storageService.putFinalObject(mergedChunk)
 
         // aggiorno objectKey e stato su FileVersion
         fileVersion.objectKey = finalObjectKey
@@ -817,9 +1044,10 @@ class FileService(
         fileVersionRepository.save(fileVersion)
 
         storageService.deletePartialObjects(upload.id.toString())
+        log.info("Single chunk upload completed successfully - upload: {}", upload.id)
     }
 
-    override fun getUserDetails(token:String): UserDTO {
+    override fun getUserDetails(token: String): UserDTO {
         // Get user ID directly from JWT in SecurityContext
         val userId = getUserIdFromJwt()
         log.debug("Current user ID: {}", userId)
@@ -828,8 +1056,7 @@ class FileService(
 
     }
 
-    private fun getUserFromUserService(token: String, userId: UUID): UserDTO {
-
+    override fun getUserFromUserService(token: String, userId: UUID): UserDTO {
         try {
             val userDTO = userServiceClient.get()
                 .uri("/api/v1/users/{id}", userId)
@@ -872,10 +1099,13 @@ class FileService(
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun getFileVersions(fileId: UUID): List<FileVersionDTO> {
-        log.debug("Getting versions for file: $fileId")
+        log.debug("Getting versions for file: {}", fileId)
 
         val file = fileRepository.findById(fileId)
-            .orElseThrow { ResourceNotFoundException("File not found: $fileId") }
+            .orElseThrow {
+                log.warn("File not found: {}", fileId)
+                ResourceNotFoundException("File not found: $fileId")
+            }
 
         // Check if user has permission to access this file
         val token = authService.getAccessToken()
@@ -883,17 +1113,22 @@ class FileService(
         getCurrentUserPermission(fileId, userDTO) // This will throw if no permission
 
         // Return all versions sorted by version number descending (newest first)
-        return file.versions
+        val versions = file.versions
             .sortedByDescending { it.version }
             .map { it.toDTO() }
+        log.debug("Retrieved {} versions for file: {}", versions.size, fileId)
+        return versions
     }
 
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
     override fun downloadFileVersion(fileId: UUID, version: Long): DownloadDTO {
-        log.debug("Downloading file: $fileId version: $version")
+        log.debug("Downloading file version: {} version: {}", fileId, version)
 
         val file = fileRepository.findById(fileId)
-            .orElseThrow { ResourceNotFoundException("File not found: $fileId") }
+            .orElseThrow {
+                log.warn("File not found: {}", fileId)
+                ResourceNotFoundException("File not found: $fileId")
+            }
 
         // Check if user has permission to access this file
         val token = authService.getAccessToken()
@@ -906,16 +1141,136 @@ class FileService(
 
         // Check if version is available
         if (fileVersion.status != FileStatus.AVAILABLE) {
-            throw ResponseStatusException(HttpStatus.CONFLICT, "File version is not available for download (status: ${fileVersion.status})")
+            log.warn("File version not available for download - fileId: {}, version: {}, status: {}", fileId, version, fileVersion.status)
+            throw ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "File version is not available for download (status: ${fileVersion.status})"
+            )
         }
 
         // Download from storage - getObject returns ByteArray
+        log.debug("Retrieving file from storage - fileId: {}, version: {}", fileId, version)
         val bytes = storageService.getObject("files", fileVersion.objectKey)
 
+        log.info("File version downloaded successfully - fileId: {}, version: {}", fileId, version)
         return DownloadDTO(
             filename = fileVersion.filename,
             contentType = fileVersion.contentType,
             file = bytes
         )
+    }
+
+    /**
+     * Marks a specific file version as favorite for the current user.
+     * Idempotent: favoriting an already-favorited version returns the existing record.
+     * Requires at least READ access to the file; DELETED versions cannot be favorited.
+     */
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun addFavorite(fileId: UUID, version: Long): FileVersionFavoriteDTO {
+        val token = authService.getAccessToken()
+        val userDTO = getUserDetails(token)
+        getCurrentUserPermission(fileId, userDTO) // Throws if no read access
+
+        val fileVersion = fileVersionRepository.findByFileUuidAndVersion(fileId, version)
+            .orElseThrow { ResourceNotFoundException("Version $version not found for file $fileId") }
+
+        if (fileVersion.status == FileStatus.DELETED) {
+            throw ResourceNotFoundException("Version $version not found for file $fileId")
+        }
+
+        val versionId = requireNotNull(fileVersion.id) { "Persisted file version must have an id" }
+        val existing = fileVersionFavoriteRepository.findByUserIdAndFileVersion_Id(userDTO.id, versionId)
+        if (existing != null) {
+            log.debug("Version {} of file {} already favorited by user {}", version, fileId, userDTO.id)
+            return existing.toDTO()
+        }
+
+        val favorite = FileVersionFavorite(
+            id = null,
+            userId = userDTO.id,
+            createdAt = Date.from(Instant.now()),
+            fileVersion = fileVersion
+        )
+        log.info("User {} favorited version {} of file {}", userDTO.id, version, fileId)
+        return fileVersionFavoriteRepository.save(favorite).toDTO()
+    }
+
+    /** Removes the current user's favorite on a specific version. Idempotent. */
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun removeFavorite(fileId: UUID, version: Long) {
+        val userId = getUserIdFromJwt()
+
+        val fileVersion = fileVersionRepository.findByFileUuidAndVersion(fileId, version)
+            .orElseThrow { ResourceNotFoundException("Version $version not found for file $fileId") }
+
+        val versionId = requireNotNull(fileVersion.id) { "Persisted file version must have an id" }
+        val existing = fileVersionFavoriteRepository.findByUserIdAndFileVersion_Id(userId, versionId)
+        if (existing != null) {
+            fileVersionFavoriteRepository.delete(existing)
+            log.info("User {} removed favorite on version {} of file {}", userId, version, fileId)
+        }
+    }
+
+    /**
+     * Returns the current user's favorited versions, enriched with owner display names.
+     * Versions soft-deleted after being favorited, and files the user can no longer
+     * access, are hidden from the result (the favorite record is kept).
+     */
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun getMyFavorites(pageable: Pageable): Page<FileVersionFavoriteDTO> {
+        val token = authService.getAccessToken()
+        val userDTO = getUserDetails(token)
+
+        val favoritesPage = fileVersionFavoriteRepository.findByUserId(userDTO.id, pageable)
+
+        // Re-check access per distinct file so revoked shares don't leak into the listing
+        val accessibleFileIds = favoritesPage.content
+            .mapNotNull { it.fileVersion.file?.uuid }
+            .distinct()
+            .filter { fileId ->
+                try {
+                    getCurrentUserPermission(fileId, userDTO)
+                    true
+                } catch (e: ForbiddenException) {
+                    false
+                } catch (e: ResourceNotFoundException) {
+                    false
+                }
+            }
+            .toSet()
+
+        val ownerIds = favoritesPage.content
+            .filter { it.fileVersion.file?.uuid in accessibleFileIds }
+            .mapNotNull { it.fileVersion.file?.ownerId }
+            .distinct()
+        val ownerNamesMap = getUsersBatchFromUserService(token, ownerIds)
+
+        // Page.map does not support dropping rows, so hidden entries are mapped to null
+        // and filtered out; total count may slightly overestimate, acceptable trade-off.
+        val visible = favoritesPage.content.filter {
+            it.fileVersion.status != FileStatus.DELETED && it.fileVersion.file?.uuid in accessibleFileIds
+        }
+        val dtos = visible.map { it.toDTO(ownerNamesMap[it.fileVersion.file?.ownerId]?.fullName) }
+        return org.springframework.data.domain.PageImpl(dtos, pageable, favoritesPage.totalElements)
+    }
+
+    /** Returns the version numbers of [fileId] favorited by the current user. */
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun getFavoritedVersionsForFile(fileId: UUID): List<Long> {
+        val token = authService.getAccessToken()
+        val userDTO = getUserDetails(token)
+        getCurrentUserPermission(fileId, userDTO) // Throws if no read access
+
+        return fileVersionFavoriteRepository
+            .findByUserIdAndFileVersion_File_Uuid(userDTO.id, fileId)
+            .filter { it.fileVersion.status != FileStatus.DELETED }
+            .map { it.fileVersion.version }
+            .sorted()
+    }
+
+    override fun isOwner(fileId: UUID, userDTO: UserDTO): Boolean {
+        val file = fileRepository.findById(fileId)
+            .orElseThrow { ResourceNotFoundException("File not found: $fileId") }
+        return file.ownerId == userDTO.id
     }
 }

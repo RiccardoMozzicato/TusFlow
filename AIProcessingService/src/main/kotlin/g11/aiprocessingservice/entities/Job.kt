@@ -1,5 +1,7 @@
 package g11.aiprocessingservice.entities
 
+import g11.aiprocessingservice.dto.FileDTO
+import g11.aiprocessingservice.dto.JobDTO
 import g11.aiprocessingservice.dto.jobStatus
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -8,7 +10,9 @@ import jakarta.persistence.EnumType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.annotations.UpdateTimestamp
 import org.hibernate.type.SqlTypes
+import java.time.Instant
 import java.util.UUID
 
 @Entity
@@ -27,11 +31,32 @@ open class Job(
     @Column(name = "job_type", nullable = false)
     open var type: String,
 
+    @Column(name = "attempts", nullable = false)
+    open var attempts: UInt,
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", columnDefinition = "jsonb")
     open var payload: Map<String, Any>?,
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    open var status: jobStatus
+    open var status: jobStatus,
+
+    /** Set by Hibernate on every save; tracks the latest status transition. */
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    open var updatedAt: Instant? = null
 )
+
+fun Job.toDTO(file: FileDTO): JobDTO {
+    return JobDTO(
+        id = jobid,
+        fileId = fileid,
+        version = version,
+        contentType = file.contentType,
+        ownerUserId = file.owner,
+        fileVersionId = file.version,
+        aiAttempts = attempts,
+        filename = file.fileName
+    )
+}

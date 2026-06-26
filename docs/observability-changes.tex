@@ -1,0 +1,535 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{parskip}
+
+% Colors
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{keyword}{RGB}{0,0,180}
+\definecolor{comment}{RGB}{80,120,80}
+\definecolor{string}{RGB}{160,0,0}
+
+% Code listing style
+\lstdefinestyle{code}{
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{keyword}\bfseries,
+  commentstyle=\color{comment}\itshape,
+  stringstyle=\color{string},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=4,
+  showstringspaces=false,
+  numbers=none,
+}
+
+\lstdefinestyle{yaml}{
+  style=code,
+  language=,
+  morekeywords={management,tracing,sampling,probability,otlp,endpoint},
+}
+
+\lstdefinestyle{kotlin}{
+  style=code,
+  language=Java,
+  morekeywords={fun,val,var,override,data,object,companion,when,is,in,by,
+                import,package,class,interface,object,open,private,internal,
+                suspend,inline,reified,sealed,enum,annotation,true,false,null},
+}
+
+\lstdefinestyle{xml}{
+  style=code,
+  language=XML,
+}
+
+% Section formatting
+\titleformat{\section}{\large\bfseries}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+\titleformat{\subsubsection}{\normalsize\itshape}{}{0em}{}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+}
+
+\title{\textbf{Observability Changes}\\\large Distributed Tracing --- final-project-g11}
+\author{Session notes}
+\date{April 2026}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% -----------------------------------------------------------------------------
+\section{Overview}
+
+This document records every change made to introduce distributed tracing across
+all four microservices of the project, propagate trace context through the
+Debezium outbox so the entire upload pipeline appears as a single trace, and fix
+the AI worker file-download bug uncovered in the process.
+
+\medskip
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Service} & \textbf{Spring Boot} & \textbf{Port} \\
+\midrule
+TusUploaderService  & 3.5.8  & 8081 \\
+AIProcessingService & 3.5.9  & 8083 \\
+ApiGateway          & 3.4.12 & 8080 \\
+UserDetailService   & 3.5.8  & 8082 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\medskip
+The observability backend is the \textbf{Grafana LGTM} all-in-one container
+(\texttt{grafana/otel-lgtm}) already present in \texttt{docker-compose.yml},
+exposing:
+\begin{itemize}[noitemsep]
+  \item \texttt{localhost:3000} --- Grafana UI
+  \item \texttt{localhost:3100} --- Loki (log ingestion, used by the Loki4j appender)
+  \item \texttt{localhost:4318} --- OTLP HTTP (traces $\to$ Tempo)
+  \item \texttt{localhost:9099} --- Prometheus (metrics)
+\end{itemize}
+
+The expected end-to-end trace tree for a single file upload is:
+
+\begin{lstlisting}[style=code, caption={Trace tree visible in Tempo after all changes}]
+HTTP POST /upload  (TusUploaderService)
+  └── kafka receive file-outbox  (AIProcessingService: MetadataProcessor)
+        └── updateFileMetadata  (TusUploaderService: KafkaConsumer)
+        └── kafka receive file-analyzed  (AIProcessingService: EmbeddingProcessor)
+              └── embeddings-batch publish x N
+\end{lstlisting}
+
+% -----------------------------------------------------------------------------
+\section{Tracing Dependencies --- All 4 Services}
+
+\subsection{Why Micrometer Tracing instead of the OTel Java Agent}
+
+All four \texttt{build.gradle.kts} files previously contained a
+\texttt{downloadOtelAgent} Gradle task that fetched
+\texttt{opentelemetry-javaagent.jar} v2.12.0 and attached it to
+\texttt{bootRun} via a \texttt{-javaagent} JVM argument.
+
+This approach was \textbf{removed} because:
+\begin{itemize}
+  \item Running both the OTel Java agent and Spring Boot's
+        \texttt{micrometer-tracing-bridge-otel} at the same time produces
+        \textbf{duplicate spans} for every operation.
+  \item The logback MDC keys already in use (\texttt{traceId}, \texttt{spanId})
+        match the \textbf{Micrometer Tracing} naming convention, not the OTel
+        agent convention (\texttt{trace\_id}, \texttt{span\_id}).
+  \item The Spring Boot native approach integrates cleanly with Kafka
+        instrumentation and the rest of the Spring ecosystem.
+\end{itemize}
+
+\subsection{Dependencies added}
+
+In each \texttt{build.gradle.kts}, under the \texttt{dependencies} block:
+
+\begin{lstlisting}[style=kotlin, caption={build.gradle.kts --- added to all 4 services}]
+// Distributed Tracing (Micrometer + OTel bridge + OTLP exporter)
+implementation("io.micrometer:micrometer-tracing-bridge-otel")
+implementation("io.opentelemetry:opentelemetry-exporter-otlp")
+\end{lstlisting}
+
+Versions are managed by the Spring Boot BOM.
+\texttt{micrometer-tracing-bridge-otel} bridges Spring's \texttt{Tracer}
+abstraction to the OTel SDK; \texttt{opentelemetry-exporter-otlp} sends spans
+to Tempo via OTLP HTTP.  The bridge also auto-configures a
+\texttt{Propagator} bean (W3C TraceContext) that is used for manual context
+extraction described in Section~\ref{sec:debezium}.
+
+\subsection{Configuration added to application.yml}
+
+\begin{lstlisting}[style=yaml, caption={application.yml --- added to all 4 services}]
+management:
+  tracing:
+    sampling:
+      probability: 1.0        # sample every request (tune down for production)
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+\end{lstlisting}
+
+\subsection{Console appender --- logback-spring.xml}
+
+The Loki appender pattern already contained \texttt{traceId=\%mdc\{traceId:-\}}
+in all services.  The \textbf{CONSOLE} appender was missing it. Updated in all
+four \texttt{logback-spring.xml} files:
+
+\begin{lstlisting}[style=xml, caption={logback-spring.xml --- CONSOLE appender (all 4 services)}]
+<appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+        <pattern>
+            ${LOG_DATE} ${LOG_THREAD} ${LOG_LEVEL} ${LOG_LOGGER}
+            %clr([%mdc{traceId:-} %mdc{spanId:-}]){faint}
+            --> %msg%n%ex{full}
+        </pattern>
+    </encoder>
+</appender>
+\end{lstlisting}
+
+% -----------------------------------------------------------------------------
+\section{AIProcessingService --- Kafka Consumer Tracing}
+
+\subsection{Problem}
+
+\texttt{KafkaConfig.kt} manually constructs both \texttt{ConsumerFactory} and
+\texttt{ConcurrentKafkaListenerContainerFactory} from scratch, completely
+bypassing Spring Boot's auto-configuration.  Without
+\texttt{isObservationEnabled = true}, no Kafka consumer spans were ever created,
+making \texttt{AIProcessingService} invisible in Tempo.
+
+\subsection{Two-factory design}
+
+AIProcessingService has two distinct consumers:
+
+\begin{itemize}
+  \item \textbf{MetadataProcessor} listens to \texttt{file-outbox} --- a
+        Debezium CDC topic.  Debezium is the actual Kafka publisher and never
+        sets W3C trace headers, so Spring Kafka's built-in observation would
+        create \textbf{orphan root spans} for every message.  Trace context is
+        extracted manually inside the listener (see Section~\ref{sec:debezium}).
+
+  \item \textbf{EmbeddingProcessor} listens to \texttt{file-analyzed} --- a
+        topic published by \texttt{MetadataProcessor} via \texttt{KafkaTemplate}
+        with explicit \texttt{traceparent} headers.  Spring Kafka's observation
+        correctly creates a child span here.
+\end{itemize}
+
+These two cases require different configuration, so two factory beans are
+defined in \texttt{KafkaConfig.kt}:
+
+\begin{lstlisting}[style=kotlin, caption={KafkaConfig.kt --- default factory (file-analyzed)}]
+@Bean
+fun kafkaListenerContainerFactory(
+    errorHandler: DefaultErrorHandler
+): ConcurrentKafkaListenerContainerFactory<String, String> {
+    val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
+    factory.consumerFactory = consumerFactory()
+    factory.containerProperties.ackMode = ContainerProperties.AckMode.MANUAL
+    // traceparent header present in file-analyzed -> correct child span
+    factory.containerProperties.isObservationEnabled = true
+    factory.setCommonErrorHandler(errorHandler)
+    return factory
+}
+\end{lstlisting}
+
+\begin{lstlisting}[style=kotlin, caption={KafkaConfig.kt --- Debezium factory (file-outbox)}]
+@Bean
+fun debeziumKafkaListenerContainerFactory(
+    errorHandler: DefaultErrorHandler
+): ConcurrentKafkaListenerContainerFactory<String, String> {
+    val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
+    factory.consumerFactory = consumerFactory()
+    factory.containerProperties.ackMode = ContainerProperties.AckMode.MANUAL
+    // Must be explicitly false: Spring Boot auto-config sets it to true on
+    // ALL factory beans if tracing is enabled.  Debezium messages carry no
+    // Kafka headers, so observation would generate orphan root spans.
+    factory.containerProperties.isObservationEnabled = false
+    factory.setCommonErrorHandler(errorHandler)
+    return factory
+}
+\end{lstlisting}
+
+\texttt{MetadataProcessor} opts into the Debezium factory:
+\begin{lstlisting}[style=kotlin, caption={MetadataProcessor.kt --- @KafkaListener}]
+@KafkaListener(
+    id = "Ai-service-consumer",
+    topics = ["file-outbox"],
+    containerFactory = "debeziumKafkaListenerContainerFactory"
+)
+override fun onMessage(message: String, acknowledgment: Acknowledgment) { ... }
+\end{lstlisting}
+
+\textbf{Important}: simply omitting \texttt{isObservationEnabled} is not
+sufficient.  Spring Boot 3.x contributes a
+\texttt{ConcurrentKafkaListenerContainerFactoryCustomizer} that enables
+observation on every factory bean in the context when tracing is active.  The
+flag must be \textbf{set to \texttt{false} explicitly} to override this.
+
+% -----------------------------------------------------------------------------
+\section{Trace Context Propagation Through the Debezium Outbox}
+\label{sec:debezium}
+
+\subsection{Architecture of the message flow}
+
+File events do \textbf{not} go through a \texttt{KafkaTemplate}.  The actual
+flow is:
+
+\begin{enumerate}
+  \item \textbf{TusUploaderService} --- \texttt{TusService}/\texttt{FileService}
+        writes a row into the \texttt{files\_outbox\_events} PostgreSQL table.
+  \item \textbf{Debezium} (Kafka Connect) watches the table with CDC and
+        publishes each row to the \texttt{file-outbox} Kafka topic.
+        Crucially, Debezium never sets Kafka record headers --- the JSON body
+        is the only carrier available.
+  \item \textbf{AIProcessingService} --- \texttt{MetadataProcessor} consumes
+        from \texttt{file-outbox}, performs AI analysis, and writes a result
+        row into \texttt{job\_outbox}.
+  \item Debezium publishes \texttt{job\_outbox} rows to the
+        \texttt{job-outbox} Kafka topic.
+  \item \textbf{TusUploaderService} --- \texttt{KafkaConsumer} consumes from
+        \texttt{job-outbox} and updates the file metadata in the database.
+\end{enumerate}
+
+\subsection{Why the RecordInterceptor approach does not work}
+
+An earlier attempt used a \texttt{RecordInterceptor} to extract
+\texttt{traceparent} from the message body and inject it into the Kafka record
+headers, expecting Spring Kafka's observation to then read the header and create
+a child span.
+
+This approach \textbf{fails} because Spring Kafka creates the consumer
+observation (which reads the headers) from the \emph{original}
+\texttt{ConsumerRecord} \textbf{before} calling
+\texttt{RecordInterceptor.intercept()}.  By the time the interceptor adds the
+header, the observation has already started as a new root span.
+
+\subsection{Correct approach: manual Propagator.extract() in the listener}
+
+The fix is to bypass the Spring Kafka observation entirely for Debezium
+consumers and manually resume the upstream trace inside the listener method,
+using Micrometer's \texttt{Propagator} (auto-configured by
+\texttt{micrometer-tracing-bridge-otel} as W3C TraceContext):
+
+\begin{lstlisting}[style=kotlin, caption={Pattern used in both Debezium listeners}]
+val traceparent = extractTraceparentFromPayload(message)
+val span = if (traceparent != null) {
+    propagator.extract(mapOf("traceparent" to traceparent)) { map, key -> map[key] }
+        .name("kafka receive <topic>")
+        .start()
+} else {
+    tracer.nextSpan().name("kafka receive <topic>").start()
+}
+val scope = tracer.withSpan(span)
+try {
+    // ... listener logic ...
+} finally {
+    scope.close()
+    span.end()
+}
+\end{lstlisting}
+
+\begin{lstlisting}[style=kotlin, caption={Debezium payload traceparent extraction}]
+private fun extractTraceparentFromPayload(message: String): String? = try {
+    val root = objectMapper.readTree(message)
+    // Debezium serialises the JSONB payload column as an escaped JSON string.
+    // Structure: { "event_type": "...", "payload": "{\"traceparent\":\"00-...\"}", ... }
+    root["payload"]?.asText()?.let { payloadStr ->
+        objectMapper.readTree(payloadStr)["traceparent"]
+            ?.asText()?.takeIf { it.isNotBlank() }
+    } ?: root["traceparent"]?.asText()?.takeIf { it.isNotBlank() }
+} catch (_: Exception) { null }
+\end{lstlisting}
+
+This pattern is applied in:
+\begin{itemize}[noitemsep]
+  \item \textbf{AIProcessingService} --- \texttt{MetadataProcessor.onMessage()}
+        (consumes \texttt{file-outbox})
+  \item \textbf{TusUploaderService} --- \texttt{KafkaConsumer.consumeFileUploadCompleted()}
+        (consumes \texttt{job-outbox})
+\end{itemize}
+
+\subsection{Producer side: embedding traceparent in outbox payloads}
+
+For the context to be available to consumers, the W3C \texttt{traceparent}
+string is embedded in every outbox event payload at write time.
+
+\subsubsection{TusUploaderService --- TusService.kt and FileService.kt}
+
+\texttt{Tracer} was injected into both services.  When building the outbox
+event:
+
+\begin{lstlisting}[style=kotlin, caption={FILE\_INSERTED / FILE\_DELETED outbox payload}]
+val payload = mapOf(
+    // ... existing fields ...
+    "traceparent" to tracer.currentSpan()?.context()
+        ?.let { "00-${it.traceId()}-${it.spanId()}-01" }
+)
+\end{lstlisting}
+
+\subsubsection{AIProcessingService --- JobStatusService.kt}
+
+\texttt{JobStatusService.createOutboxEvent()} is called inside the
+\texttt{MetadataProcessor} span (which is itself a child of the upload trace
+after the fix above).  \texttt{tracer.currentSpan()} therefore captures the
+correct parent context for the \texttt{job-outbox} events:
+
+\begin{lstlisting}[style=kotlin, caption={JobStatusService.kt --- createOutboxEvent()}]
+private fun createOutboxEvent(event_type: String, payload: Map<String, Any>) {
+    val enrichedPayload = payload.toMutableMap().apply {
+        tracer.currentSpan()?.context()?.let {
+            put("traceparent", "00-${it.traceId()}-${it.spanId()}-01")
+        }
+    }
+    jobOutboxRepository.save(JobOutbox(event_type = event_type, payload = enrichedPayload))
+}
+\end{lstlisting}
+
+\subsection{Producer side: KafkaTemplate messages (file-analyzed, embeddings-batch)}
+
+Topics published via \texttt{KafkaTemplate} support explicit header injection
+using \texttt{ProducerRecord}:
+
+\begin{lstlisting}[style=kotlin, caption={MetadataProcessor.kt --- publishFileAnalyzedEvent()}]
+val headers = RecordHeaders()
+tracer.currentSpan()?.context()?.let {
+    headers.add("traceparent",
+        "00-${it.traceId()}-${it.spanId()}-01".toByteArray(Charsets.UTF_8))
+}
+kafkaTemplate.send(ProducerRecord(
+    "file-analyzed", null, job.fileId.toString(), eventJson, headers))
+\end{lstlisting}
+
+The same pattern is used in \texttt{EmbeddingProcessor} for the
+\texttt{embeddings-batch} topic.  Because these topics carry the
+\texttt{traceparent} \emph{as a Kafka header}, \texttt{isObservationEnabled =
+true} (the default factory) works correctly and no manual extraction is needed.
+
+% -----------------------------------------------------------------------------
+\section{TusUploaderService --- KafkaConsumerConfig.kt}
+
+The \texttt{KafkaConsumerConfig} in TusUploaderService has a single consumer
+(the \texttt{job-outbox} Debezium topic).  As with the Debezium factory in
+AIProcessingService, \texttt{isObservationEnabled} must be explicitly
+\texttt{false}:
+
+\begin{lstlisting}[style=kotlin, caption={TusUploaderService --- KafkaConsumerConfig.kt}]
+@Bean
+fun kafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
+    val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
+    factory.consumerFactory = consumerFactory()
+    // Must be explicitly false: Spring Boot auto-config enables observation on all
+    // factories. job-outbox is a Debezium topic (no Kafka headers); trace context
+    // is handled manually in the listener via Propagator.extract().
+    factory.containerProperties.isObservationEnabled = false
+    return factory
+}
+\end{lstlisting}
+
+% -----------------------------------------------------------------------------
+\section{updateFileMetadata --- Manual Span}
+
+\texttt{FileService.updateFileMetadata()} is a plain internal method (no HTTP,
+no Kafka) so it does not generate a span automatically.  To make the database
+write visible in Tempo as a child of the \texttt{kafka receive job-outbox} span,
+a manual span is created using the already-injected \texttt{Tracer}:
+
+\begin{lstlisting}[style=kotlin, caption={FileService.kt --- updateFileMetadata()}]
+override fun updateFileMetadata(id: UUID, version: Long?, metadata: Map<String, String>) {
+    val span = tracer.nextSpan().name("updateFileMetadata").start()
+    val scope = tracer.withSpan(span)
+    try {
+        // ... DB read and write logic ...
+    } finally {
+        scope.close()
+        span.end()
+    }
+}
+\end{lstlisting}
+
+% -----------------------------------------------------------------------------
+\section{Bug Fix --- AI Worker Cannot Download Files}
+
+\subsection{Symptom}
+
+\begin{lstlisting}[style=code, caption={Error log from AIProcessingService}]
+ERROR g.a.services.MetadataProcessor
+  --> Error calling file service for download <fileId>: 404 :
+      {"detail":"User not found: <userId>",
+       "instance":"/api/v1/files/<fileId>/download"}
+\end{lstlisting}
+
+\subsection{Root cause}
+
+\texttt{FileService.downloadFile()} performed two operations unconditionally for
+all callers regardless of role:
+
+\begin{enumerate}
+  \item \textbf{\texttt{getUserDetails(token)}}: extracts the user ID from the
+        JWT, then calls \texttt{UserDetailService GET /api/v1/users/\{id\}}.
+        The AI service authenticates as the \texttt{ai-client} Keycloak service
+        account --- this account exists in Keycloak but has no row in
+        \texttt{userdb}, so UserDetailService returned 404.
+
+  \item \textbf{\texttt{getCurrentUserPermission()}}: annotated with
+        \texttt{@PreAuthorize} that does not list \texttt{ROLE\_ai\_worker},
+        so this call would have thrown a security exception regardless.
+\end{enumerate}
+
+\subsection{Fix --- FileService.kt}
+
+\begin{lstlisting}[style=kotlin, caption={FileService.kt --- downloadFile()}]
+val isAiWorker = SecurityContextHolder.getContext()
+    .authentication.authorities
+    .any { it.authority == "ROLE_ai_worker" }
+
+if (!isAiWorker) {
+    val token = authService.getAccessToken()
+    val userDetails = getUserDetails(token)
+    getCurrentUserPermission(id, userDetails)
+}
+\end{lstlisting}
+
+The \texttt{@PreAuthorize} on the method already enforces that only
+authenticated, authorized roles can reach this code.  For
+\texttt{ROLE\_ai\_worker} callers the JWT authority check is the trust boundary;
+an additional lookup in a service that does not register service accounts would
+always fail.
+
+% -----------------------------------------------------------------------------
+\section{Summary of Files Modified}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Service} & \textbf{File} & \textbf{Change} \\
+\midrule
+All 4 & \texttt{build.gradle.kts}    & Removed OTel agent task; added Micrometer deps \\
+All 4 & \texttt{application.yml}     & Added \texttt{management.tracing} + OTLP endpoint \\
+All 4 & \texttt{logback-spring.xml}  & Added traceId/spanId to CONSOLE appender \\
+\midrule
+AIProcessingService & \texttt{conf/KafkaConfig.kt}
+  & Two factories: default (obs=true) and Debezium (obs=false) \\
+AIProcessingService & \texttt{services/MetadataProcessor.kt}
+  & Propagator.extract() in listener; containerFactory override \\
+AIProcessingService & \texttt{services/EmbeddingProcessor.kt}
+  & traceparent header in embeddings-batch ProducerRecord \\
+AIProcessingService & \texttt{services/JobStatusService.kt}
+  & traceparent embedded in job\_outbox event payload \\
+\midrule
+TusUploaderService & \texttt{conf/KafkaConsumerConfig.kt}
+  & isObservationEnabled = false (explicit) \\
+TusUploaderService & \texttt{services/KafkaConsumer.kt}
+  & Propagator + Tracer injected; Propagator.extract() in listener \\
+TusUploaderService & \texttt{services/TusService.kt}
+  & Tracer injected; traceparent in FILE\_INSERTED payload \\
+TusUploaderService & \texttt{services/FileService.kt}
+  & traceparent in FILE\_DELETED payload \\
+TusUploaderService & \texttt{services/FileService.kt}
+  & downloadFile: skip user lookup for ROLE\_ai\_worker \\
+TusUploaderService & \texttt{services/FileService.kt}
+  & updateFileMetadata: manual span added \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}

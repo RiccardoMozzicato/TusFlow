@@ -8,6 +8,8 @@ spring:
           issuer-uri: ${issuer}
   application:
     name: TusUploaderService
+  profiles:
+    active: dev
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -51,6 +53,12 @@ tus:
   exposeHeaders: location,upload-offset,upload-length,upload-expires,tus-version,tus-extension,tus-resumable,tus-checksum-algorithm,upload-metadata
   allowOrigin: "*"
   expirationPeriod: 3600
+ai:
+  metadata:
+    sse:
+      # 5 min: allow slow self-hosted reasoning models (see AIProcessingService
+      # ai.openai.read-timeout-ms) to finish before the stream emits a timeout.
+      timeout-ms: 300000
 minio:
   url: http://localhost:9000
   access-key: minioadmin
@@ -68,3 +76,25 @@ kafka:
   bootstrap-servers: localhost:9094
   topic:
     file-upload:  file-outbox
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+    metrics:
+      export:
+        url: ${OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
+        step: 10s
+  metrics:
+    distribution:
+      # Emit histogram buckets so Grafana can compute real p95/p99 + heatmaps.
+      percentiles-histogram:
+        http.server.requests: true
+logging:
+  level:
+    org:
+      hibernate:
+        SQL: WARN

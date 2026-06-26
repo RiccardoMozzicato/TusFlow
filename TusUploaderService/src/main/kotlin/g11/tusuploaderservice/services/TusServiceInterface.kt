@@ -3,6 +3,7 @@ package g11.tusuploaderservice.services
 import g11.tusuploaderservice.dto.UploadDTO
 import jakarta.validation.Valid
 import java.time.Instant
+import java.util.UUID
 
 interface TusServiceInterface {
     fun createUpload(@Valid upload: UploadDTO): UploadDTO
@@ -13,4 +14,5 @@ interface TusServiceInterface {
 //    fun readFileDTO(id: String): UploadDTO
     fun getUploadInfo(id:String): UploadDTO
     fun terminateUpload(id:String)
+    fun softDeleteAndPurgeChunks(uploadId: UUID)
 }

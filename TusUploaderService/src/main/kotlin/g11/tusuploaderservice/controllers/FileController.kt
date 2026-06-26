@@ -4,18 +4,15 @@ import g11.tusuploaderservice.dto.DownloadDTO
 import g11.tusuploaderservice.dto.FileDTO
 import g11.tusuploaderservice.dto.FileShareDTO
 import g11.tusuploaderservice.dto.FileVersionDTO
+import g11.tusuploaderservice.dto.FileVersionFavoriteDTO
 import g11.tusuploaderservice.dto.FiltersDTO
 import g11.tusuploaderservice.dto.MetadataAIDTO
-import g11.tusuploaderservice.dto.RagQueryRequest
-import g11.tusuploaderservice.dto.RagQueryResponse
+import g11.tusuploaderservice.dto.Ownership
+import g11.tusuploaderservice.dto.PendingUploadDTO
 import g11.tusuploaderservice.dto.SharingScope
 import g11.tusuploaderservice.entities.PERMISSION_LEVEL
-import g11.tusuploaderservice.entities.FileStatus
-import g11.tusuploaderservice.exceptions.ResourceNotFoundException
-import g11.tusuploaderservice.exceptions.ResourceUncompletedException
-import g11.tusuploaderservice.services.FileService
 import g11.tusuploaderservice.services.FileServiceInterface
-import g11.tusuploaderservice.services.StorageService
+import g11.tusuploaderservice.utils.getUserIdFromJwt
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.enums.ParameterIn
@@ -27,19 +24,13 @@ import io.swagger.v3.oas.annotations.headers.Header
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
-import org.springframework.security.core.Authentication
-import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import org.springframework.web.bind.annotation.*
-import org.springframework.web.client.RestClient
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 import java.util.Date
@@ -57,47 +48,28 @@ import java.util.UUID
 @RequestMapping("/api/v1/files")
 class FileController(
     private val fileService: FileServiceInterface,
-    @Qualifier("aiServiceClient") private val aiServiceClient: RestClient
 ) {
     private val log = LoggerFactory.getLogger(FileController::class.java)
 
-    //region Swagger Documentation
-    @Operation(
-        tags = ["File Management"],
-        summary = "Get all files",
-        description = "Retrieves all files present in the repository without pagination or filtering.",
-    )
-    @ApiResponse(
-        responseCode = "200",
-        description = "Successfully retrieved all files",
-        content = [Content(
-            mediaType = "application/json",
-            schema = Schema(implementation = FileDTO::class)
-        )]
-    )
-    @ApiResponse(
-        responseCode = "404",
-        description = "No files found in the repository",
-        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
-    )
-    //endregion
-    @GetMapping("/all")
-    fun getAllFiles(): ResponseEntity<List<FileDTO>> {
-        log.debug("Getting all files from repository")
-        val files = fileService.getAllFiles()
-        return ResponseEntity.ok(files)
-    }
+    // Resolves the authenticated user (owner) id from the JWT for request logging.
+    // Never throws so an API log line can't break the request flow.
+    private fun currentUserOwnerId(): String =
+        runCatching { getUserIdFromJwt().toString() }.getOrDefault("unknown")
 
     //region Swagger Documentation
     @Operation(
         tags = ["File Management"],
         summary = "Get list of files metadata",
-        description = "Retrieves a paginated list of files with optional filtering by status, content type, and date range.",
+        description = "Retrieves a paginated list of files visible to the current user in the requested sharing scopes (combined with OR). Files whose current version is AVAILABLE or MERGE_PENDING (still processing) are returned; DELETED versions are excluded. Returns an empty page when no files match.",
         parameters = [
+            Parameter(name = "sharingScope", description = "Sharing scopes to include, comma-separated (PERSONAL, DEPARTMENT, ORGANIZATION)", schema = Schema(type = "string", example = "PERSONAL,DEPARTMENT")),
             Parameter(name = "contentType", description = "Filter by content type", schema = Schema(type = "string", example = "application/pdf")),
+            Parameter(name = "excludeContentTypes", description = "Keep only files whose content type matches none of these tokens (repeatable); used for the 'Other' file-type bucket", schema = Schema(type = "string", example = "application/pdf")),
             Parameter(name = "dateFrom", description = "Filter files created from this date (ISO format)", schema = Schema(type = "string", example = "2024-01-01T00:00:00Z")),
             Parameter(name = "dateTo", description = "Filter files created until this date (ISO format)", schema = Schema(type = "string", example = "2024-12-31T23:59:59Z")),
             Parameter(name = "sort", description = "Sort field and direction (e.g., 'createdAt,desc')", schema = Schema(type = "string", example = "createdAt,desc")),
+            Parameter(name = "search", description = "Free-text query matched case-insensitively against the file name (substring)", schema = Schema(type = "string", example = "report")),
+            Parameter(name = "ownership", description = "Optional ownership partition: OWNED for caller-owned files, SHARED for files owned by others", schema = Schema(type = "string", allowableValues = ["OWNED", "SHARED"])),
             Parameter(name = "page", description = "Page number (0-indexed)", schema = Schema(type = "integer", example = "0")),
             Parameter(name = "size", description = "Page size", schema = Schema(type = "integer", example = "10"))
         ]
@@ -150,25 +122,6 @@ class FileController(
         )]
     )
     @ApiResponse(
-        responseCode = "404",
-        description = "No files found matching the specified criteria",
-        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
-            examples = [ExampleObject(
-                name = "FilesNotFound",
-                summary = "No results for given filters",
-                value = """
-                {
-                  "type": "Not Found",
-                  "title": "No files found",
-                  "status": 404,
-                  "detail": "No files match the provided filters",
-                  "instance": "/api/v1/files"
-                }
-                """
-            )]
-        )]
-    )
-    @ApiResponse(
         responseCode = "500",
         description = "Internal Server Error",
         content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
@@ -189,32 +142,30 @@ class FileController(
     )
     //endregion
     @GetMapping
-    fun getFilesMetadata(
+    fun getFiles(
         @RequestParam(required = false) contentType: String?,
         @RequestParam(required = false) dateFrom: String?,
         @RequestParam(required = false) dateTo: String?,
         @RequestParam(defaultValue = "createdAt,desc") sort: String,
         @RequestParam(defaultValue = "0") page: UInt,
         @RequestParam(defaultValue = "10") size: UInt,
-        @RequestParam(defaultValue = "PERSONAL") sharingScope: SharingScope,
+        @RequestParam(defaultValue = "PERSONAL") sharingScope: Set<SharingScope>,
+        @RequestParam(required = false) ownership: Ownership?,
+        @RequestParam(required = false) excludeContentTypes: List<String>?,
+        @RequestParam(required = false) search: String?,
     ): ResponseEntity<Page<FileDTO>> {
 
-        log.debug("getFilesMetadata")
+        log.debug("API GET /api/v1/files userOwnerId={}", currentUserOwnerId())
+        log.debug("Requested file metadata: contentType={}, excludeContentTypes={}, dateFrom={}, dateTo={}, sort={}, page={}, size={}, sharingScope={}, ownership={}, search={}", contentType, excludeContentTypes, dateFrom, dateTo, sort, page, size, sharingScope, ownership, search)
         // Parse sort parameter
         val sortParts = sort.split(",")
         val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "createdAt"
         val sortDirection = if (sortParts.getOrNull(1)?.lowercase() == "asc") Sort.Direction.ASC else Sort.Direction.DESC
 
-        val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope)
+        val filtersDTO = FiltersDTO(contentType, dateFrom, dateTo, sortField, sortDirection, page, size, sharingScope, ownership, excludeContentTypes, search)
 
-        log.debug(filtersDTO.sharingScope.toString())
-        val files = if(filtersDTO.sharingScope == SharingScope.PERSONAL) {
-            log.debug("Getting PERSONAL files")
-            fileService.getPersonalFiles(filtersDTO)
-        } else {
-            log.debug("Getting organization or department files")
-            fileService.getOrganizationDepartmentFiles(filtersDTO)
-        }
+        val files = fileService.getFiles(filtersDTO)
+        log.debug("Retrieved {} files with applied filters", files.totalElements)
 
         return ResponseEntity.ok(files)
     }
@@ -261,7 +212,9 @@ class FileController(
     //endregion
     @GetMapping("/{id}")
     fun getFileMetadata(@PathVariable id: UUID): ResponseEntity<FileDTO> {
+        log.debug("API GET /api/v1/files/{} userOwnerId={} fileId={}", id, currentUserOwnerId(), id)
         val fileDTO = fileService.getFileMetadata(id)
+        log.debug("Successfully retrieved file metadata for id: {}", id)
         return ResponseEntity.ok(fileDTO)
     }
 
@@ -311,9 +264,71 @@ class FileController(
         @PathVariable id: UUID,
         @RequestParam(required = false) version: Long?
     ): ResponseEntity<MetadataAIDTO> {
-        log.debug("Fetching AI-generated metadata for file: {} version: {}", id, version)
+        log.debug("API GET /api/v1/files/generatedmetadata/{} userOwnerId={} fileId={}, version={}", id, currentUserOwnerId(), id, version)
         val metadata = fileService.getFileGeneratedMetadata(id, version)
+        log.debug("Successfully retrieved AI-generated metadata for file: {}", id)
         return ResponseEntity.ok(metadata)
+    }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["File Management"],
+        summary = "Update AI-generated metadata for a file",
+        description = "Updates AI-generated metadata (summary, tags, sensitivity) for a specific file version.",
+        parameters = [
+            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "File version (optional, defaults to current version)", required = false, `in` = ParameterIn.QUERY, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "AI metadata successfully updated"
+    )
+    @ApiResponse(
+        responseCode = "400",
+        description = "Bad Request - Invalid metadata or empty payload",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File or file version not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    @ApiResponse(
+        responseCode = "500",
+        description = "Internal Server Error",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @PatchMapping("/generatedmetadata/{id}")
+    fun updateFileGeneratedMetadata(
+        @PathVariable id: UUID,
+        @RequestParam(required = false) version: Long?,
+        @RequestBody metadata: Map<String, String>
+    ): ResponseEntity<HttpStatus> {
+        log.debug("API PATCH /api/v1/files/generatedmetadata/{} userOwnerId={} fileId={}, version={}", id, currentUserOwnerId(), id, version)
+
+        if (metadata.isEmpty()) {
+            log.warn("Rejected generated-metadata update: empty payload fileId={}", id)
+            throw ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Metadata cannot be empty"
+            )
+        }
+
+        metadata.keys.forEach { key ->
+            if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                log.warn("Rejected generated-metadata update: non-ASCII key fileId={} key={}", id, key)
+                throw ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Metadata key '$key' must be ASCII encoded"
+                )
+            }
+        }
+
+        fileService.updateGeneratedMetadataByUser(id, version, metadata)
+        log.info("Generated metadata updated successfully fileId={} version={}", id, version)
+        return ResponseEntity.ok(HttpStatus.OK)
     }
 
     //region Swagger Documentation
@@ -382,8 +397,10 @@ class FileController(
         @RequestBody metadata: Map<String, String>
     ): ResponseEntity<HttpStatus> {
 
+        log.debug("API PATCH /api/v1/files/{}/versions/{} userOwnerId={} fileId={}, version={}", id, version, currentUserOwnerId(), id, version)
         // Check if metadata is empty
         if (metadata.isEmpty()) {
+            log.warn("Rejected metadata update: empty payload fileId={} version={}", id, version)
             throw ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Metadata cannot be empty"
@@ -393,13 +410,16 @@ class FileController(
         // Validate metadata keys are ASCII
         metadata.keys.forEach { key ->
             if (!key.matches(Regex("\\A\\p{ASCII}+\\z"))) {
+                log.warn("Rejected metadata update: non-ASCII key fileId={} version={} key={}", id, version, key)
                 throw ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Metadata key '$key' must be ASCII encoded"
                 )
             }
         }
+        log.debug("Requested update for file metadata: fileId={}, version={}", id, version)
         fileService.updateFileMetadataByUser(id,version, metadata)
+        log.info("File metadata updated successfully fileId={} version={}", id, version)
         return ResponseEntity.ok(HttpStatus.OK)
 
     }
@@ -458,7 +478,10 @@ class FileController(
     //endregion
     @DeleteMapping("/{id}")
     fun deleteFileMetadata(@PathVariable id: UUID): ResponseEntity<HttpStatus> {
+        log.debug("API DELETE /api/v1/files/{} userOwnerId={} fileId={}", id, currentUserOwnerId(), id)
+
         fileService.deleteFile(id)
+        log.info("File metadata deleted successfully for id: {}", id)
         return ResponseEntity.ok(HttpStatus.OK)
     }
 
@@ -468,7 +491,8 @@ class FileController(
         summary = "Download file",
         description = "Downloads the complete file content. File must be fully uploaded and merged.",
         parameters = [
-            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid"))
+            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "Optional file version to download. When omitted, the current version is downloaded.", required = false, `in` = ParameterIn.QUERY, schema = Schema(type = "integer", format = "int64"))
         ]
     )
     @ApiResponse(
@@ -479,6 +503,14 @@ class FileController(
             Header(name = "Content-Type", description = "File content type")
         ],
         content = [Content(mediaType = "application/octet-stream")]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
     )
     @ApiResponse(
         responseCode = "404",
@@ -531,11 +563,70 @@ class FileController(
         @RequestParam("version") version: Long? = null,
         res: HttpServletResponse
     ) {
+        log.debug("API GET /api/v1/files/{}/download userOwnerId={} fileId={}, version={}", id, currentUserOwnerId(), id, version)
+
         val download: DownloadDTO = fileService.downloadFile(id, version)
+        log.info("File download started: {} version: {}", id, version)
         res.setHeader("Content-Disposition", "attachment; filename=\"${download.filename}\"")
         res.setHeader("Content-Type", download.contentType)
         res.outputStream.use { output -> output.write(download.file) }
+        log.debug("File download completed: {}", id)
     }
+
+    //region Swagger Documentation
+    @Operation(
+        tags = ["File Management"],
+        summary = "Preview file",
+        description = "Streams file content inline for browser preview. File must be fully uploaded and merged.",
+        parameters = [
+            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "Optional file version to preview. When omitted, the current version is previewed.", required = false, `in` = ParameterIn.QUERY, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "File preview stream returned inline with the original Content-Type.",
+        headers = [
+            Header(name = "Content-Disposition", description = "Inline disposition with filename"),
+            Header(name = "Content-Type", description = "File content type")
+        ],
+        content = [Content(mediaType = "application/octet-stream")]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    @ApiResponse(
+        responseCode = "409",
+        description = "Conflict - file upload not completed",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @GetMapping("/{id}/preview")
+    fun previewFile(
+        @PathVariable id: UUID,
+        @RequestParam("version") version: Long? = null,
+        res: HttpServletResponse
+    ) {
+        log.debug("API GET /api/v1/files/{}/preview userOwnerId={} fileId={}, version={}", id, currentUserOwnerId(), id, version)
+
+        val preview: DownloadDTO = fileService.downloadFile(id, version)
+        log.info("File preview started: {} version: {}", id, version)
+        res.setHeader("Content-Disposition", "inline; filename=\"${preview.filename}\"")
+        res.setHeader("Content-Type", preview.contentType)
+        res.outputStream.use { output -> output.write(preview.file) }
+        log.debug("File preview completed: {}", id)
+    }
+
 
    //region Swagger Documentation
    @Operation(
@@ -561,7 +652,7 @@ class FileController(
                      "id": 12,
                      "fileID": "5a7e3b77-8d5a-45ab-9b1f-6e1b1e3cb92a",
                      "userID": "c5d5b9a0-1f6f-4f11-bf9d-cb49b34a6c11",
-                     "permission": "READ",
+                     "permission": "READ_ONLY",
                      "timestamp": "2025-01-14T10:25:00Z"
                    }
                  ],
@@ -619,7 +710,10 @@ class FileController(
        @RequestParam(defaultValue = "0") page: UInt,
        @RequestParam(defaultValue = "10") size: UInt
    ): ResponseEntity<Page<FileShareDTO>> {
+       log.debug("API GET /api/v1/files/{}/shares userOwnerId={} fileId={}", id, currentUserOwnerId(), id)
+
        val shares = fileService.getFileShares(id, PageRequest.of(page.toInt(), size.toInt()))
+       log.debug("Retrieved {} shares for file: {}", shares.totalElements, id)
        return ResponseEntity.ok(shares)
    }
 
@@ -630,8 +724,8 @@ class FileController(
        description = "Shares a file with a specific user, granting them the specified permission level. Returns 404 if the file or user does not exist.",
        parameters = [
            Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
-           Parameter(name = "userId", description = "User UUID to share the file with", required = true, schema = Schema(type = "string", format = "uuid")),
-           Parameter(name = "permission", description = "Permission level (READ or WRITE)", required = true, schema = Schema(type = "string", example = "READ"))
+           Parameter(name = "userId", description = "User UUID to share the file with", required = true, `in` = ParameterIn.QUERY, schema = Schema(type = "string", format = "uuid")),
+           Parameter(name = "permission", description = "Permission level", required = true, `in` = ParameterIn.QUERY, schema = Schema(type = "string", allowableValues = ["READ_ONLY", "READ_WRITE"], example = "READ_ONLY"))
        ]
    )
    @ApiResponse(
@@ -651,7 +745,7 @@ class FileController(
                  "type": "Bad Request",
                  "title": "Invalid parameters",
                  "status": 400,
-                 "detail": "permission must be one of [READ, WRITE]",
+                 "detail": "permission must be one of [READ_ONLY, READ_WRITE]",
                  "instance": "/api/v1/files/{id}/shares"
                }
                """
@@ -722,6 +816,8 @@ class FileController(
        @RequestParam userId: UUID,
        @RequestParam permission: PERMISSION_LEVEL
    ): ResponseEntity<FileShareDTO> {
+       log.debug("API POST /api/v1/files/{}/shares userOwnerId={} fileId={} targetUserId={}, permission={}", id, currentUserOwnerId(), id, userId, permission)
+
        val fileShareDTO = FileShareDTO(null, id, userId, permission, Date.from(Instant.now()).toString())
        val share = fileService.createFileShare(fileShareDTO)
        return ResponseEntity.status(HttpStatus.CREATED).body(share)
@@ -730,17 +826,24 @@ class FileController(
    //region Swagger Documentation
    @Operation(
        tags = ["File Sharing"],
-       summary = "Get files shared with user",
-       description = "Retrieves a paginated list of files that have been shared with the specified user. Returns 404 if the user does not exist.",
+       summary = "Get files shared with current user",
+       description = "Retrieves a paginated list of files shared with the authenticated user. Optional filters can narrow by permission, owner, content type, date, file name and excluded content-type buckets.",
        parameters = [
-           Parameter(name = "userId", description = "User UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+           Parameter(name = "permission", description = "Optional permission filter", schema = Schema(type = "string", allowableValues = ["READ_ONLY", "READ_WRITE"])),
+           Parameter(name = "ownerId", description = "Optional owner UUID filter", schema = Schema(type = "string", format = "uuid")),
+           Parameter(name = "contentType", description = "Filter by content type", schema = Schema(type = "string", example = "application/pdf")),
+           Parameter(name = "excludeContentTypes", description = "Keep only files whose content type matches none of these tokens (repeatable)", schema = Schema(type = "string", example = "image/")),
+           Parameter(name = "dateFrom", description = "Filter files created from this date (ISO format)", schema = Schema(type = "string", example = "2024-01-01T00:00:00Z")),
+           Parameter(name = "dateTo", description = "Filter files created until this date (ISO format)", schema = Schema(type = "string", example = "2024-12-31T23:59:59Z")),
+           Parameter(name = "sort", description = "Sort field and direction (e.g., 'createdAt,desc')", schema = Schema(type = "string", example = "createdAt,desc")),
            Parameter(name = "page", description = "Page number (0-indexed)", schema = Schema(type = "integer", example = "0")),
-           Parameter(name = "size", description = "Page size", schema = Schema(type = "integer", example = "10"))
+           Parameter(name = "size", description = "Page size", schema = Schema(type = "integer", example = "10")),
+           Parameter(name = "search", description = "Free-text query matched case-insensitively against the file name (substring)", schema = Schema(type = "string", example = "report"))
        ]
    )
    @ApiResponse(
        responseCode = "200",
-       description = "Successfully retrieved files shared with user. Returns a paginated list of files accessible to the user.",
+       description = "Successfully retrieved files shared with the current user.",
        content = [Content(
            mediaType = "application/json",
            schema = Schema(implementation = Page::class),
@@ -763,23 +866,8 @@ class FileController(
        )]
    )
    @ApiResponse(
-       responseCode = "404",
-       description = "User not found. Returned when the user UUID does not exist in the user service.",
-       content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
-           examples = [ExampleObject(
-               name = "UserNotFound",
-               summary = "User does not exist",
-               value = """
-               {
-                 "type": "Not Found",
-                 "title": "User not found",
-                 "status": 404,
-                 "detail": "The specified user does not exist",
-                 "instance": "/api/v1/files/shared-with/{userId}"
-               }
-               """
-           )]
-       )]
+       responseCode = "401",
+       description = "Unauthorized"
    )
    @ApiResponse(
        responseCode = "502",
@@ -794,7 +882,7 @@ class FileController(
                  "title": "User service error",
                  "status": 502,
                  "detail": "Failed to contact user service",
-                 "instance": "/api/v1/files/shared-with/{userId}"
+                 "instance": "/api/v1/files/my-shared"
                }
                """
            )]
@@ -813,7 +901,7 @@ class FileController(
                  "title": "Server error",
                  "status": 500,
                  "detail": "An unexpected error occurred",
-                 "instance": "/api/v1/files/shared-with/{userId}"
+                 "instance": "/api/v1/files/my-shared"
                }
                """
            )]
@@ -822,11 +910,124 @@ class FileController(
    //endregion
    @GetMapping("/my-shared")
    fun getFilesSharedWithUser(
+       @RequestParam(required = false) contentType: String?,
+       @RequestParam(required = false) dateFrom: String?,
+       @RequestParam(required = false) dateTo: String?,
+       @RequestParam(defaultValue = "createdAt,desc") sort: String,
        @RequestParam(defaultValue = "0") page: UInt,
-       @RequestParam(defaultValue = "10") size: UInt
+       @RequestParam(defaultValue = "10") size: UInt,
+       @RequestParam(required = false) permission: PERMISSION_LEVEL?,
+       @RequestParam(required = false) ownerId: UUID?,
+       @RequestParam(required = false) excludeContentTypes: List<String>?,
+       @RequestParam(required = false) search: String?,
    ): ResponseEntity<Page<FileDTO>> {
-       val sharedFiles = fileService.getFilesSharedWithCurrentUser(PageRequest.of(page.toInt(), size.toInt()))
+       log.debug(
+           "API GET /api/v1/files/my-shared userOwnerId={} contentType={} excludeContentTypes={} dateFrom={} dateTo={} sort={} permission={} ownerId={} search={}",
+           currentUserOwnerId(), contentType, excludeContentTypes, dateFrom, dateTo, sort, permission, ownerId, search,
+       )
+
+       // Parse sort; the shared listing is rooted at FileShare, so the sortable
+       // fields live on the joined file (e.g. createdAt -> file.createdAt).
+       val sortParts = sort.split(",")
+       val sortField = sortParts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "createdAt"
+       val mappedField = if (sortField.contains(".")) sortField else "file.$sortField"
+       val sortDirection = if (sortParts.getOrNull(1)?.lowercase() == "asc") Sort.Direction.ASC else Sort.Direction.DESC
+       val pageable = PageRequest.of(page.toInt(), size.toInt(), Sort.by(sortDirection, mappedField))
+
+       val sharedFiles = fileService.getFilesSharedWithCurrentUser(
+           ownerId = ownerId,
+           permission = permission,
+           contentType = contentType,
+           dateFrom = dateFrom,
+           dateTo = dateTo,
+           excludeContentTypes = excludeContentTypes,
+           search = search,
+           pageable = pageable,
+       )
+       log.debug("Retrieved {} shared files for current user", sharedFiles.totalElements)
        return ResponseEntity.ok(sharedFiles)
+   }
+
+   //region Swagger Documentation
+   @Operation(
+       tags = ["File Management"],
+       summary = "List the current user's resumable uploads",
+       description = "Returns the in-flight uploads owned by the current user that can still be " +
+           "resumed (status PENDING or UPLOADING, not expired). The client uses this to decide " +
+           "which locally-persisted uploads to resume after a reload. No offset is returned: the " +
+           "tus HEAD on /api/v1/uploads/{fileId} remains the authority on the current offset.",
+   )
+   @ApiResponse(
+       responseCode = "200",
+       description = "The caller's resumable uploads",
+       content = [Content(mediaType = "application/json", schema = Schema(type = "array", implementation = PendingUploadDTO::class))]
+   )
+   @ApiResponse(
+       responseCode = "401",
+       description = "Unauthorized"
+   )
+   //endregion
+   @GetMapping("/my-uploads")
+   fun getMyPendingUploads(): ResponseEntity<List<PendingUploadDTO>> {
+       log.debug("API GET /api/v1/files/my-uploads userOwnerId={}", currentUserOwnerId())
+       val uploads = fileService.getMyPendingUploads()
+       log.debug("Retrieved {} resumable uploads for current user", uploads.size)
+       return ResponseEntity.ok(uploads)
+   }
+
+   //region Swagger Documentation
+   @Operation(
+       tags = ["File Sharing"],
+       summary = "Filter file ids to those the user can write",
+       description = "Given a set of candidate file ids, returns the subset the current user has " +
+           "WRITE access to: owned files, files shared with READ_WRITE, and (by role) department " +
+           "files for managers and department/organization files for admins. Used by other " +
+           "services to scope actions to files the user may modify, keeping the request bounded to " +
+           "the caller's candidate set."
+   )
+   @io.swagger.v3.oas.annotations.parameters.RequestBody(
+       description = "Candidate file UUIDs to filter. Maximum 1000 ids.",
+       required = true,
+       content = [Content(
+            mediaType = "application/json",
+            schema = Schema(type = "array", implementation = UUID::class),
+           examples = [ExampleObject(value = """
+               [
+                 "5a7e3b77-8d5a-45ab-9b1f-6e1b1e3cb92a",
+                 "4995ab09-117f-4d69-8a3d-f2c635f80724"
+               ]
+           """)]
+       )]
+   )
+   @ApiResponse(
+       responseCode = "200",
+       description = "Writable subset of the candidate ids",
+       content = [Content(
+            mediaType = "application/json",
+            schema = Schema(type = "array", implementation = UUID::class),
+           examples = [ExampleObject(value = """
+               [
+                 "5a7e3b77-8d5a-45ab-9b1f-6e1b1e3cb92a"
+               ]
+           """)]
+       )]
+   )
+   @ApiResponse(
+       responseCode = "400",
+       description = "Bad Request - candidate list is larger than 1000 ids"
+   )
+   @ApiResponse(
+       responseCode = "401",
+       description = "Unauthorized"
+   )
+   //endregion
+   @PostMapping("/writable-ids")
+   fun getWritableFileIds(@RequestBody candidateIds: List<UUID>): ResponseEntity<List<UUID>> {
+       if (candidateIds.isEmpty()) return ResponseEntity.ok(emptyList())
+       if (candidateIds.size > MAX_WRITABLE_CANDIDATES) {
+           return ResponseEntity.badRequest().build()
+       }
+       return ResponseEntity.ok(fileService.getWritableFileIds(candidateIds.distinct()))
    }
 
    //region Swagger Documentation
@@ -887,8 +1088,75 @@ class FileController(
        @PathVariable id: UUID,
        @PathVariable shareId: Long
    ): ResponseEntity<HttpStatus> {
+       log.debug("API DELETE /api/v1/files/{}/shares/{} userOwnerId={} fileId={} shareId={}", id, shareId, currentUserOwnerId(), id, shareId)
        fileService.deleteFileShare(id, shareId)
+       log.info("File share deleted successfully: fileId={}, shareId={}", id, shareId)
        return ResponseEntity.ok(HttpStatus.OK)
+   }
+
+   //region Swagger Documentation
+   @Operation(
+        tags = ["File Sharing"],
+        summary = "Update file share permission",
+        description = "Updates the permission level (READ_ONLY or READ_WRITE) of an existing share. Only the file owner may change share permissions.",
+       parameters = [
+           Parameter(name = "id", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+           Parameter(name = "shareId", description = "Share record id", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "integer", format = "int64")),
+           Parameter(name = "permission", description = "New permission level", required = true, `in` = ParameterIn.QUERY, schema = Schema(type = "string", allowableValues = ["READ_ONLY", "READ_WRITE"], example = "READ_WRITE"))
+       ]
+   )
+   @ApiResponse(
+       responseCode = "200",
+       description = "Permission updated. Returns the updated share record.",
+       content = [Content(mediaType = "application/json", schema = Schema(implementation = FileShareDTO::class))]
+   )
+   @ApiResponse(
+       responseCode = "403",
+       description = "Forbidden - only the file owner can update shares.",
+       content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
+           examples = [ExampleObject(
+               name = "NotOwner",
+               summary = "Caller is not the file owner",
+               value = """
+               {
+                 "type": "Forbidden",
+                 "title": "Access denied",
+                 "status": 403,
+                 "detail": "Access denied: only file owner can update share for file {id}",
+                 "instance": "/api/v1/files/{id}/shares/{shareId}"
+               }
+               """
+           )]
+       )]
+   )
+   @ApiResponse(
+       responseCode = "404",
+       description = "File or share not found, or the share does not belong to the file.",
+       content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class),
+           examples = [ExampleObject(
+               name = "ShareNotFound",
+               summary = "File or share missing",
+               value = """
+               {
+                 "type": "Not Found",
+                 "title": "Resource not found",
+                 "status": 404,
+                 "detail": "File share {shareId} does not belong to file {id}",
+                 "instance": "/api/v1/files/{id}/shares/{shareId}"
+               }
+               """
+           )]
+       )]
+   )
+   //endregion
+   @PatchMapping("/{id}/shares/{shareId}")
+   fun updateFileShare(
+       @PathVariable id: UUID,
+       @PathVariable shareId: Long,
+       @RequestParam permission: PERMISSION_LEVEL
+   ): ResponseEntity<FileShareDTO> {
+       val share = fileService.updateFileSharePermission(id, shareId, permission)
+       return ResponseEntity.ok(share)
    }
 
     //region Swagger Documentation
@@ -901,8 +1169,11 @@ class FileController(
         ]
     )
     @ApiResponse(
-        responseCode = "302",
-        description = "Redirect to upload endpoint"
+        responseCode = "307",
+        description = "Temporary redirect to the TUS upload endpoint. The client must replay the creation request against the Location header.",
+        headers = [
+            Header(name = "Location", description = "Redirect target, for example /api/v1/uploads?fileId={fileId}")
+        ]
     )
     @ApiResponse(
         responseCode = "404",
@@ -949,14 +1220,21 @@ class FileController(
         req: HttpServletRequest,
         res: HttpServletResponse
     ) {
+        log.debug("API POST /api/v1/files/{}/versions userOwnerId={} fileId={}", fileId, currentUserOwnerId(), fileId)
+
         fileService.existsFileOrThrow(fileId) // Throws 404 if file does not exist
+        log.debug("File exists, redirecting to upload endpoint for file: {}", fileId)
+        // 307 preserves the method, body and (same-origin) headers, so the tus client's
+        // creation POST — with Upload-Length / Tus-Resumable / Upload-Metadata — is replayed
+        // against the real upload endpoint. The path must be absolute-from-root and include
+        // /api/v1 so it routes through the gateway to this service's TusController.
         res.status = HttpServletResponse.SC_TEMPORARY_REDIRECT // 307
-        res.setHeader("Location", "/uploads?fileId=${fileId}")
+        res.setHeader("Location", "/api/v1/uploads?fileId=${fileId}")
     }
 
     //region Swagger Documentation
     @Operation(
-        tags = ["File Management"],
+        tags = ["File Versioning"],
         summary = "Get all versions of a file",
         description = "Retrieves all versions of a specific file with their metadata.",
     )
@@ -965,7 +1243,7 @@ class FileController(
         description = "Successfully retrieved file versions",
         content = [Content(
             mediaType = "application/json",
-            schema = Schema(implementation = FileVersionDTO::class)
+            schema = Schema(type = "array", implementation = FileVersionDTO::class)
         )]
     )
     @ApiResponse(
@@ -976,63 +1254,151 @@ class FileController(
     //endregion
     @GetMapping("/{fileId}/versions")
     fun getFileVersions(@PathVariable fileId: UUID): ResponseEntity<List<FileVersionDTO>> {
-        log.debug("Getting all versions for file: $fileId")
+        log.debug("API GET /api/v1/files/{}/versions userOwnerId={} fileId={}", fileId, currentUserOwnerId(), fileId)
+
         val versions = fileService.getFileVersions(fileId)
+        log.debug("Retrieved {} versions for file: {}", versions.size, fileId)
         return ResponseEntity.ok(versions)
     }
 
     //region Swagger Documentation
     @Operation(
-        tags = ["AI RAG"],
-        summary = "Query files with RAG",
-        description = "Performs semantic search on file contents using RAG (Retrieval-Augmented Generation) powered by AI."
+        tags = ["Version Favorites"],
+        summary = "Favorite a file version",
+        description = "Marks a specific file version as favorite for the current user. Idempotent: favoriting an already-favorited version returns the existing record. Requires at least read access to the file.",
+        parameters = [
+            Parameter(name = "fileId", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "Version number", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "integer", format = "int64"))
+        ]
     )
     @ApiResponse(
-        responseCode = "200",
-        description = "Successfully retrieved RAG response",
-        content = [Content(mediaType = "application/json", schema = Schema(implementation = RagQueryResponse::class))]
+        responseCode = "201",
+        description = "Version successfully favorited (or already favorited). Returns the favorite record.",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = FileVersionFavoriteDTO::class))]
     )
     @ApiResponse(
-        responseCode = "500",
-        description = "AI Service Error",
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden - caller does not have read access to the file"
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File or version not found",
         content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
     )
     //endregion
+    @PostMapping("/{fileId}/versions/{version}/favorite")
+    fun addVersionFavorite(
+        @PathVariable fileId: UUID,
+        @PathVariable version: Long
+    ): ResponseEntity<FileVersionFavoriteDTO> {
+        val favorite = fileService.addFavorite(fileId, version)
+        return ResponseEntity.status(HttpStatus.CREATED).body(favorite)
+    }
 
-    @PostMapping("/query")
-    fun queryFiles(@RequestBody request: RagQueryRequest, principal: Authentication): ResponseEntity<RagQueryResponse> {
-        // Estrai userId dal JWT token
-        val userId = when (principal) {
-            is JwtAuthenticationToken -> principal.token.subject
-            else -> throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid authentication")
-        }
+    //region Swagger Documentation
+    @Operation(
+        tags = ["Version Favorites"],
+        summary = "Unfavorite a file version",
+        description = "Removes the current user's favorite on a specific file version. Idempotent: removing a non-favorited version succeeds.",
+        parameters = [
+            Parameter(name = "fileId", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid")),
+            Parameter(name = "version", description = "Version number", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "integer", format = "int64"))
+        ]
+    )
+    @ApiResponse(responseCode = "204", description = "Favorite removed (or was not present)")
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden - caller does not have read access to the file"
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File or version not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @DeleteMapping("/{fileId}/versions/{version}/favorite")
+    fun removeVersionFavorite(
+        @PathVariable fileId: UUID,
+        @PathVariable version: Long
+    ): ResponseEntity<Void> {
+        fileService.removeFavorite(fileId, version)
+        return ResponseEntity.noContent().build()
+    }
 
-        log.info("Forwarding RAG query to AI Service: {} for user: {}", request.query, userId)
+    //region Swagger Documentation
+    @Operation(
+        tags = ["Version Favorites"],
+        summary = "List my favorite versions",
+        description = "Retrieves the current user's favorited file versions, paginated. Soft-deleted versions and files the user can no longer access are hidden.",
+        parameters = [
+            Parameter(name = "page", description = "Page number (0-indexed)", schema = Schema(type = "integer", example = "0")),
+            Parameter(name = "size", description = "Page size", schema = Schema(type = "integer", example = "10"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Successfully retrieved favorites",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = Page::class))]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    //endregion
+    @GetMapping("/favorites")
+    fun getMyFavorites(
+        @RequestParam(defaultValue = "0") page: UInt,
+        @RequestParam(defaultValue = "10") size: UInt
+    ): ResponseEntity<Page<FileVersionFavoriteDTO>> {
+        val favorites = fileService.getMyFavorites(PageRequest.of(page.toInt(), size.toInt()))
+        return ResponseEntity.ok(favorites)
+    }
 
-        try {
-            // Aggiungi userId ai filtri
-            val filters = request.filters.toMutableMap()
-            filters["ownerId"] = userId
+    //region Swagger Documentation
+    @Operation(
+        tags = ["Version Favorites"],
+        summary = "Get favorited version numbers for a file",
+        description = "Returns the version numbers of the given file favorited by the current user. Used to render favorite indicators in the version history.",
+        parameters = [
+            Parameter(name = "fileId", description = "File UUID", required = true, `in` = ParameterIn.PATH, schema = Schema(type = "string", format = "uuid"))
+        ]
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Successfully retrieved favorited version numbers",
+        content = [Content(mediaType = "application/json", schema = Schema(type = "array", implementation = Long::class))]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden - caller does not have read access to the file"
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "File not found",
+        content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
+    )
+    //endregion
+    @GetMapping("/{fileId}/favorites")
+    fun getFavoritedVersionsForFile(@PathVariable fileId: UUID): ResponseEntity<List<Long>> {
+        val versions = fileService.getFavoritedVersionsForFile(fileId)
+        return ResponseEntity.ok(versions)
+    }
 
-            val requestWithFilters = request.copy(filters = filters)
-
-            val response = aiServiceClient.post()
-                .uri("/api/rag/query")
-                .body(requestWithFilters)
-                .retrieve()
-                .body(RagQueryResponse::class.java)
-
-            return ResponseEntity.ok(response)
-
-        } catch (e: Exception) {
-            log.error("Failed to query AI Service: ${e.message}", e)
-            throw ResponseStatusException(
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                "Failed to contact AI Service: ${e.message}"
-            )
-        }
+    private companion object {
+        /** Upper bound on a writable-ids filter request, to keep the candidate IN query bounded. */
+        const val MAX_WRITABLE_CANDIDATES = 1000
     }
 
 }
-
-

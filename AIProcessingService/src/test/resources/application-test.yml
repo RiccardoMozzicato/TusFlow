@@ -1,21 +1,47 @@
+spring:
+  ai:
+    openai:
+      api-key: test-api-key
+      base-url: http://localhost:9999
+      chat:
+        options:
+          model: test-model
+    ollama:
+      base-url: http://localhost:11434
+      embedding:
+        options:
+          model: nomic-embed-text
+    vectorstore:
+      pgvector:
+        initialize-schema: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/certs
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+# imageChatClient builds a dedicated OpenAiApi from ai.image.* (it isn't mocked in the
+# integration KafkaListenerTest), so provide test values — GROQ_BASE_URL isn't set under `test`.
+ai:
+  image:
+    base-url: http://localhost:9999
+    api-key: test-api-key
+  retry:
+    # No real sleeping between analysis backoff attempts under test.
+    analysis-backoff-base-ms: 0
+    analysis-backoff-cap-ms: 0
+
+issuer: http://localhost:9090/realms/file-management
+
+keycloak:
+  client-id: test-client
+  client-secret: test-secret
+  token-uri: http://localhost:9090/realms/file-management/protocol/openid-connect/token
+
 kafka:
-  bootstrap-servers: "localhost:9094"
   consumer:
     auto-offset-reset: earliest
     group-id: "test-group"
-    bootstrap-servers: "localhost:9094"
-  producer:
-    bootstrap-servers: "localhost:9094"
-    key-serializer: org.apache.kafka.common.serialization.StringSerializer
-    value-serializer: org.apache.kafka.common.serialization.StringSerializer
-
-spring:
-  kafka:
-    bootstrap-servers: "localhost:9094"
-    consumer:
-      auto-offset-reset: earliest
-      group-id: "test-group"
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-

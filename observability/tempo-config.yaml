@@ -1,0 +1,80 @@
+# Tempo config override for the grafana/otel-lgtm dev stack.
+#
+# Mounted over /otel-lgtm/tempo-config.yaml (see docker-compose.yml `lgtm` service).
+# Identical to the image's bundled config EXCEPT the ingester timing below.
+#
+# Why: the image ships trace_idle_period/max_block_duration = 1s. Tempo seals a trace into a
+# block after 1s of inactivity. Our cross-service traces (ApiGateway -> TusUploaderService ->
+# async Kafka consumer) are emitted by separate services, each with its own OTLP BatchSpanProcessor
+# flushing on an independent ~5s timer, so the spans of ONE trace arrive several seconds apart.
+# The gateway's *root* span (it ends last, and exports from a different service than the children)
+# routinely lands after Tempo already sealed the block holding the children — so the search index
+# records that block as "<root span not yet received>" and never updates it. Single-service traces
+# (one batch) are unaffected, which is why they showed names while uploads did not.
+#
+# Fix: widen the windows so all of a trace's spans land in one block before it is sealed. Trades a
+# little extra latency before a trace becomes searchable (acceptable for a dev/observability stack).
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9096
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "127.0.0.1:4417"
+        http:
+          endpoint: "127.0.0.1:4418"
+
+ingester:
+  trace_idle_period: 15s    # was 1s — wait 15s of inactivity before sealing a trace
+  max_block_duration: 60s   # was 1s — let a block accumulate up to 60s
+  flush_check_period: 5s    # was 1s
+  lifecycler:
+    address: 127.0.0.1
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+    min_ready_duration: 1s
+
+memberlist:
+  bind_addr: [127.0.0.1]
+  bind_port: 7947
+
+query_frontend:
+  mcp_server:
+    enabled: true
+
+querier:
+  frontend_worker:
+    frontend_address: 127.0.0.1:9096
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /data/tempo/wal
+    local:
+      path: /data/tempo/blocks
+
+metrics_generator:
+  processor:
+    local_blocks:
+      filter_server_spans: false
+    span_metrics:
+      dimensions:
+        - service_name
+        - operation
+        - status_code
+  traces_storage:
+    path: /data/tempo/generator/traces
+  storage:
+    path: /data/tempo/generator/wal
+    remote_write:
+      - url: http://127.0.0.1:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  metrics_generator_processors: [service-graphs, local-blocks, span-metrics]

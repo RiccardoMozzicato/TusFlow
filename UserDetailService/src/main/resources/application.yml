@@ -1,6 +1,8 @@
 spring:
     application:
       name: UserDetailService
+    profiles:
+      active: dev
     datasource:
       url: jdbc:postgresql://localhost:5433/userdb
       username: myuser
@@ -31,10 +33,10 @@ spring:
 server:
   port: 8082
 
-logging:
-    level:
-      org.springframework.web: DEBUG
-      org.springframework.security: DEBUG
+#logging:
+#    level:
+#      org.springframework.web: DEBUG
+#      org.springframework.security: DEBUG
 
 keycloak-admin:
   server-url: http://localhost:9090/
@@ -42,3 +44,30 @@ keycloak-admin:
   client-id: user-admin
   secret: lgwvWQ7TnGvcRL1SYxsdzUu7j3hiXDNB
 
+kafka:
+  bootstrap-servers: localhost:9094
+  consumer:
+    group-id: userdetail-service
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+    metrics:
+      export:
+        url: ${OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
+        step: 10s
+  metrics:
+    distribution:
+      # Emit histogram buckets so Grafana can compute real p95/p99 + heatmaps.
+      percentiles-histogram:
+        http.server.requests: true
+
+minio:
+  url: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  users-bucket: users

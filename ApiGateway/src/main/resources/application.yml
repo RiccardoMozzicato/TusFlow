@@ -1,14 +1,16 @@
 # Add log debug for spring wemb mvc and cloud gateway
-logging:
-    level:
-        org.springframework.web: DEBUG
-        org.springframework.cloud.gateway: DEBUG
+#logging:
+#    level:
+#        org.springframework.web: DEBUG
+#        org.springframework.cloud.gateway: DEBUG
 
 baseUrl: http://localhost:8080
 
 spring:
   application:
     name: ApiGateway
+  profiles:
+    active: dev
   security:
     oauth2:
       client:
@@ -28,7 +30,39 @@ spring:
   cloud:
     gateway:
       mvc:
+        # The AI-job / RAG live channel is STOMP-over-SockJS. Since the servlet gateway can't
+        # proxy a raw WebSocket upgrade, SockJS falls back to HTTP *streaming* transports whose
+        # response never completes (eventsource, xhr_streaming). By default Spring Cloud Gateway
+        # MVC buffers every proxied response to EOF (streaming-media-types is empty), so the
+        # receive channel delivers no bytes, the browser's EventSource/xhr_streaming aborts on
+        # the SockJS transport timeout, and STOMP never connects — no live updates anywhere.
+        # Listing these content types switches them to incremental, flushing copy.
+        # Match is exact (List.contains -> MediaType.equals), so the charset MUST be included.
+        streaming-media-types:
+          - "text/event-stream;charset=UTF-8"
+          - "application/javascript;charset=UTF-8"
         routes:
+          - id: tus-openapi
+            uri: http://localhost:8081
+            predicates:
+              - Path=/docs/openapi/tus
+            filters:
+              - SetPath=/v3/api-docs
+
+          - id: user-openapi
+            uri: http://localhost:8082
+            predicates:
+              - Path=/docs/openapi/users
+            filters:
+              - SetPath=/v3/api-docs
+
+          - id: ai-openapi
+            uri: http://localhost:8083
+            predicates:
+              - Path=/docs/openapi/ai
+            filters:
+              - SetPath=/v3/api-docs
+
           - id: file-service
             uri: http://localhost:8081
             predicates:
@@ -43,6 +77,20 @@ spring:
             filters:
               - TokenRelay
 
+          - id: ai-service
+            uri: http://localhost:8083
+            predicates:
+              - Path=/api/v1/jobs/**
+            filters:
+              - TokenRelay
+
+          - id: ai-rag-service
+            uri: http://localhost:8083
+            predicates:
+              - Path=/api/rag/**
+            filters:
+              - TokenRelay
+
           - id: ui
             uri: ${UI_URL}
             predicates:
@@ -50,9 +98,38 @@ spring:
             filters:
               - AddRequestHeader=X-Debug, true
 
+springdoc:
+  swagger-ui:
+    urls:
+      - name: API Gateway
+        url: /v3/api-docs
+      - name: TusUploaderService
+        url: /docs/openapi/tus
+      - name: UserDetailService
+        url: /docs/openapi/users
+      - name: AIProcessingService
+        url: /docs/openapi/ai
+    urls-primary-name: API Gateway
+
 # use the production url, not the development one
 UI_URL: "http://localhost:5173"
 
 server:
   port: 8080
 
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+    metrics:
+      export:
+        url: ${OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
+        step: 10s
+  metrics:
+    distribution:
+      # Emit histogram buckets so Grafana can compute real p95/p99 + heatmaps.
+      percentiles-histogram:
+        http.server.requests: true

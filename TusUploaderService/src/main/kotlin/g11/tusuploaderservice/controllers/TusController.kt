@@ -7,7 +7,7 @@ import g11.tusuploaderservice.exceptions.MissingFieldException
 import g11.tusuploaderservice.exceptions.TusContentTypeException
 import g11.tusuploaderservice.exceptions.UploadLengthException
 import g11.tusuploaderservice.exceptions.InvalidFormatException
-import g11.tusuploaderservice.services.FileService
+import g11.tusuploaderservice.metrics.TusMetrics
 import g11.tusuploaderservice.services.FileServiceInterface
 import g11.tusuploaderservice.services.TusServiceInterface
 import io.swagger.v3.oas.annotations.Operation
@@ -34,14 +34,36 @@ import org.slf4j.LoggerFactory
 import org.springframework.http.ProblemDetail
 import java.util.UUID
 import g11.tusuploaderservice.utils.parseMetadataHeader
+import g11.tusuploaderservice.utils.getUserIdFromJwt
+import io.micrometer.tracing.Tracer
 import org.springframework.web.bind.annotation.RequestParam
-import kotlin.text.get
 
 
 @RestController
 @RequestMapping("/api/v1/uploads")
-class TusController(val tus: TusProperties, val tusService: TusServiceInterface, private val fileService: FileServiceInterface) {
+class TusController(
+    val tus: TusProperties,
+    val tusService: TusServiceInterface,
+    private val fileService: FileServiceInterface,
+    private val tracer: Tracer,
+    private val tusMetrics: TusMetrics,
+) {
     private val log = LoggerFactory.getLogger(TusController::class.java)
+
+    // Tags the current request span with the client-generated file id. A tus upload spans
+    // several independent HTTP requests (the creation POST plus one PATCH per chunk), each of
+    // which the gateway records as its own trace. They can't share a single trace id, so we
+    // stamp every upload request's span with `file.id` instead: querying Tempo with
+    // `{ .file.id = "<uuid>" }` then regroups the POST and all its PATCHes for one upload.
+    private fun tagFileId(fileId: UUID?) {
+        fileId?.let { tracer.currentSpan()?.tag("file.id", it.toString()) }
+    }
+
+    // Resolves the authenticated user (owner) id from the JWT for request logging.
+    // Never throws so an API log line can't break the request flow.
+    private fun currentUserOwnerId(): String =
+        runCatching { getUserIdFromJwt().toString() }.getOrDefault("unknown")
+
     //region Swagger Documentation
     @Operation(
         tags = [ "Tus Server Capabilities" ],
@@ -88,7 +110,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -100,6 +122,8 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
     @RequestMapping("", method = [RequestMethod.OPTIONS])
     @ResponseStatus(HttpStatus.NO_CONTENT)
     open fun optionsUploads(res: HttpServletResponse) {
+        log.debug("API OPTIONS /api/v1/uploads userOwnerId={}", currentUserOwnerId())
+
         res.setHeader("Tus-Version", tus.version)
         res.setHeader("Tus-Extension", tus.extensions?.joinToString(separator = ","))
         res.setHeader("Tus-Checksum-Algorithm", tusService.getSupportedHashAlgorithms().joinToString(", "))
@@ -111,21 +135,59 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         res.setHeader("Access-Control-Expose-Headers", tus.exposeHeaders?.joinToString(separator = ","))
 
     }
-    //region Swagger Do   @ApiResponse(
-    //       responseCode = "404",
-    //       description = "File not found. Returned when the specified file UUID does not exist.",
-    //       content = [Content(mediaType = "application/problem+json", schema = Schema(implementation = ProblemDetail::class))]
-    //   )cumentation
+    //region Swagger Documentation
     @Operation(
         tags = [ "File Handling" ],
         summary = "Create a new upload",
-        description = "Creates a new file upload resource on the server and returns its location.",
+        description = "Creates a new TUS upload resource for a client-generated file id and returns the resumable upload location. Supports regular creation, deferred length and creation-with-upload.",
         parameters = [
             Parameter(
-                name = "Tus-Resumable",
-                description = "Tus-Version",
-                schema = Schema(type = "string"),
+                name = "fileId",
+                description = "Client-generated file UUID. The same id is used later to resume, inspect or terminate the upload.",
+                schema = Schema(type = "string", format = "uuid"),
                 required = true,
+                `in` = ParameterIn.QUERY
+            ),
+            Parameter(
+                name = "sharingScope",
+                description = "Initial visibility scope for the file. Defaults to PERSONAL when omitted.",
+                schema = Schema(type = "string", allowableValues = ["PERSONAL", "DEPARTMENT", "ORGANIZATION"], defaultValue = "PERSONAL"),
+                required = false,
+                `in` = ParameterIn.QUERY
+            ),
+            Parameter(
+                name = "Tus-Resumable",
+                description = "TUS protocol version. Must match the server-supported version.",
+                schema = Schema(type = "string", example = "1.0.0"),
+                required = true,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Length",
+                description = "Total upload size in bytes. Required unless Upload-Defer-Length is used.",
+                schema = Schema(type = "integer", format = "int64", example = "10485760"),
+                required = false,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Defer-Length",
+                description = "Set to 1 when the upload length is not known at creation time.",
+                schema = Schema(type = "integer", example = "1"),
+                required = false,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Metadata",
+                description = "Comma-separated TUS metadata. Values must be base64 encoded, for example: filename cmVwb3J0LnBkZg==,filetype YXBwbGljYXRpb24vcGRm",
+                schema = Schema(type = "string"),
+                required = false,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Checksum",
+                description = "Optional checksum header for creation-with-upload: '<algorithm> <base64-digest>'.",
+                schema = Schema(type = "string", example = "sha-1 Kq5sNclPz7QV2+lfQIuc6R7oRu0="),
+                required = false,
                 `in` = ParameterIn.HEADER
             ),
             Parameter(
@@ -142,7 +204,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
             Header(
                 name = "Location",
                 description = "URI of the newly created upload resource",
-                schema = Schema(type = "string", example = "http://localhost:8080/uploads/c22c49d6-04fd-444f-87ca-8e9e64f43f50")
+                schema = Schema(type = "string", example = "/api/v1/uploads/c22c49d6-04fd-444f-87ca-8e9e64f43f50")
             ),
             Header(
                 name = "Upload-Expires",
@@ -171,7 +233,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Missing required header",
                       "status": 400,
                       "detail": "Upload-Length header is required",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -194,7 +256,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Upload expired",
                       "status": 410,
                       "detail": "Upload has expired and is no longer available",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -217,7 +279,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Unsupported protocol version",
                       "status": 412,
                       "detail": "Tus-Resumable version not supported",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -240,7 +302,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Upload size exceeds limit",
                       "status": 413,
                       "detail": "Upload-Length must be lower than maximum allowed size",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -263,7 +325,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Invalid Content-Type",
                       "status": 415,
                       "detail": "Content-Type must be application/offset+octet-stream for creation-with-upload",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -286,7 +348,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Checksum validation failed",
                       "status": 460,
                       "detail": "Calculated checksum does not match provided checksum",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -309,7 +371,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred",
-                      "instance": "/uploads"
+                      "instance": "/api/v1/uploads"
                     }
                     """
                     )
@@ -332,6 +394,9 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         @RequestHeader("Content-Type", required = false) contentType: String?,
         res: HttpServletResponse
     ) {
+        log.debug("API POST /api/v1/uploads userOwnerId={} fileId={}", currentUserOwnerId(), fileId)
+        tagFileId(fileId)
+
         //if no scope is provided, default to PERSONAL
         val sharingScope = scope ?: SharingScope.PERSONAL
 
@@ -339,6 +404,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         val parsedUploadMetadata: Map<String, String>? = parseMetadataHeader(uploadMetadata)
 
         val filename = parsedUploadMetadata?.get("filename")
+        log.debug("Upload metadata parsed fileId={} filename={}", fileId, filename)
 
         var file = UploadDTO(
             filename = filename,
@@ -358,35 +424,44 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
 
         //creation with upload
         if (contentLength != null && contentLength > 0) {
+            log.info("Starting upload chunk fileId={} size={}", fileId, contentLength)
             contentType?.let {
                 // Extract media type without parameters (e.g., remove ";charset=UTF-8")
                 val mediaType = it.split(";").firstOrNull()?.trim()
                 if (mediaType != "application/offset+octet-stream") {
+                    log.warn("Invalid Content-Type for upload fileId={} contentType={}", fileId, contentType)
                     throw TusContentTypeException("Invalid Content-Type for upload - must be provided for TUS protocol")
                 }
             } ?: throw MissingFieldException("Missing Content-Type header for upload")
 
             val chunk: ByteArray = req.inputStream.readAllBytes()
             if (chunk.size.toLong() != contentLength) {
+                log.warn("Upload length mismatch fileId={} expected={} actual={}", fileId, contentLength, chunk.size)
                 throw UploadLengthException("Content-Length header does not match chunk size")
             }
 
             if (checksumHeader != null) {
+                log.debug("Checksum validation started fileId={}", fileId)
                 tusService.executeChecksum(chunk, checksumHeader)
             }
 
             file = tusService.createUploadWithChunk(file, chunk)
-            log.debug("CONTROLLER - UPLOADING CHUNK: {}", file)
+            tusMetrics.countCreated()
+            tusMetrics.recordChunk(chunk.size)
+            tusMetrics.countCompletionIfDone(file.uploadOffset, file.uploadLength)
+            log.info("Upload chunk processed fileId={} offset={}", fileId, file.uploadOffset)
             res.setHeader("Upload-Offset", file.uploadOffset.toString())
             uploadExpires = file.uploadExpires
         }
         else {
+            log.debug("Initializing empty upload fileId={}", fileId)
             file = tusService.createUpload(file)
-            log.debug("CONTROLLER - Creating new upload: \n{}", file)
+            tusMetrics.countCreated()
+            log.info("Upload initialized fileId={}", fileId)
         }
 
         val location = "http://localhost:8080/api/v1/uploads/${file.id}"
-
+        log.debug("Upload location set fileId={} location={}", fileId, location)
         res.setHeader("Location", location)
         res.setHeader("Upload-Expires", uploadExpires)
     }
@@ -399,9 +474,16 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         description = "Retrieve the current status of an upload including offset, length, metadata, and expiration.",
         parameters = [
             Parameter(
+                name = "id",
+                description = "Upload resource id, matching the file UUID used at creation time.",
+                schema = Schema(type = "string", format = "uuid"),
+                required = true,
+                `in` = ParameterIn.PATH
+            ),
+            Parameter(
                 name = "Tus-Resumable",
-                description = "Tus-Version",
-                schema = Schema(type = "string"),
+                description = "TUS protocol version.",
+                schema = Schema(type = "string", example = "1.0.0"),
                 required = true,
                 `in` = ParameterIn.HEADER
             ),
@@ -453,7 +535,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Resource not found",
                       "status": 404,
                       "detail": "Upload resource with the specified ID does not exist",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -476,7 +558,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Upload expired",
                       "status": 410,
                       "detail": "Upload has expired and is no longer available",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -499,7 +581,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Unsupported protocol version",
                       "status": 412,
                       "detail": "Tus-Resumable version not supported",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -522,7 +604,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred during upload",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -534,7 +616,19 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
     @RequestMapping("/{id}", method = [RequestMethod.HEAD])
     @ResponseStatus(HttpStatus.NO_CONTENT)
     open fun headUploads(@PathVariable id: String, req: HttpServletRequest, res: HttpServletResponse) {
+        log.debug("API HEAD /api/v1/uploads/{} userOwnerId={} uploadId={}", id, currentUserOwnerId(), id)
         val result = tusService.getUploadInfo(id)
+        tagFileId(result.fileUuid)
+
+        log.debug(
+            "Upload info resolved id={} offset={} length={} defer={} expiresPresent={} metadataPresent={}",
+            id,
+            result.uploadOffset,
+            result.uploadLength,
+            result.uploadDeferLength,
+            result.uploadExpires != null,
+            !result.uploadMetadata.isNullOrEmpty()
+        )
 
         res.setHeader("Upload-Offset", result.uploadOffset.toString())
         result.uploadLength?.let { res.setHeader("Upload-Length", it.toString()) }
@@ -558,23 +652,56 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         description = "Uploads a chunk of a specified file to the server.",
         parameters = [
             Parameter(
+                name = "id",
+                description = "Upload resource id.",
+                schema = Schema(type = "string", format = "uuid"),
+                required = true,
+                `in` = ParameterIn.PATH
+            ),
+            Parameter(
                 name = "Tus-Resumable",
-                description = "Tus-Version",
-                schema = Schema(type = "string"),
+                description = "TUS protocol version.",
+                schema = Schema(type = "string", example = "1.0.0"),
                 required = true,
                 `in` = ParameterIn.HEADER
             ),
             Parameter(
-                name = "Upload-Defer-Length",
-                schema = Schema(type = "integer"),
+                name = "Content-Type",
+                description = "Must be application/offset+octet-stream.",
+                schema = Schema(type = "string", example = "application/offset+octet-stream"),
+                required = true,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Offset",
+                description = "Byte offset where this chunk starts. Must match the server-side offset.",
+                schema = Schema(type = "integer", format = "int64", example = "2048"),
+                required = true,
+                `in` = ParameterIn.HEADER
+            ),
+            Parameter(
+                name = "Upload-Checksum",
+                description = "Optional checksum header: '<algorithm> <base64-digest>'.",
+                schema = Schema(type = "string", example = "sha-1 Kq5sNclPz7QV2+lfQIuc6R7oRu0="),
                 `in` = ParameterIn.HEADER
             ),
             Parameter(
                 name = "Upload-Length",
-                schema = Schema(type = "integer"),
+                description = "Optional final upload length when it was deferred at creation time.",
+                schema = Schema(type = "integer", format = "int64", example = "10485760"),
                 `in` = ParameterIn.HEADER
             )
-        ]
+        ],
+        requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Binary upload chunk starting at Upload-Offset.",
+            required = true,
+            content = [
+                Content(
+                    mediaType = "application/offset+octet-stream",
+                    schema = Schema(type = "string", format = "binary")
+                )
+            ]
+        )
     )
     @ApiResponse(
         responseCode = "204",
@@ -612,7 +739,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Invalid request",
                       "status": 400,
                       "detail": "Upload length exceeds maximum allowed size",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -635,7 +762,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Resource not found",
                       "status": 404,
                       "detail": "Upload resource with the specified ID does not exist",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -658,7 +785,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Offset mismatch",
                       "status": 409,
                       "detail": "Upload-Offset does not match current file offset",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -681,7 +808,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Upload expired",
                       "status": 410,
                       "detail": "Upload has expired and is no longer available",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -704,7 +831,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Unsupported protocol version",
                       "status": 412,
                       "detail": "Tus-Resumable version not supported",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -727,7 +854,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Upload size exceeds limit",
                       "status": 413,
                       "detail": "File length exceeds expected length",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -750,7 +877,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Invalid Content-Type",
                       "status": 415,
                       "detail": "Content-Type must be application/offset+octet-stream",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -773,7 +900,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Checksum validation failed",
                       "status": 460,
                       "detail": "Calculated checksum does not match provided checksum",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -796,7 +923,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred during upload",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -816,19 +943,17 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         req: HttpServletRequest,
         res: HttpServletResponse
     ) {
+        log.debug("API PATCH /api/v1/uploads/{} userOwnerId={} uploadId={}", id, currentUserOwnerId(), id)
 
-        log.debug("request headers:")
         req.headerNames.toList().forEach { headerName ->
             log.debug("$headerName: ${req.getHeader(headerName)}")
         }
-        val contentLength = req.getHeader("Content-Length")
-
-        log.debug("patchUploads $id $offset $contentType $version $contentLength")
 
         val uuid: UUID
         try{
             uuid= UUID.fromString(id)
         } catch (e: IllegalArgumentException){
+            log.warn("Invalid UUID format in PATCH upload id={}", id)
             throw InvalidFormatException("Invalid UUID format for upload ID", e)
         }
 
@@ -846,18 +971,23 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         val checksumHeader = req.getHeader("Upload-Checksum")
 
         if (checksumHeader != null) {
+            log.debug("Checksum validation started uploadId={}", id)
             tusService.executeChecksum(chunk, checksumHeader)
         }
 
-        log.debug("CONTROLLER - UPLOADING NEW CHUNK: {}", uploadDto)
+        log.debug("Uploading chunk received: uploadId={} offset={} size={}", id, offset, chunk.size)
 
         uploadDto = tusService.appendChunk(uploadDto, chunk)
+        tagFileId(uploadDto.fileUuid)
+        tusMetrics.recordChunk(chunk.size)
+        tusMetrics.countCompletionIfDone(uploadDto.uploadOffset, uploadDto.uploadLength)
 
-        log.debug("CONTROLLER - NEW UPLOAD DTO AFTER CHUNK APPEND: {}", uploadDto)
-
+        log.info("Chunk appended successfully uploadId={} newOffset={}", id, uploadDto.uploadOffset)
         res.setHeader("Tus-Resumable", tus.version)
         res.setHeader("Upload-Offset", uploadDto.uploadOffset.toString())
+
         if (uploadDto.uploadExpires != null) {
+            log.debug("Upload expiration updated uploadId={} expires={}", id, uploadDto.uploadExpires)
             res.setHeader("Upload-Expires", uploadDto.uploadExpires)
         }
     }
@@ -868,10 +998,17 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
         description = "Terminates an upload and deletes all associated data including the file and metadata.",
         parameters = [
             Parameter(
-                name = "Tus-Resumable",
-                description = "Tus-Version",
-                schema = Schema(type = "string"),
+                name = "id",
+                description = "Upload resource id.",
+                schema = Schema(type = "string", format = "uuid"),
                 required = true,
+                `in` = ParameterIn.PATH
+            ),
+            Parameter(
+                name = "Tus-Resumable",
+                description = "TUS protocol version. Accepted when provided; this endpoint currently does not require the header.",
+                schema = Schema(type = "string", example = "1.0.0"),
+                required = false,
                 `in` = ParameterIn.HEADER
             ),
         ]
@@ -902,7 +1039,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Resource not found",
                       "status": 404,
                       "detail": "Upload resource with the specified ID does not exist",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -925,7 +1062,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Upload expired",
                       "status": 410,
                       "detail": "Upload has expired and is no longer available",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -948,7 +1085,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Unsupported protocol version",
                       "status": 412,
                       "detail": "Tus-Resumable version not supported",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -971,7 +1108,7 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
                       "title": "Server error",
                       "status": 500,
                       "detail": "An unexpected error occurred during upload",
-                      "instance": "/uploads/{id}"
+                      "instance": "/api/v1/uploads/{id}"
                     }
                     """
                     )
@@ -985,9 +1122,11 @@ class TusController(val tus: TusProperties, val tusService: TusServiceInterface,
     open fun deleteUploads(
         @PathVariable("id") file_id: String,
         req: HttpServletRequest,
-        res: HttpServletResponse) {
-
+        res: HttpServletResponse
+    ) {
+        log.debug("API DELETE /api/v1/uploads/{} userOwnerId={} uploadId={}", file_id, currentUserOwnerId(), file_id)
         tusService.terminateUpload(file_id)
+        tusMetrics.countTerminated()
         res.setHeader("Tus-Resumable", tus.version)
     }
 }
