@@ -8,6 +8,6 @@ data class UserInfo(
     val fullName: String,
     val department: String,
     val organization: String,
-    val roles: List<String>
-
+    val roles: List<String>,
+    val photoProfileUrl: String? = null
 )

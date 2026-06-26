@@ -7,6 +7,7 @@ export interface UserInfo {
   department: string
   organization: string
   roles: string[]
+  photoProfileUrl: string | null
 }
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'anonymous'

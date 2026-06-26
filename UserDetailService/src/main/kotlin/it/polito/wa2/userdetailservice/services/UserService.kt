@@ -1,11 +1,14 @@
 package it.polito.wa2.userdetailservice.services
 
+import it.polito.wa2.userdetailservice.dto.AvatarContentDTO
+import it.polito.wa2.userdetailservice.dto.AvatarDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
 import it.polito.wa2.userdetailservice.dto.toDTO
 import it.polito.wa2.userdetailservice.entities.User
 import it.polito.wa2.userdetailservice.enums.UserRole
+import it.polito.wa2.userdetailservice.exceptions.AvatarTypeUnsupported
 import it.polito.wa2.userdetailservice.exceptions.SelfDeletionNotAllowedException
 import it.polito.wa2.userdetailservice.exceptions.StorageQuotaBelowUsedException
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
@@ -13,6 +16,7 @@ import it.polito.wa2.userdetailservice.exceptions.UserNotFoundException
 import it.polito.wa2.userdetailservice.repositories.UserRepository
 import it.polito.wa2.userdetailservice.specs.UserSpecifications
 import jakarta.transaction.Transactional
+import org.jboss.resteasy.plugins.providers.InputStreamProvider
 import org.keycloak.admin.client.CreatedResponseUtil
 import org.keycloak.admin.client.Keycloak
 import org.keycloak.representations.idm.CredentialRepresentation
@@ -26,6 +30,7 @@ import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.stereotype.Service
+import java.io.InputStream
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
@@ -33,6 +38,7 @@ import java.util.UUID
 @Service
 class UserService(
     private var userRepo: UserRepository,
+    private val minioService: minioServiceInterface,
     @Value("\${keycloak-admin.realm}") private val realm: String,
     private val keycloak: Keycloak, // Il tuo bean configurato
 ): UserServiceInterface {
@@ -53,6 +59,15 @@ class UserService(
         val jwt = authentication.principal as Jwt
         return UUID.fromString(jwt.subject)
     }
+
+    // Gateway-relative path the frontend uses as an <img src>. The browser hits the
+    // gateway same-origin (which proxies to this service); MinIO is never exposed.
+    // Null when the user has no stored avatar, so the UI falls back to initials.
+    // The ?v= token (the user's updatedAt) changes on every upload so the browser
+    // refetches the new image immediately instead of showing the cached one — the
+    // object key is stable, so without it the <img src> would never change.
+    private fun User.avatarPath(): String? =
+        imageObjectKey?.let { "/api/v1/users/$id/avatar?v=${updatedAt?.time ?: 0}" }
 
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_admin','ROLE_manager','ROLE_staff', 'ROLE_serviceaccount-fileservice')")
@@ -86,7 +101,7 @@ class UserService(
             filtersDTO.pageNumber, filtersDTO.pageSize, filtersDTO.search, sortField, filtersDTO.sortDirection, organization != null,
         )
         val spec = UserSpecifications.buildUsers(organization, filtersDTO.search)
-        return userRepo.findAll(spec, pageable).map { it.toDTO() }
+        return userRepo.findAll(spec, pageable).map { it.toDTO(it.avatarPath()) }
     }
 
     @Transactional
@@ -98,7 +113,7 @@ class UserService(
         }
 
         log.debug("returning user {}", id)
-        return user.toDTO()
+        return user.toDTO(user.avatarPath())
     }
 
     @Transactional
@@ -229,6 +244,61 @@ class UserService(
         userEntity.role = user.role
         userEntity.storageQuota = user.storageQuota
         userEntity.updatedAt = Date.from(Instant.now())
+
+        try {
+            val userResource = keycloak.realm(realm).users().get(user.id.toString())
+            val userRepresentation = userResource.toRepresentation()
+            val fullNameParts = user.fullName.trim().split(" ", limit = 2)
+            userRepresentation.firstName = fullNameParts.getOrNull(0) ?: ""
+            userRepresentation.lastName = fullNameParts.getOrNull(1) ?: ""
+            userRepresentation.email = user.email
+            userResource.update(userRepresentation)
+        } catch(e: Exception) {
+            throw RuntimeException("Error updating user", e)
+        }
+    }
+
+    @Transactional
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun updateAvatar(userId: String, avatar: AvatarDTO) {
+
+        if (avatar.contentType == null || !avatar.contentType.startsWith("image/")) {
+            throw AvatarTypeUnsupported()
+        }
+
+        val user = userRepo.findById(UUID.fromString(userId)).orElseThrow {
+            log.warn("User with id {} not found", userId)
+            UserNotFoundException("user not found")
+        }
+
+        val objectKey = "${userId}/avatar"
+        minioService.putAvatar(objectKey, avatar)
+        user.imageObjectKey = objectKey
+        // Bump updatedAt so avatarPath()'s ?v= token changes and clients refetch.
+        user.updatedAt = Date.from(Instant.now())
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun getAvatarContent(userId: UUID): AvatarContentDTO? {
+        val user = userRepo.findById(userId).orElseThrow {
+            log.warn("User with id {} not found", userId)
+            UserNotFoundException("user not found")
+        }
+
+        val objectKey = user.imageObjectKey ?: return null
+        return minioService.getAvatar(objectKey)
+    }
+
+    @Transactional
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    override fun deleteAvatar(userId: String) {
+        val user = userRepo.findById(UUID.fromString(userId)).orElseThrow {
+            log.warn("User with id {} not found", userId)
+            UserNotFoundException("user not found")
+        }
+
+        user.imageObjectKey?.let { minioService.removeAvatar(it) }
+        user.imageObjectKey = null
     }
 
     @Transactional

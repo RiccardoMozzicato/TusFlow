@@ -29,6 +29,7 @@ import org.keycloak.admin.client.resource.RolesResource
 import org.keycloak.admin.client.resource.UserResource
 import org.keycloak.admin.client.resource.UsersResource
 import org.keycloak.representations.idm.RoleRepresentation
+import org.keycloak.representations.idm.UserRepresentation
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.core.io.ClassPathResource
@@ -66,6 +67,19 @@ class UserServiceTest: IntegrationTest() {
         jdbcTemplate.execute("TRUNCATE TABLE users CASCADE")
         val populator = ResourceDatabasePopulator(ClassPathResource("test-data.sql"))
         DatabasePopulatorUtils.execute(populator, dataSource)
+    }
+
+    // updateUser() syncs name/email back to Keycloak; stub that chain so the
+    // success-path tests don't fall into the "Error updating user" catch block.
+    private fun mockKeycloakUserUpdate(userId: UUID) {
+        val realmResource = mockk<RealmResource>()
+        val usersResource = mockk<UsersResource>()
+        val userResource = mockk<UserResource>()
+        every { keycloak.realm(realm) } returns realmResource
+        every { realmResource.users() } returns usersResource
+        every { usersResource.get(userId.toString()) } returns userResource
+        every { userResource.toRepresentation() } returns UserRepresentation()
+        justRun { userResource.update(any()) }
     }
 
     private fun setupJwtAuthentication(userId: String, roles: List<String>) {
@@ -513,6 +527,7 @@ class UserServiceTest: IntegrationTest() {
             role = UserRole.ROLE_admin,
             storageQuota = 21474836480
         )
+        mockKeycloakUserUpdate(userId)
 
         // act
         userService.updateUser(updatedUser)
@@ -573,6 +588,7 @@ class UserServiceTest: IntegrationTest() {
             role = UserRole.ROLE_manager,
             storageQuota = 2_000L
         )
+        mockKeycloakUserUpdate(userId)
 
         // act
         userService.updateUser(updatedUser)
@@ -599,6 +615,7 @@ class UserServiceTest: IntegrationTest() {
             role = UserRole.ROLE_manager,
             storageQuota = null
         )
+        mockKeycloakUserUpdate(userId)
 
         // act
         userService.updateUser(updatedUser)

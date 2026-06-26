@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import type { RootState } from '@/app/store'
-import { fetchUserInfo } from './authApi'
+import { getCurrentUser } from '@/features/users/usersApi'
+import {fetchUserInfo} from './authApi'
 import type { AuthState, UserInfo } from './types'
 
 const initialState: AuthState = {
@@ -9,10 +10,23 @@ const initialState: AuthState = {
   error: null,
 }
 
-// Bootstraps auth on app load: asks the gateway who the user is.
+// Bootstraps auth on app load: the gateway (/userinfo, from Keycloak) is the
+// source of identity and roles, but it can't know the avatar — that lives behind
+// UserDetailService/MinIO. So we also read /me and merge its photoProfileUrl in.
+// A /me failure must not break auth: the user stays authenticated, photo null.
 export const loadCurrentUser = createAsyncThunk<UserInfo | null>(
   'auth/loadCurrentUser',
-  async () => fetchUserInfo(),
+  async () => {
+    const userInfo = await fetchUserInfo()
+    if (!userInfo) return null
+
+    try {
+      const me = await getCurrentUser()
+      return { ...userInfo, photoProfileUrl: me.photoProfileUrl ?? null }
+    } catch {
+      return { ...userInfo, photoProfileUrl: null }
+    }
+  },
 )
 
 const authSlice = createSlice({

@@ -12,9 +12,11 @@ import ProfileHeader from '@/features/profile/components/ProfileHeader'
 import PersonalInfoCard from '@/features/profile/components/PersonalInfoCard'
 import ManagerProfile from '@/features/profile/components/manager/ManagerProfile'
 import StaffProfile from '@/features/profile/components/staff/StaffProfile'
+import { useState } from 'react'
 
-const EDIT_PROFILE_BUTTON = (
+const EDIT_PROFILE_BUTTON = (setShowProfileModal: any) => (
   <button
+    onClick={setShowProfileModal}
     type="button"
     className="rounded-ds-lg border border-ds-outline px-6 py-3 font-ds-label text-ds-label-md text-ds-primary transition-colors hover:bg-ds-surface-container"
   >
@@ -47,37 +49,48 @@ function AdminConsoleCallout() {
   )
 }
 
+
+interface ProfilePage {
+    updateUser: () => void
+}
+
 // Base profile page for every authenticated user. Content adapts to the user's
 // highest role, each with a dedicated layout: staff sees a personal workspace,
 // managers a department-scoped view, admins a profile with a shortcut to the
 // gated admin console.
-export default function ProfilePage() {
+export default function ProfilePage({updateUser} : ProfilePage) {
   const user = useAppSelector(selectCurrentUser)
 
   if (!user) return null
 
   const role = highestRole(user.roles)
-  const displayName = user.fullName || user.username || 'Unknown user'
+  const [showProfileModal, setShowProfileModal] = useState(false)
+
+  const toggleShowProfileModal = () => {
+    setShowProfileModal(current => !current)
+  }
 
   if (role === ROLES.manager) {
-    return <ManagerProfile user={user} />
+    return <ManagerProfile user={user} updateUser={updateUser} toggleShowProfileModal={toggleShowProfileModal} showProfileModal={showProfileModal} />
   }
 
   if (role === ROLES.staff) {
-    return <StaffProfile user={user} />
+    return <StaffProfile user={user} updateUser={updateUser} toggleShowProfileModal={toggleShowProfileModal} showProfileModal={showProfileModal} />
   }
 
   // Admin: profile summary plus a shortcut into the admin console.
   return (
     <div className="mx-auto max-w-[1160px] space-y-8">
       <ProfileHeader
-        name={displayName}
+        user={user}
+        showProfileModal={showProfileModal}
+        toggleShowProfileModal={toggleShowProfileModal}
+        updateUser={updateUser}
         roleLabel={ROLE_LABELS[role]}
         roleBadgeClassName={ROLE_BADGE_CLASSES[role]}
         department={user.department}
-        email={user.email}
         organization={user.organization}
-        actions={EDIT_PROFILE_BUTTON}
+        actions={EDIT_PROFILE_BUTTON(setShowProfileModal)}
       />
 
       <PersonalInfoCard user={user} />

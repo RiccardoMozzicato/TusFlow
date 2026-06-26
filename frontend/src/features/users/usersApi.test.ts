@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { http } from '@/api/axios'
 import { API } from '@/config'
-import { createUser, deleteUser, getUsers, updateUser, type UserDTO } from './usersApi'
+import {
+  createUser,
+  deletePhotoProfile,
+  deleteUser,
+  getUsers,
+  updateUser,
+  type UserDTO,
+} from './usersApi'
 
 vi.mock('@/api/axios', () => ({
   http: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -74,5 +81,16 @@ describe('deleteUser', () => {
     mockedDelete.mockResolvedValue({ data: undefined })
     await deleteUser('u-1')
     expect(mockedDelete).toHaveBeenCalledWith(`${API.users}/u-1`)
+  })
+})
+
+describe('deletePhotoProfile', () => {
+  it('deletes the current user avatar with credentials', async () => {
+    mockedDelete.mockResolvedValue({ data: undefined })
+    await deletePhotoProfile()
+    expect(mockedDelete).toHaveBeenCalledWith(
+      `${API.users}/me/avatar`,
+      expect.objectContaining({ withCredentials: true }),
+    )
   })
 })

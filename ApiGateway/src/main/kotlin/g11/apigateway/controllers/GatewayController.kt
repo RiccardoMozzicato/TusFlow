@@ -6,13 +6,13 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.core.oidc.user.OidcUser
 import org.springframework.security.web.csrf.CsrfToken
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.client.RestClient
-import org.springframework.web.client.RestClientResponseException
 
 @RestController
 @RequestMapping("/api")
@@ -41,7 +41,6 @@ class AuthController(
 
         val filteredRoles = realmRoles.filter { it == "staff" || it == "admin" || it =="manager"}
 
-
         // 3. Costruzione della risposta
         val userInfo = UserInfo(
             uuid=user.name ?: "",
@@ -50,7 +49,7 @@ class AuthController(
             fullName = user.fullName ?: "",
             department = user.claims["department"] as? String ?: "",
             organization = user.claims["organization"] as? String ?: "",
-            roles = filteredRoles,
+            roles = filteredRoles
         )
 
         log.debug("User info for user with id={} returned", userInfo.uuid)

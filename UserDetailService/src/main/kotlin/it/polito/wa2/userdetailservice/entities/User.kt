@@ -49,6 +49,9 @@ class User(
     @Temporal(TemporalType.TIMESTAMP)
     open var updatedAt: Date? = null,
 
+    @Column(updatable = true, nullable = true)
+    open var imageObjectKey: String? = null,
+
     // Optimistic-lock version: guards concurrent updates to the same user row (e.g. interleaved
     // storage events) by failing the stale write instead of silently clobbering it. Managed by
     // Hibernate; never set it manually.

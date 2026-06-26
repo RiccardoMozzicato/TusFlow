@@ -78,21 +78,33 @@ function OverviewSection() {
   )
 }
 
+interface AdminPageProps {
+  updateUser: () => void
+}
+
 // Full admin console. Reachable only via the role-gated /admin route, so the
 // current user is guaranteed to hold the admin role.
-export default function AdminPage() {
+export default function AdminPage({ updateUser }: AdminPageProps) {
   const user = useAppSelector(selectCurrentUser)
-  const displayName = user?.fullName || user?.username || 'Administrator'
+  const [showProfileModal, setShowProfileModal] = useState(false)
+
+  const toggleShowProfileModal = () => {
+    setShowProfileModal((current) => !current)
+  }
+
+  if (!user) return null
 
   return (
     <div className="mx-auto max-w-[1160px] space-y-8">
       <ProfileHeader
-        name={displayName}
+        user={user}
+        showProfileModal={showProfileModal}
+        toggleShowProfileModal={toggleShowProfileModal}
+        updateUser={updateUser}
         roleLabel={ROLE_LABELS[ROLES.admin]}
         roleBadgeClassName={ROLE_BADGE_CLASSES[ROLES.admin]}
-        department={user?.department ?? ''}
-        email={user?.email ?? ''}
-        organization={user?.organization}
+        department={user.department ?? ''}
+        organization={user.organization}
         actions={
           <button
             type="button"

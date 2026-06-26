@@ -24,6 +24,20 @@ export async function fetchUserInfo(): Promise<UserInfo | null> {
   }
 }
 
+export async function fetchCurrentUserFromService(): Promise<UserInfo | null> {
+    try {
+        // skipAuthRedirect is custom request meta consumed by the axios interceptor.
+        const config: AxiosRequestConfig & RequestMeta = { skipAuthRedirect: true }
+        const { data } = await http.get<UserInfo>("/api/v1/users/me", config)
+        return data
+    } catch (error) {
+        if (isUnauthorized(error)) {
+            return null
+        }
+        throw error
+    }
+}
+
 function isUnauthorized(error: unknown): boolean {
   return (
     typeof error === 'object' &&

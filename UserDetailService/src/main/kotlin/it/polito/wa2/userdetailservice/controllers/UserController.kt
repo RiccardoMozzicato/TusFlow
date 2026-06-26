@@ -7,18 +7,25 @@ import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.ExampleObject
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import it.polito.wa2.userdetailservice.dto.AvatarDTO
 import it.polito.wa2.userdetailservice.dto.FiltersDTO
 import it.polito.wa2.userdetailservice.dto.UserCreationDTO
 import it.polito.wa2.userdetailservice.dto.UserDTO
 import it.polito.wa2.userdetailservice.exceptions.UserConflictError
 import it.polito.wa2.userdetailservice.services.UserServiceInterface
 import it.polito.wa2.userdetailservice.validators.UserUpdateValidation
+import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
+import org.springframework.core.io.InputStreamResource
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Sort
+import org.springframework.http.CacheControl
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ProblemDetail
+import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -35,6 +42,7 @@ import java.util.UUID
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
+import org.springframework.web.multipart.MultipartFile
 
 
 @RestController
@@ -50,6 +58,13 @@ class UserController(
     private fun currentUserOwnerId(): String =
         runCatching { (SecurityContextHolder.getContext().authentication.principal as Jwt).subject }
             .getOrDefault("unknown")
+
+    // Spring requires a strong ETag wrapped in double quotes; MinIO returns the
+    // raw hash (sometimes already quoted), so normalize to a single quoted form.
+    private fun normalizeETag(raw: String): String {
+        val unquoted = raw.trim().removeSurrounding("\"")
+        return "\"$unquoted\""
+    }
 
     //region Swagger Documentation
     @Operation(
@@ -505,6 +520,41 @@ class UserController(
         userService.updateUser(userDTO)
     }
 
+    @PostMapping("/me/avatar", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    fun updateUserAvatar(@RequestParam file: MultipartFile, response: HttpServletResponse) {
+        log.debug("API POST /api/v1/users/me/avatar userId={}", currentUserOwnerId())
+        val dto = AvatarDTO(file.inputStream, file.size, file.contentType)
+        userService.updateAvatar(currentUserOwnerId(), dto)
+    }
+
+    // Streams the avatar bytes from MinIO through the gateway so MinIO is never
+    // reachable from the browser. Returns 404 (no body) when the user has no
+    // avatar, letting the frontend fall back to initials.
+    @GetMapping("/{id}/avatar")
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    fun getUserAvatar(@PathVariable id: UUID): ResponseEntity<InputStreamResource> {
+        log.debug("API GET /api/v1/users/{}/avatar userId={}", id, currentUserOwnerId())
+        val avatar = userService.getAvatarContent(id) ?: return ResponseEntity.notFound().build()
+
+        val headers = HttpHeaders().apply {
+            contentType = MediaType.parseMediaType(avatar.contentType)
+            cacheControl = CacheControl.noCache().headerValue
+            avatar.etag?.let { eTag = normalizeETag(it) }
+        }
+        return ResponseEntity.ok().headers(headers).body(InputStreamResource(avatar.stream))
+    }
+
+    @DeleteMapping("/me/avatar")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_manager', 'ROLE_staff')")
+    fun deleteUserAvatar() {
+        log.debug("API DELETE /api/v1/users/me/avatar userId={}", currentUserOwnerId())
+        userService.deleteAvatar(currentUserOwnerId())
+    }
+
+
     //region Swagger Documentation
     @Operation(
         tags = [ "User Handling" ],
@@ -609,6 +659,4 @@ class UserController(
 
         return userService.getUser(UUID.fromString(jwt.subject))
     }
-
-
 }
