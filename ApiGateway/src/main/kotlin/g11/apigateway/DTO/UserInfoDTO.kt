@@ -16,9 +16,10 @@ data class UserInfo(
     val department: String,
     @Schema(description = "User organization claim.", example = "PoliTo")
     val organization: String,
-    val roles: List<String>,
-    val photoProfileUrl: String? = null
     @Schema(description = "Application roles extracted from Keycloak realm roles.", example = "[\"staff\"]")
-    val roles: List<String>
+    val roles: List<String>,
+    @Schema(description = "User profile photo URL.")
+    val photoProfileUrl: String? = null
+
 
 )
