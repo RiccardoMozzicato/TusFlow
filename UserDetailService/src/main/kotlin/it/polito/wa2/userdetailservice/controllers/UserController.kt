@@ -55,7 +55,7 @@ class UserController(
     @Operation(
         tags = [ "User Handling" ],
         summary = "Get the list of users",
-        description = "Retrieve a paginated list of users.",
+        description = "Retrieve a paginated list of users visible to the authenticated principal. The result can be filtered by name/email and sorted by supported user fields.",
         parameters = [
             Parameter(
                 name = "page",
@@ -80,7 +80,7 @@ class UserController(
             ),
             Parameter(
                 name = "sort",
-                description = "Sort spec as 'field,direction' (fields: fullName, email, department, role, storageUsed, createdAt)",
+                description = "Sort spec as 'field,direction'. Supported fields: fullName, email, department, role, storageUsed, createdAt.",
                 required = false,
                 example = "fullName,asc",
                 schema = Schema(type = "string", defaultValue = "fullName,asc")
@@ -93,6 +93,14 @@ class UserController(
         content = [
             Content(mediaType = "application/json", schema = Schema(implementation = Page::class))
         ]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
     )
     @ApiResponse(
         responseCode = "500",
@@ -164,8 +172,9 @@ class UserController(
                             "email": "john.doe@gmail.com",
                             "organization": "Polytechnic University of Turin",
                             "department": "Engineering",
-                            "role": "VIEWER",
-                            "storageQuota": 1073741824
+                            "role": "ROLE_staff",
+                            "storageQuota": 1073741824,
+                            "storageUsed": 0
                         }
                         """
                     )
@@ -216,6 +225,14 @@ class UserController(
         ]
     )
     @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
+    )
+    @ApiResponse(
         responseCode = "500",
         description = "Internal Server Error",
         content = [
@@ -245,6 +262,73 @@ class UserController(
         return userService.getUser(id)
     }
 
+    //region Swagger Documentation
+    @Operation(
+        tags = [ "User Handling" ],
+        summary = "Get users by id batch",
+        description = "Retrieve multiple users by UUID. This endpoint is intended for service-to-service lookups such as resolving file owners and sharing recipients.",
+        requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "List of user UUIDs to retrieve",
+            required = true,
+            content = [
+                Content(
+                    mediaType = "application/json",
+                    schema = Schema(type = "array", implementation = UUID::class),
+                    examples = [
+                        ExampleObject(
+                            value = """
+                            [
+                              "123e4567-e89b-12d3-a456-426614174000",
+                              "123e4567-e89b-12d3-a456-426614174001"
+                            ]
+                            """
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "OK",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = Map::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                          "123e4567-e89b-12d3-a456-426614174000": {
+                            "id": "123e4567-e89b-12d3-a456-426614174000",
+                            "fullName": "John Doe",
+                            "email": "john.doe@gmail.com",
+                            "organization": "Polytechnic University of Turin",
+                            "department": "Engineering",
+                            "role": "ROLE_staff",
+                            "storageQuota": 1073741824,
+                            "storageUsed": 0
+                          }
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "400",
+        description = "Bad Request"
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
+    )
+    //endregion
     @PostMapping("/batch")
     @ResponseStatus(HttpStatus.OK)
     @PreAuthorize("hasAnyRole('ROLE_admin', 'ROLE_serviceaccount-fileservice')")
@@ -259,22 +343,21 @@ class UserController(
         summary = "Create a new user",
         description = "Create a new user with the provided details.",
         requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "User details",
+            description = "New user details. The user is created in Keycloak and then persisted in the UserDetailService database.",
             required = true,
             content = [
                 Content(
                     mediaType = "application/json",
-                    schema = Schema(implementation = UserDTO::class),
+                    schema = Schema(implementation = UserCreationDTO::class),
                     examples = [
                         ExampleObject(
                             value = """
                             {
-                                "id": "123e4567-e89b-12d3-a456-426614174000",
-                                "fullName": "John Doe",
+                                "username": "John Doe",
                                 "email": "john.doe@gmail.com",
                                 "organization": "Polytechnic University of Turin",
                                 "department": "Engineering",
-                                "role": "VIEWER",
+                                "role": "ROLE_staff",
                                 "storageQuota": 1073741824
                             }"""
                         )
@@ -309,6 +392,14 @@ class UserController(
                 ]
             )
         ]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
     )
     @ApiResponse(
         responseCode = "409",
@@ -392,8 +483,9 @@ class UserController(
                                 "email": "john.doe@gmail.com",
                                 "organization": "Polytechnic University of Turin",
                                 "department": "Engineering",
-                                "role": "VIEWER",
-                                "storageQuota": 1073741824
+                                "role": "ROLE_staff",
+                                "storageQuota": 1073741824,
+                                "storageUsed": 0
                             }"""
                         )
                     ]
@@ -425,6 +517,14 @@ class UserController(
                 ]
             )
         ]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "Forbidden"
     )
     @ApiResponse(
         responseCode = "404",
@@ -598,6 +698,45 @@ class UserController(
     }
 
     //region Swagger Documentation
+    @Operation(
+        tags = [ "User Handling" ],
+        summary = "Get current user",
+        description = "Retrieve the profile of the authenticated user. The user id is read from the JWT subject."
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "OK",
+        content = [
+            Content(
+                mediaType = "application/json",
+                schema = Schema(implementation = UserDTO::class),
+                examples = [
+                    ExampleObject(
+                        value = """
+                        {
+                            "id": "123e4567-e89b-12d3-a456-426614174000",
+                            "fullName": "John Doe",
+                            "email": "john.doe@gmail.com",
+                            "organization": "Polytechnic University of Turin",
+                            "department": "Engineering",
+                            "role": "ROLE_staff",
+                            "storageQuota": 1073741824,
+                            "storageUsed": 0
+                        }
+                        """
+                    )
+                ]
+            )
+        ]
+    )
+    @ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized"
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "Not Found"
+    )
     //endregion
     @GetMapping("/me")
     @ResponseStatus(HttpStatus.OK)
