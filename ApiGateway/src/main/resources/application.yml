@@ -56,6 +56,13 @@ spring:
             filters:
               - SetPath=/v3/api-docs
 
+          - id: ai-openapi
+            uri: http://localhost:8083
+            predicates:
+              - Path=/docs/openapi/ai
+            filters:
+              - SetPath=/v3/api-docs
+
           - id: file-service
             uri: http://localhost:8081
             predicates:
@@ -100,6 +107,8 @@ springdoc:
         url: /docs/openapi/tus
       - name: UserDetailService
         url: /docs/openapi/users
+      - name: AIProcessingService
+        url: /docs/openapi/ai
     urls-primary-name: API Gateway
 
 # use the production url, not the development one

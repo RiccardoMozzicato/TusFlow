@@ -31,9 +31,8 @@ class OpenApiConfig {
                     - `/api/rag/**` -> AIProcessingService RAG APIs
                     - `/ui/**` -> frontend application
 
-                    Swagger UI also links the TusUploaderService and UserDetailService OpenAPI
-                    documents through gateway-local proxy routes. AIProcessingService is not linked
-                    here yet.
+                    Swagger UI also links the TusUploaderService, UserDetailService and
+                    AIProcessingService OpenAPI documents through gateway-local proxy routes.
                     """.trimIndent()
                 )
                 .version("0.0.1")
