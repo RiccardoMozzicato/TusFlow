@@ -26,6 +26,7 @@ export default function UploadPage() {
     summary,
     addFiles,
     updateStagedMetadata,
+    setStagedScope,
     removeStaged,
     startStaged,
     startAllStaged,
@@ -97,15 +98,18 @@ export default function UploadPage() {
         <StorageMeter summary={storage.summary} hasError={storage.hasError} />
       </header>
 
-      <DropZone onFiles={(files) => addFiles(files, scope)} />
+      <DropZone onFiles={addFiles} />
 
       {staged.length > 0 ? (
         <StagedUploads
           staged={staged}
+          scopes={scopes}
+          generalScope={scope}
           onMetadataChange={updateStagedMetadata}
+          onScopeChange={setStagedScope}
           onRemove={removeStaged}
-          onStart={startStaged}
-          onStartAll={startAllStaged}
+          onStart={(id) => startStaged(id, scope)}
+          onStartAll={() => startAllStaged(scope)}
         />
       ) : null}
 
