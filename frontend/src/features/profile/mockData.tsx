@@ -7,7 +7,6 @@ import type { ManagementLink } from './types'
 // --- Personal scope (staff) -------------------------------------------------
 
 export const STAFF_QUICK_LINKS: ManagementLink[] = [
-  { label: 'Edit Profile', icon: 'manage_accounts' },
   { label: 'My Documents', icon: 'folder_shared', to: '/documents' },
   { label: 'Shared with Me', icon: 'group_add', to: '/shared' },
 ]

@@ -132,109 +132,130 @@ export default function UserProfileModal(props: UserProfileModalInterface) {
     }
 
 
+    const isAdmin = props.user?.roles.includes(ROLES.admin) ?? false
+    const hasPhoto = file != null || savedPhotoUrl != null
+
     return (
-        <div className="fixed inset-0 bg-on-background/40 backdrop-blur-[2px] flex items-center justify-center p-lg z-[9999]">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-ds-on-background/40 p-margin-mobile backdrop-blur-[4px]">
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
 
-            <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <header className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
-                    <div className="flex items-center gap-md">
-                        <h3 className="font-headline-md text-headline-md text-primary">Edit Profile</h3>
-                    </div>
+            <div className="flex max-h-[90vh] w-full max-w-[440px] flex-col overflow-hidden rounded-xl border border-ds-outline-variant/30 bg-ds-surface-container-lowest shadow-xl">
+                {/* Header */}
+                <header className="flex items-center justify-between border-b border-ds-outline-variant/20 bg-ds-surface px-6 py-4">
+                    <h3 className="font-ds-heading text-ds-headline-sm text-ds-primary">Upload Profile Picture</h3>
                     <button
                         onClick={props.onClose}
-                        className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors text-on-surface-variant cursor-pointer"
+                        aria-label="Close modal"
+                        className="flex h-10 w-10 items-center justify-center rounded-full text-ds-on-surface-variant transition-colors hover:bg-ds-surface-container-high disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                        disabled={isSaving}
                     >
                         <span className="material-symbols-outlined">close</span>
                     </button>
                 </header>
 
-                <div className={`w-full flex-1 overflow-y-auto flex ${props.user?.roles.includes(ROLES.admin) ? 'flex-row' : 'flex-col'} items-center justify-center gap-8  pb-5 pt-5`}>
-
-                    <div className="relative group">
-                        <div className="w-40 h-40 rounded-full overflow-hidden border-4 border-surface-container shadow-sm bg-surface-container-low flex items-center justify-center">
+                {/* Body */}
+                <div className="flex flex-col items-center gap-6 overflow-y-auto p-6 text-center">
+                    {/* Avatar preview */}
+                    <div className="relative">
+                        <div className="flex h-44 w-44 items-center justify-center overflow-hidden rounded-full border-4 border-ds-surface-container-high bg-ds-surface-container font-ds-heading text-ds-display-lg text-ds-on-surface-variant shadow-[0_0_20px_rgba(2,36,72,0.08)]">
                             { fileUrl || savedPhotoUrl ?
-                                <img alt="Profile Preview" className="w-full h-full object-cover"
+                                <img alt="Profile Preview" className="h-full w-full object-cover"
                                      src={ fileUrl || savedPhotoUrl || ""} />
                                 :
                                     initialsOf(props.user?.fullName || "")
                             }
                         </div>
+                        <div className="absolute bottom-2 right-2 flex items-center justify-center rounded-full border-2 border-ds-surface-container-lowest bg-ds-primary p-2.5 text-ds-on-primary shadow-lg">
+                            <span className="material-symbols-outlined text-[20px]">photo_camera</span>
+                        </div>
                     </div>
 
-                    <div className="w-full max-w-[220px] flex flex-col gap-3">
+                    {/* Description & hint */}
+                    <div className="flex flex-col gap-1">
+                        <p className="max-w-[320px] font-ds-body text-ds-body-md text-ds-on-surface-variant">
+                            Personalize your account. This photo will be visible to your team and collaborators.
+                        </p>
+                        <p className="pt-2 font-ds-label text-ds-label-md uppercase tracking-widest text-ds-secondary">
+                            Supported: JPG, PNG • Max size: 5MB
+                        </p>
+                    </div>
+
+                    {/* Admin-only profile fields */}
+                    {isAdmin && (
+                        <div className="flex w-full max-w-xs flex-col gap-1.5 text-left">
+                            <label className="px-1 font-ds-body text-ds-body-sm text-ds-on-surface-variant">Full Name</label>
+                            <div className="relative flex items-center">
+                                <span className="material-symbols-outlined pointer-events-none absolute left-4 text-[20px] text-ds-on-surface-variant">edit</span>
+                                <input
+                                    type="text"
+                                    value={newName}
+                                    onChange={(e) => setNewName(e.target.value)}
+                                    placeholder="Put your full name"
+                                    required
+                                    className="h-12 w-full rounded-xl border border-ds-outline bg-ds-surface-container-low pl-11 pr-4 font-ds-body text-ds-body-md text-ds-on-surface outline-none transition-all placeholder:text-ds-on-surface-variant/50 focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/20"
+                                />
+                            </div>
+                            <label className="px-1 font-ds-body text-ds-body-sm text-ds-on-surface-variant">Email</label>
+                            <div className="relative flex items-center">
+                                <span className="material-symbols-outlined pointer-events-none absolute left-4 text-[20px] text-ds-on-surface-variant">edit</span>
+                                <input
+                                    type="email"
+                                    value={newEmail}
+                                    onChange={(e) => setNewEmail(e.target.value)}
+                                    placeholder="Put your email"
+                                    required
+                                    className="h-12 w-full rounded-xl border border-ds-outline bg-ds-surface-container-low pl-11 pr-4 font-ds-body text-ds-body-md text-ds-on-surface outline-none transition-all placeholder:text-ds-on-surface-variant/50 focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/20"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {error && <p className="font-ds-body text-ds-body-md text-ds-error">{error}</p>}
+
+                    {/* Action buttons */}
+                    <div className="flex w-full flex-col gap-3 pt-2">
                         <button
                             onClick={handleButtonClick}
                             disabled={isSaving}
-                            className="w-full bg-ds-primary text-ds-on-primary h-12 rounded-xl font-body-md font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed">
-                            <span className="material-symbols-outlined text-[20px]">upload</span>
+                            className="flex w-full items-center justify-center gap-2 rounded-lg bg-ds-primary px-6 py-3 font-ds-body text-ds-body-md font-bold text-ds-on-primary shadow-sm transition-all hover:bg-ds-primary-container active:scale-[0.98] disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed">
+                            <span className="material-symbols-outlined">upload</span>
                             Upload New Photo
                         </button>
                         <button
                             onClick={removePhoto}
-                            disabled={isSaving || (file == null && savedPhotoUrl == null)}
-                            className="w-full bg-ds-error text-ds-on-primary h-10 rounded-xl font-body-md font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed">
-                            <span className="material-symbols-outlined text-[20px]">delete</span>
+                            disabled={isSaving || !hasPhoto}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-6 py-3 font-ds-body text-ds-body-md font-medium text-ds-error transition-all hover:border-ds-error/20 hover:bg-ds-error-container/20 active:scale-[0.98] disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed">
+                            <span className="material-symbols-outlined">delete</span>
                             Remove Photo
                         </button>
                     </div>
-
                 </div>
 
-                {props.user?.roles.includes(ROLES.admin) && (
-                    <div className="w-full max-w-xs mx-auto mb-6 flex flex-col gap-1.5">
-
-                        <label className="text-body-sm font-medium text-on-surface-variant px-1">Full Name</label>
-
-                        <div className="relative flex items-center">
-                            <span className="material-symbols-outlined absolute left-4 text-[20px] text-on-surface-variant pointer-events-none">
-                                edit
-                            </span>
-                            <input
-                                type="text"
-                                value={newName}
-                                onChange={(e) => setNewName(e.target.value)}
-                                placeholder="Put your full name"
-                                required={true}
-                                className="w-full h-12 pl-11 pr-4 bg-surface-container-low border border-outline rounded-xl font-body-md text-on-surface outline-none transition-all focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/20 placeholder:text-on-surface-variant/50"
-                            />
-                        </div>
-
-                        <label className="text-body-sm font-medium text-on-surface-variant px-1">Email</label>
-
-                        <div className="relative flex items-center">
-                            <span className="material-symbols-outlined absolute left-4 text-[20px] text-on-surface-variant pointer-events-none">
-                                edit
-                            </span>
-                            <input
-                                type="email"
-                                value={newEmail}
-                                onChange={(e) => setNewEmail(e.target.value)}
-                                placeholder="Put your email"
-                                required={true}
-                                className="w-full h-12 pl-11 pr-4 bg-surface-container-low border border-outline rounded-xl font-body-md text-on-surface outline-none transition-all focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/20 placeholder:text-on-surface-variant/50"
-                            />
-                        </div>
-                    </div>
-                )}
-                { error && <p className="mb-4 text-body-md text-ds-error">{error}</p> }
-
-
-                <footer className="bg-surface-container-low p-lg border-t border-outline-variant flex justify-end gap-3">
+                {/* Footer: Save / Cancel */}
+                <footer className="flex justify-end gap-3 border-t border-ds-outline-variant bg-ds-surface-container-low p-6">
                     <button
                         onClick={props.onClose}
                         disabled={isSaving}
-                        className="w-32 h-12 border border-outline text-on-surface font-body-md font-semibold rounded-xl hover:bg-surface-container-high transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                        className="h-12 w-32 rounded-xl border border-ds-outline font-ds-body text-ds-body-md font-semibold text-ds-on-surface transition-colors hover:bg-ds-surface-container-high disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={saveChanges}
-                        className="w-32 h-12 bg-ds-primary text-ds-on-primary font-body-md font-semibold rounded-xl shadow-md hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                        disabled={isSaveDisabled()}
+                        className="h-12 w-32 rounded-xl bg-ds-primary font-ds-body text-ds-body-md font-semibold text-ds-on-primary shadow-md transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                     >
                         {isSaving ? 'Saving…' : 'Save'}
                     </button>
                 </footer>
+
+                {/* Subtle branding strip */}
+                <div className="flex justify-center border-t border-ds-outline-variant/10 bg-ds-surface-container-low px-6 py-3">
+                    <div className="flex items-center gap-1 opacity-40">
+                        <span className="material-symbols-outlined text-[14px]">verified_user</span>
+                        <span className="font-ds-label text-ds-label-sm">Secure storage powered by DocPortal</span>
+                    </div>
+                </div>
             </div>
         </div> )
 }
