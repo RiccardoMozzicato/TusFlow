@@ -1,6 +1,12 @@
 package g11.apigateway.controllers
 
 import g11.apigateway.DTO.UserInfo
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.tags.Tag
 import g11.apigateway.metrics.GatewayMetrics
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -16,14 +22,37 @@ import org.springframework.web.client.RestClientResponseException
 
 @RestController
 @RequestMapping("/api")
+@Tag(
+    name = "Gateway Authentication",
+    description = "Gateway-owned endpoints used by the SPA to inspect the current authenticated session.",
+)
 class AuthController(
     @Qualifier("userServiceClient") private val userServiceClient: RestClient,
     private val gatewayMetrics: GatewayMetrics,
 ) {
     private val log = LoggerFactory.getLogger(AuthController::class.java)
 
+    @Operation(
+        summary = "Get current authenticated user",
+        description = "Returns the Keycloak-backed user profile for the current gateway session. A 401 response is expected when the SPA is loaded without an authenticated session.",
+        responses = [
+            ApiResponse(
+                responseCode = "200",
+                description = "Authenticated user information.",
+                content = [Content(schema = Schema(implementation = UserInfo::class))]
+            ),
+            ApiResponse(
+                responseCode = "401",
+                description = "No authenticated gateway session is available.",
+                content = [Content()]
+            )
+        ]
+    )
     @GetMapping("/auth/userinfo")
-    fun getUserInfo(@AuthenticationPrincipal user: OidcUser?, csrfToken: CsrfToken): ResponseEntity<Any> {
+    fun getUserInfo(
+        @Parameter(hidden = true) @AuthenticationPrincipal user: OidcUser?,
+        @Parameter(hidden = true) csrfToken: CsrfToken,
+    ): ResponseEntity<Any> {
         log.debug("Requested user info")
         // 1. Se l'utente non è loggato, restituisci 401 o un oggetto anonimo
         if (user == null) {
