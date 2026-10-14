@@ -740,4 +740,4 @@ Web Applications II — A.Y. 2025/2026
 
 ## 📄 License
 
-This project is part of an academic assignment for Politecnico di Torino.
+Released under the [MIT License](LICENSE). Originally developed as an academic project for Politecnico di Torino.
