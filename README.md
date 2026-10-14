@@ -1,7 +1,8 @@
-# File Management System with AI-Powered Metadata Enrichment & RAG
+# TusFlow
 
-**Gruppo 11** — Laboratorio 5
-**Web Applications II — Politecnico di Torino**
+**File Management System with AI-Powered Metadata Enrichment & RAG**
+
+Final project for **Web Applications II** — Politecnico di Torino, A.Y. 2025/2026 (Group 11).
 
 A microservices-based document portal where files are uploaded with a resumable protocol, enriched
 automatically by an LLM (summary, tags, sensitivity — including **vision** analysis of images),
